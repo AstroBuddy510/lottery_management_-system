@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "pLjmX30t9BOp5n227TUZX"
+uri = "file://VS2000_Smart_Office_Technical_Specification.md"
+type = "text"
+title = "VS2000 Smart Office — Technical Specification"
