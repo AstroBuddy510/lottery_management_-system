@@ -3,20 +3,42 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VS2000 Smart Office — Lottery Management Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management
+  - name: agents
+    description: Agent and writer management
+  - name: settings
+    description: System settings and cashier time windows
+  - name: sales
+    description: Sales logging
+  - name: entries
+    description: Gross and wins entry
+  - name: payments
+    description: Payment collection
+  - name: calculations
+    description: Daily calculation engine
+  - name: reports
+    description: Performance reports
+  - name: reserve
+    description: Reserve fund management
+  - name: notifications
+    description: Communications and notifications
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +46,1626 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in and receive tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+        "401":
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Invalidate session
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Logged out
+
+  /users/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Get current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+        - in: query
+          name: isActive
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deactivateUser
+      tags: [users]
+      summary: Deactivate a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List all agents
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: isActive
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentWithUser"
+    post:
+      operationId: createAgent
+      tags: [agents]
+      summary: Create an agent and assign code
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWithUser"
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [agents]
+      summary: Get agent detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWithUser"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateAgent
+      tags: [agents]
+      summary: Update agent
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentWithUser"
+
+  /agents/{agentId}/writers:
+    get:
+      operationId: listWriters
+      tags: [agents]
+      summary: List writers under an agent
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: isActive
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Writer"
+    post:
+      operationId: createWriter
+      tags: [agents]
+      summary: Create a writer under an agent
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WriterInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Writer"
+
+  /writers/{id}:
+    patch:
+      operationId: updateWriter
+      tags: [agents]
+      summary: Update writer
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WriterUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Writer"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get current system settings
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemSettings"
+    post:
+      operationId: createSettings
+      tags: [settings]
+      summary: Create new settings record
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemSettingsInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemSettings"
+
+  /settings/time-windows:
+    get:
+      operationId: listTimeWindows
+      tags: [settings]
+      summary: List cashier time windows
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TimeWindow"
+    post:
+      operationId: createTimeWindow
+      tags: [settings]
+      summary: Create a cashier time window
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimeWindowInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeWindow"
+
+  /settings/time-windows/{id}:
+    patch:
+      operationId: updateTimeWindow
+      tags: [settings]
+      summary: Update time window
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TimeWindowUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimeWindow"
+    delete:
+      operationId: deleteTimeWindow
+      tags: [settings]
+      summary: Delete time window
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /sales:
+    get:
+      operationId: listSales
+      tags: [sales]
+      summary: List sales logs
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: writerId
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesLog"
+    post:
+      operationId: createSale
+      tags: [sales]
+      summary: Log a sale
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalesLogInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesLog"
+
+  /entries/gross:
+    get:
+      operationId: listGrossEntries
+      tags: [entries]
+      summary: List gross entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: writerId
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GrossEntry"
+    post:
+      operationId: createGrossEntry
+      tags: [entries]
+      summary: Submit gross entry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrossEntryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrossEntry"
+
+  /entries/gross/{id}:
+    put:
+      operationId: updateGrossEntry
+      tags: [entries]
+      summary: Update gross entry if unlocked
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrossEntryUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrossEntry"
+        "409":
+          description: Entry is locked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /entries/wins:
+    get:
+      operationId: listWinsEntries
+      tags: [entries]
+      summary: List wins entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: writerId
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WinsEntry"
+    post:
+      operationId: createWinsEntry
+      tags: [entries]
+      summary: Submit wins entry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WinsEntryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WinsEntry"
+
+  /entries/wins/{id}:
+    put:
+      operationId: updateWinsEntry
+      tags: [entries]
+      summary: Update wins entry if unlocked
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WinsEntryUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WinsEntry"
+
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List payments
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: agentId
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: Record a payment (cashier only, within time window)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "403":
+          description: Outside cashier time window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /payments/{id}/void:
+    post:
+      operationId: voidPayment
+      tags: [payments]
+      summary: Void a payment
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VoidInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /calculations/run:
+    post:
+      operationId: runCalculations
+      tags: [calculations]
+      summary: Trigger daily calculation for a given date
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalcRunInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalcRunResult"
+
+  /calculations:
+    get:
+      operationId: listCalculations
+      tags: [calculations]
+      summary: List daily calculations
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: writerId
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyCalculation"
+
+  /reports/writer/{writerId}:
+    get:
+      operationId: getWriterReport
+      tags: [reports]
+      summary: Writer performance report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: writerId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WriterReport"
+
+  /reports/agent/{agentId}:
+    get:
+      operationId: getAgentReport
+      tags: [reports]
+      summary: Agent summary report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentReport"
+
+  /reports/organization:
+    get:
+      operationId: getOrgReport
+      tags: [reports]
+      summary: Organization-wide report
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgReport"
+
+  /reserve/balance:
+    get:
+      operationId: getReserveBalance
+      tags: [reserve]
+      summary: Get current reserve fund balance
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReserveSummary"
+
+  /reserve/allocations:
+    get:
+      operationId: listReserveAllocations
+      tags: [reserve]
+      summary: List reserve fund allocations
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReserveAllocation"
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: Get notification inbox for current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationWithReceipt"
+    post:
+      operationId: sendNotification
+      tags: [notifications]
+      summary: Send a notification
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+
+  /notifications/{id}/read:
+    patch:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark notification as read
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationWithReceipt"
+
+  /notifications/unread-count:
+    get:
+      operationId: getUnreadCount
+      tags: [notifications]
+      summary: Get count of unread notifications
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnreadCount"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    RefreshInput:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      required: [id, fullName, email, role, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+        lastLogin:
+          type: ["string", "null"]
+
+    UserInput:
+      type: object
+      required: [fullName, email, password, role]
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
+
+    UserUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
+        isActive:
+          type: boolean
+        password:
+          type: string
+
+    AgentWithUser:
+      type: object
+      required: [id, userId, agentCode, fullCode, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        agentCode:
+          type: string
+        fullCode:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    AgentInput:
+      type: object
+      required: [userId, agentCode]
+      properties:
+        userId:
+          type: string
+        agentCode:
+          type: string
+          minLength: 2
+          maxLength: 2
+
+    AgentUpdate:
+      type: object
+      properties:
+        isActive:
+          type: boolean
+
+    Writer:
+      type: object
+      required: [id, agentId, writerCode, fullCode, fullName, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        writerCode:
+          type: string
+        fullCode:
+          type: string
+        fullName:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    WriterInput:
+      type: object
+      required: [writerCode, fullName]
+      properties:
+        writerCode:
+          type: string
+          minLength: 4
+          maxLength: 4
+        fullName:
+          type: string
+
+    WriterUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+        isActive:
+          type: boolean
+
+    SystemSettings:
+      type: object
+      required: [id, commissionPct, reservePct, effectiveDate, updatedAt]
+      properties:
+        id:
+          type: string
+        commissionPct:
+          type: string
+        reservePct:
+          type: string
+        effectiveDate:
+          type: string
+        updatedAt:
+          type: string
+        updatedBy:
+          type: string
+
+    SystemSettingsInput:
+      type: object
+      required: [commissionPct, reservePct, effectiveDate]
+      properties:
+        commissionPct:
+          type: string
+        reservePct:
+          type: string
+        effectiveDate:
+          type: string
+
+    TimeWindow:
+      type: object
+      required: [id, windowOpen, windowClose, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        dayOfWeek:
+          type: ["integer", "null"]
+        windowOpen:
+          type: string
+        windowClose:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    TimeWindowInput:
+      type: object
+      required: [windowOpen, windowClose]
+      properties:
+        dayOfWeek:
+          type: ["integer", "null"]
+        windowOpen:
+          type: string
+        windowClose:
+          type: string
+        isActive:
+          type: boolean
+
+    TimeWindowUpdate:
+      type: object
+      properties:
+        dayOfWeek:
+          type: ["integer", "null"]
+        windowOpen:
+          type: string
+        windowClose:
+          type: string
+        isActive:
+          type: boolean
+
+    SalesLog:
+      type: object
+      required: [id, writerId, gameType, ticketAmount, saleDate, loggedBy, createdAt]
+      properties:
+        id:
+          type: string
+        writerId:
+          type: string
+        gameType:
+          type: string
+        ticketAmount:
+          type: string
+        saleDate:
+          type: string
+        imageUrl:
+          type: ["string", "null"]
+        loggedBy:
+          type: string
+        createdAt:
+          type: string
+
+    SalesLogInput:
+      type: object
+      required: [writerId, gameType, ticketAmount, saleDate]
+      properties:
+        writerId:
+          type: string
+        gameType:
+          type: string
+        ticketAmount:
+          type: string
+        saleDate:
+          type: string
+        imageUrl:
+          type: string
+
+    GrossEntry:
+      type: object
+      required: [id, writerId, entryDate, grossAmount, enteredBy, locked, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        writerId:
+          type: string
+        entryDate:
+          type: string
+        grossAmount:
+          type: string
+        enteredBy:
+          type: string
+        locked:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    GrossEntryInput:
+      type: object
+      required: [writerId, entryDate, grossAmount]
+      properties:
+        writerId:
+          type: string
+        entryDate:
+          type: string
+        grossAmount:
+          type: string
+
+    GrossEntryUpdate:
+      type: object
+      required: [grossAmount]
+      properties:
+        grossAmount:
+          type: string
+
+    WinsEntry:
+      type: object
+      required: [id, writerId, entryDate, winsAmount, enteredBy, locked, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        writerId:
+          type: string
+        entryDate:
+          type: string
+        winsAmount:
+          type: string
+        enteredBy:
+          type: string
+        locked:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    WinsEntryInput:
+      type: object
+      required: [writerId, entryDate, winsAmount]
+      properties:
+        writerId:
+          type: string
+        entryDate:
+          type: string
+        winsAmount:
+          type: string
+
+    WinsEntryUpdate:
+      type: object
+      required: [winsAmount]
+      properties:
+        winsAmount:
+          type: string
+
+    Payment:
+      type: object
+      required: [id, agentId, cashierId, amount, paymentDate, isVoided, createdAt]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        cashierId:
+          type: string
+        amount:
+          type: string
+        paymentDate:
+          type: string
+        notes:
+          type: ["string", "null"]
+        isVoided:
+          type: boolean
+        voidedBy:
+          type: ["string", "null"]
+        voidedReason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    PaymentInput:
+      type: object
+      required: [agentId, amount, paymentDate]
+      properties:
+        agentId:
+          type: string
+        amount:
+          type: string
+        paymentDate:
+          type: string
+        notes:
+          type: string
+
+    VoidInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+
+    DailyCalculation:
+      type: object
       required:
-        - status
+        [id, writerId, calcDate, grossSales, commissionPct, commissionAmount, netGross,
+         winsAmount, reservePct, reserveAmount, writerBalance, calculatedAt]
+      properties:
+        id:
+          type: string
+        writerId:
+          type: string
+        calcDate:
+          type: string
+        grossSales:
+          type: string
+        commissionPct:
+          type: string
+        commissionAmount:
+          type: string
+        netGross:
+          type: string
+        winsAmount:
+          type: string
+        reservePct:
+          type: string
+        reserveAmount:
+          type: string
+        writerBalance:
+          type: string
+        calculatedAt:
+          type: string
+
+    CalcRunInput:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+
+    CalcRunResult:
+      type: object
+      required: [processed, date]
+      properties:
+        processed:
+          type: integer
+        date:
+          type: string
+        calculations:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyCalculation"
+
+    WriterReportRow:
+      type: object
+      required: [grossSales, commissionAmount, netGross, winsAmount, reserveAmount, writerBalance]
+      properties:
+        calcDate:
+          type: string
+        grossSales:
+          type: string
+        commissionAmount:
+          type: string
+        netGross:
+          type: string
+        winsAmount:
+          type: string
+        reserveAmount:
+          type: string
+        writerBalance:
+          type: string
+
+    WriterReport:
+      type: object
+      required: [writer, totals, rows]
+      properties:
+        writer:
+          $ref: "#/components/schemas/Writer"
+        totals:
+          $ref: "#/components/schemas/WriterReportRow"
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/WriterReportRow"
+
+    AgentWriterSummary:
+      type: object
+      required: [writer, totals]
+      properties:
+        writer:
+          $ref: "#/components/schemas/Writer"
+        totals:
+          $ref: "#/components/schemas/WriterReportRow"
+
+    AgentReport:
+      type: object
+      required: [agent, totals, writers]
+      properties:
+        agent:
+          $ref: "#/components/schemas/AgentWithUser"
+        totals:
+          $ref: "#/components/schemas/WriterReportRow"
+        writers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentWriterSummary"
+
+    OrgAgentSummary:
+      type: object
+      required: [agent, totals]
+      properties:
+        agent:
+          $ref: "#/components/schemas/AgentWithUser"
+        totals:
+          $ref: "#/components/schemas/WriterReportRow"
+
+    OrgReport:
+      type: object
+      required: [totals, agents]
+      properties:
+        totals:
+          $ref: "#/components/schemas/WriterReportRow"
+        agents:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgAgentSummary"
+
+    ReserveSummary:
+      type: object
+      required: [totalContributed, totalAllocated, balance]
+      properties:
+        totalContributed:
+          type: string
+        totalAllocated:
+          type: string
+        balance:
+          type: string
+        latestPeriod:
+          type: ["string", "null"]
+
+    ReserveAllocation:
+      type: object
+      required: [id, writerId, allocationDate, amountDrawn, reserveBalanceAfter, createdAt]
+      properties:
+        id:
+          type: string
+        writerId:
+          type: string
+        allocationDate:
+          type: string
+        amountDrawn:
+          type: string
+        reason:
+          type: ["string", "null"]
+        reserveBalanceAfter:
+          type: string
+        createdAt:
+          type: string
+
+    Notification:
+      type: object
+      required: [id, sentBy, messageType, title, body, targetType, createdAt]
+      properties:
+        id:
+          type: string
+        sentBy:
+          type: string
+        messageType:
+          type: string
+          enum: [announcement, alert, reminder]
+        title:
+          type: string
+        body:
+          type: string
+        targetType:
+          type: string
+          enum: [all, all_agents, agent, writer]
+        targetId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    NotificationWithReceipt:
+      type: object
+      required: [id, sentBy, messageType, title, body, targetType, createdAt, readAt]
+      properties:
+        id:
+          type: string
+        sentBy:
+          type: string
+        messageType:
+          type: string
+          enum: [announcement, alert, reminder]
+        title:
+          type: string
+        body:
+          type: string
+        targetType:
+          type: string
+          enum: [all, all_agents, agent, writer]
+        targetId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        readAt:
+          type: ["string", "null"]
+
+    NotificationInput:
+      type: object
+      required: [messageType, title, body, targetType]
+      properties:
+        messageType:
+          type: string
+          enum: [announcement, alert, reminder]
+        title:
+          type: string
+        body:
+          type: string
+        targetType:
+          type: string
+          enum: [all, all_agents, agent, writer]
+        targetId:
+          type: string
+
+    UnreadCount:
+      type: object
+      required: [count]
+      properties:
+        count:
+          type: integer
 
