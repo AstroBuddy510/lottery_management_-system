@@ -35,6 +35,9 @@ export function Payments() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListPaymentsQueryKey({}) });
 
+  const agentList = Array.isArray(agents) ? agents : [];
+  const agentMap: Record<string, string> = Object.fromEntries(agentList.map(a => [a.id, a.fullCode]));
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -61,7 +64,7 @@ export function Payments() {
   };
 
   const handleVoid = async (id: string) => {
-    if (!confirm("Void this payment?")) return;
+    if (!confirm("Void this payment? This cannot be undone.")) return;
     try {
       await voidMutation.mutateAsync({ id, data: { reason: "Voided by cashier" } });
       toast({ title: "Payment voided" });
@@ -71,16 +74,33 @@ export function Payments() {
     }
   };
 
-  const agentList = Array.isArray(agents) ? agents : [];
+  const paymentList = Array.isArray(payments) ? payments : [];
+  const todayValid = paymentList.filter(p => !p.isVoided && p.paymentDate?.startsWith(new Date().toISOString().split("T")[0]));
+  const todayTotal = todayValid.reduce((s, p) => s + Number(p.amount), 0);
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold">Payments</h1>
         <Button size="sm" onClick={() => setOpen(true)}>Record Payment</Button>
       </div>
 
-      <div className="flex gap-3 mb-4 flex-wrap">
+      {(!filterFrom && !filterTo && !filterAgentId) && paymentList.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-muted-foreground mb-0.5">Collected Today</div>
+            <div className="text-xl font-bold text-primary">${todayTotal.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">{todayValid.length} payment{todayValid.length !== 1 ? "s" : ""}</div>
+          </div>
+          <div className="border rounded-lg p-3">
+            <div className="text-xs text-muted-foreground mb-0.5">Total (filtered)</div>
+            <div className="text-xl font-bold">${paymentList.filter(p => !p.isVoided).reduce((s, p) => s + Number(p.amount), 0).toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">{paymentList.filter(p => !p.isVoided).length} valid</div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-3 mb-4 flex-wrap items-end">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">From</Label>
           <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-8 text-sm w-36" />
@@ -95,13 +115,11 @@ export function Payments() {
             <SelectTrigger className="h-8 text-sm w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="_all">All agents</SelectItem>
-              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}
+              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-end">
-          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>Clear</Button>
-        </div>
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>Clear</Button>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
@@ -119,12 +137,12 @@ export function Payments() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
-            ) : !Array.isArray(payments) || payments.length === 0 ? (
+            ) : paymentList.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No payments found.</TableCell></TableRow>
-            ) : payments.map(p => (
+            ) : paymentList.map(p => (
               <TableRow key={p.id} className={p.isVoided ? "opacity-50" : ""}>
                 <TableCell className="text-sm">{p.paymentDate?.split("T")[0]}</TableCell>
-                <TableCell className="text-sm font-mono">{p.agentId}</TableCell>
+                <TableCell className="text-sm font-mono font-medium">{agentMap[p.agentId] ?? p.agentId.slice(0, 8) + "…"}</TableCell>
                 <TableCell className="text-sm text-right font-mono">${Number(p.amount).toFixed(2)}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{p.notes ?? "—"}</TableCell>
                 <TableCell><Badge variant={p.isVoided ? "destructive" : "default"} className="text-xs">{p.isVoided ? "Voided" : "Valid"}</Badge></TableCell>
@@ -147,12 +165,12 @@ export function Payments() {
               <Label className="text-xs">Agent</Label>
               <Select value={form.agentId} onValueChange={v => setForm(f => ({ ...f, agentId: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}</SelectContent>
+                <SelectContent>{agentList.filter(a => a.isActive).map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5"><Label className="text-xs">Amount</Label><Input type="number" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Date</Label><Input type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Notes (optional)</Label><Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="h-9 text-sm" /></div>
+            <div className="space-y-1.5"><Label className="text-xs">Amount</Label><Input type="number" step="0.01" min="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5"><Label className="text-xs">Payment Date</Label><Input type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5"><Label className="text-xs">Notes (optional)</Label><Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="h-9 text-sm" placeholder="Receipt #, memo..." /></div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createMutation.isPending || !form.agentId}>Record</Button>

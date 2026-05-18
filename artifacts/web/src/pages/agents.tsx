@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   useListAgents, useListUsers, useCreateAgent, useUpdateAgent,
   useListWriters, useCreateWriter, useUpdateWriter,
@@ -28,7 +28,7 @@ function WritersSection({ agentId }: { agentId: string }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
   const [form, setForm] = useState({ writerCode: "", fullName: "" });
-  const [editForm, setEditForm] = useState({ fullName: "" });
+  const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWritersQueryKey(agentId) });
 
@@ -49,7 +49,7 @@ function WritersSection({ agentId }: { agentId: string }) {
     e.preventDefault();
     if (!editWriter) return;
     try {
-      await updateMutation.mutateAsync({ id: editWriter.id, data: { fullName: editForm.fullName } });
+      await updateMutation.mutateAsync({ id: editWriter.id, data: { fullName: editForm.fullName, isActive: editForm.isActive } });
       toast({ title: "Writer updated" });
       setEditWriter(null);
       invalidate();
@@ -67,7 +67,7 @@ function WritersSection({ agentId }: { agentId: string }) {
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading writers...</p>
       ) : !Array.isArray(writers) || writers.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No writers.</p>
+        <p className="text-xs text-muted-foreground">No writers yet.</p>
       ) : (
         <table className="w-full text-sm">
           <thead>
@@ -85,7 +85,7 @@ function WritersSection({ agentId }: { agentId: string }) {
                 <td className="py-1 text-xs">{w.fullName}</td>
                 <td className="py-1"><Badge variant={w.isActive ? "default" : "secondary"} className="text-xs h-4 px-1">{w.isActive ? "Active" : "Inactive"}</Badge></td>
                 <td className="py-1 text-right">
-                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName }); }}>Edit</Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}>Edit</Button>
                 </td>
               </tr>
             ))}
@@ -97,8 +97,14 @@ function WritersSection({ agentId }: { agentId: string }) {
         <DialogContent>
           <DialogHeader><DialogTitle>Add Writer</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
-            <div className="space-y-1.5"><Label className="text-xs">Writer Code (4 chars)</Label><Input value={form.writerCode} onChange={e => setForm(f => ({ ...f, writerCode: e.target.value.toUpperCase() }))} required maxLength={4} className="h-9 text-sm" placeholder="CK01" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Full Name</Label><Input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Writer Code (4 chars)</Label>
+              <Input value={form.writerCode} onChange={e => setForm(f => ({ ...f, writerCode: e.target.value.toUpperCase() }))} required maxLength={4} className="h-9 text-sm font-mono" placeholder="CK01" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Full Name</Label>
+              <Input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createMutation.isPending}>Create</Button>
@@ -109,9 +115,16 @@ function WritersSection({ agentId }: { agentId: string }) {
 
       <Dialog open={!!editWriter} onOpenChange={open => !open && setEditWriter(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit Writer</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Edit Writer — {editWriter?.fullCode}</DialogTitle></DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4">
-            <div className="space-y-1.5"><Label className="text-xs">Full Name</Label><Input value={editForm.fullName} onChange={e => setEditForm({ fullName: e.target.value })} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Full Name</Label>
+              <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch checked={editForm.isActive} onCheckedChange={v => setEditForm(f => ({ ...f, isActive: v }))} />
+              <Label className="text-sm">{editForm.isActive ? "Active" : "Inactive"}</Label>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditWriter(null)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save</Button>
@@ -192,10 +205,10 @@ export function Agents() {
             ) : !Array.isArray(agents) || agents.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No agents found.</TableCell></TableRow>
             ) : agents.map(a => (
-              <>
-                <TableRow key={a.id} className={!a.isActive ? "opacity-50" : ""}>
+              <Fragment key={a.id}>
+                <TableRow className={!a.isActive ? "opacity-50" : ""}>
                   <TableCell>
-                    <button className="text-muted-foreground hover:text-foreground text-xs" onClick={() => setExpanded(expanded === a.id ? null : a.id)}>
+                    <button className="text-muted-foreground hover:text-foreground text-xs w-5 h-5 flex items-center justify-center" onClick={() => setExpanded(expanded === a.id ? null : a.id)}>
                       {expanded === a.id ? "▼" : "▶"}
                     </button>
                   </TableCell>
@@ -208,13 +221,13 @@ export function Agents() {
                   </TableCell>
                 </TableRow>
                 {expanded === a.id && (
-                  <TableRow key={`${a.id}-writers`}>
+                  <TableRow>
                     <TableCell colSpan={6} className="bg-muted/30 px-8 py-2">
                       <WritersSection agentId={a.id} />
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </Fragment>
             ))}
           </TableBody>
         </Table>
@@ -225,16 +238,23 @@ export function Agents() {
           <DialogHeader><DialogTitle>Add Agent</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Agent User (role=agent)</Label>
+              <Label className="text-xs">Agent User (must have role = Agent)</Label>
               <Select value={createForm.userId} onValueChange={v => setCreateForm(f => ({ ...f, userId: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select user..." /></SelectTrigger>
                 <SelectContent>{agentRoleUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.fullName} — {u.email}</SelectItem>)}</SelectContent>
               </Select>
+              {agentRoleUsers.length === 0 && (
+                <p className="text-xs text-muted-foreground">No available agent-role users. Create a user with role "Agent" first.</p>
+              )}
             </div>
-            <div className="space-y-1.5"><Label className="text-xs">Agent Code (2 chars)</Label><Input value={createForm.agentCode} onChange={e => setCreateForm(f => ({ ...f, agentCode: e.target.value.toUpperCase() }))} required maxLength={2} className="h-9 text-sm" placeholder="PA" /></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Agent Code (2 chars)</Label>
+              <Input value={createForm.agentCode} onChange={e => setCreateForm(f => ({ ...f, agentCode: e.target.value.toUpperCase() }))} required maxLength={2} className="h-9 text-sm font-mono" placeholder="PA" />
+              <p className="text-xs text-muted-foreground">Full code will be VS-{createForm.agentCode || "XX"}</p>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending || !createForm.userId}>Create</Button>
+              <Button type="submit" size="sm" disabled={createMutation.isPending || !createForm.userId || createForm.agentCode.length !== 2}>Create</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -244,6 +264,10 @@ export function Agents() {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Agent — {editAgent?.fullCode}</DialogTitle></DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <div>Name: <span className="text-foreground font-medium">{editAgent?.user?.fullName}</span></div>
+              <div>Email: <span className="text-foreground">{editAgent?.user?.email}</span></div>
+            </div>
             <div className="flex items-center gap-3">
               <Switch checked={editIsActive} onCheckedChange={setEditIsActive} />
               <Label className="text-sm">{editIsActive ? "Active" : "Inactive"}</Label>

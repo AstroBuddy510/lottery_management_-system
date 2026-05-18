@@ -39,8 +39,8 @@ export function Settings() {
     try {
       await createSettingsMutation.mutateAsync({
         data: {
-          commissionPct: settingsForm.commissionPct,
-          reservePct: settingsForm.reservePct,
+          commissionPct: String(Number(settingsForm.commissionPct) / 100),
+          reservePct: String(Number(settingsForm.reservePct) / 100),
           effectiveDate: settingsForm.effectiveDate,
         }
       });
@@ -127,8 +127,8 @@ export function Settings() {
             </div>
             <Button size="sm" onClick={() => {
               setSettingsForm({
-                commissionPct: settings ? String(Number(settings.commissionPct) * 100) : "",
-                reservePct: settings ? String(Number(settings.reservePct) * 100) : "",
+                commissionPct: settings ? String((Number(settings.commissionPct) * 100).toFixed(2)) : "",
+                reservePct: settings ? String((Number(settings.reservePct) * 100).toFixed(2)) : "",
                 effectiveDate: settings?.effectiveDate?.split("T")[0] ?? "",
               });
               setSettingsOpen(true);
@@ -199,9 +199,18 @@ export function Settings() {
         <DialogContent>
           <DialogHeader><DialogTitle>Update System Settings</DialogTitle></DialogHeader>
           <form onSubmit={handleCreateSettings} className="space-y-4">
-            <div className="space-y-1.5"><Label className="text-xs">Commission % (e.g. 5 for 5%)</Label><Input type="number" step="0.01" value={settingsForm.commissionPct} onChange={e => setSettingsForm(f => ({ ...f, commissionPct: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Reserve % (e.g. 3 for 3%)</Label><Input type="number" step="0.01" value={settingsForm.reservePct} onChange={e => setSettingsForm(f => ({ ...f, reservePct: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Effective Date</Label><Input type="date" value={settingsForm.effectiveDate} onChange={e => setSettingsForm(f => ({ ...f, effectiveDate: e.target.value }))} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Commission % (e.g. 5 for 5%)</Label>
+              <Input type="number" step="0.01" min="0" max="100" value={settingsForm.commissionPct} onChange={e => setSettingsForm(f => ({ ...f, commissionPct: e.target.value }))} required className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Reserve % (e.g. 3 for 3%)</Label>
+              <Input type="number" step="0.01" min="0" max="100" value={settingsForm.reservePct} onChange={e => setSettingsForm(f => ({ ...f, reservePct: e.target.value }))} required className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Effective Date</Label>
+              <Input type="date" value={settingsForm.effectiveDate} onChange={e => setSettingsForm(f => ({ ...f, effectiveDate: e.target.value }))} required className="h-9 text-sm" />
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setSettingsOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createSettingsMutation.isPending}>Save</Button>
@@ -209,8 +218,6 @@ export function Settings() {
           </form>
         </DialogContent>
       </Dialog>
-
-      {[windowOpen, !!editWindow].map((_, idx) => idx === 0 ? null : null)}
 
       <Dialog open={windowOpen} onOpenChange={setWindowOpen}>
         <DialogContent>

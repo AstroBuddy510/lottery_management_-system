@@ -3,6 +3,7 @@ import {
   useListGrossEntries, useCreateGrossEntry, useUpdateGrossEntry,
   useListAgents, useListWriters, getListGrossEntriesQueryKey, getListWritersQueryKey, GrossEntry,
 } from "@workspace/api-client-react";
+import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,17 +17,24 @@ import { useToast } from "@/hooks/use-toast";
 export function GrossEntries() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { writerMap, agentList } = useWriterLookup();
 
+  const [filterAgentId, setFilterAgentId] = useState("");
   const [filterWriterId, setFilterWriterId] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+
+  const { data: filterWriters } = useListWriters(filterAgentId, {}, {
+    query: { queryKey: getListWritersQueryKey(filterAgentId, {}), enabled: !!filterAgentId }
+  });
+  const filterWriterList = Array.isArray(filterWriters) ? filterWriters : [];
+
   const { data: entries, isLoading } = useListGrossEntries({
     writerId: filterWriterId || undefined,
     dateFrom: filterFrom || undefined,
     dateTo: filterTo || undefined,
   });
 
-  const { data: agents } = useListAgents({});
   const [selectedAgent, setSelectedAgent] = useState("");
   const { data: writers } = useListWriters(selectedAgent, {}, {
     query: { queryKey: getListWritersQueryKey(selectedAgent, {}), enabled: !!selectedAgent }
@@ -67,8 +75,9 @@ export function GrossEntries() {
     }
   };
 
-  const agentList = Array.isArray(agents) ? agents : [];
   const writerList = Array.isArray(writers) ? writers : [];
+
+  const clearFilter = () => { setFilterAgentId(""); setFilterWriterId(""); setFilterFrom(""); setFilterTo(""); };
 
   return (
     <div className="p-6">
@@ -77,7 +86,27 @@ export function GrossEntries() {
         <Button size="sm" onClick={() => setCreateOpen(true)}>Add Entry</Button>
       </div>
 
-      <div className="flex gap-3 mb-4 flex-wrap">
+      <div className="flex gap-3 mb-4 flex-wrap items-end">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Agent</Label>
+          <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
+            <SelectTrigger className="h-8 text-sm w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All agents</SelectItem>
+              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Writer</Label>
+          <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)} disabled={!filterAgentId}>
+            <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="All writers" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All writers</SelectItem>
+              {filterWriterList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">From</Label>
           <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-8 text-sm w-36" />
@@ -86,13 +115,7 @@ export function GrossEntries() {
           <Label className="text-xs text-muted-foreground">To</Label>
           <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-8 text-sm w-36" />
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Writer ID</Label>
-          <Input value={filterWriterId} onChange={e => setFilterWriterId(e.target.value)} className="h-8 text-sm w-48" placeholder="Filter by writer" />
-        </div>
-        <div className="flex items-end">
-          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setFilterWriterId(""); setFilterFrom(""); setFilterTo(""); }}>Clear</Button>
-        </div>
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={clearFilter}>Clear</Button>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
@@ -111,24 +134,30 @@ export function GrossEntries() {
               <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
             ) : !Array.isArray(entries) || entries.length === 0 ? (
               <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No entries found.</TableCell></TableRow>
-            ) : entries.map(entry => (
-              <TableRow key={entry.id} className={entry.locked ? "opacity-60" : ""}>
-                <TableCell className="text-sm">{entry.entryDate?.split("T")[0]}</TableCell>
-                <TableCell className="text-sm font-mono">{entry.writerId}</TableCell>
-                <TableCell className="text-sm text-right font-mono">${Number(entry.grossAmount).toFixed(2)}</TableCell>
-                <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
-                <TableCell>
-                  {!entry.locked && (
-                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount }); }}>Edit</Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+            ) : entries.map(entry => {
+              const writer = writerMap[entry.writerId];
+              return (
+                <TableRow key={entry.id} className={entry.locked ? "opacity-60" : ""}>
+                  <TableCell className="text-sm">{entry.entryDate?.split("T")[0]}</TableCell>
+                  <TableCell className="text-sm">
+                    <span className="font-mono">{writer?.fullCode ?? entry.writerId.slice(0, 8) + "…"}</span>
+                    {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
+                  </TableCell>
+                  <TableCell className="text-sm text-right font-mono">${Number(entry.grossAmount).toFixed(2)}</TableCell>
+                  <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
+                  <TableCell>
+                    {!entry.locked && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount }); }}>Edit</Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={createOpen} onOpenChange={open => { if (!open) { setSelectedAgent(""); setForm(f => ({ ...f, writerId: "" })); } setCreateOpen(open); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Gross Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
@@ -136,7 +165,7 @@ export function GrossEntries() {
               <Label className="text-xs">Agent</Label>
               <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}</SelectContent>
+                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
@@ -147,7 +176,7 @@ export function GrossEntries() {
               </Select>
             </div>
             <div className="space-y-1.5"><Label className="text-xs">Date</Label><Input type="date" value={form.entryDate} onChange={e => setForm(f => ({ ...f, entryDate: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Gross Amount</Label><Input type="number" step="0.01" value={form.grossAmount} onChange={e => setForm(f => ({ ...f, grossAmount: e.target.value }))} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5"><Label className="text-xs">Gross Amount</Label><Input type="number" step="0.01" min="0" value={form.grossAmount} onChange={e => setForm(f => ({ ...f, grossAmount: e.target.value }))} required className="h-9 text-sm" /></div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createMutation.isPending || !form.writerId}>Create</Button>
@@ -160,7 +189,13 @@ export function GrossEntries() {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4">
-            <div className="space-y-1.5"><Label className="text-xs">Gross Amount</Label><Input type="number" step="0.01" value={editForm.grossAmount} onChange={e => setEditForm({ grossAmount: e.target.value })} required className="h-9 text-sm" /></div>
+            {editEntry && (
+              <div className="text-sm text-muted-foreground">
+                Writer: <span className="text-foreground font-mono font-medium">{writerMap[editEntry.writerId]?.fullCode ?? editEntry.writerId}</span>
+                {" · "}Date: <span className="text-foreground">{editEntry.entryDate?.split("T")[0]}</span>
+              </div>
+            )}
+            <div className="space-y-1.5"><Label className="text-xs">Gross Amount</Label><Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={e => setEditForm({ grossAmount: e.target.value })} required className="h-9 text-sm" /></div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditEntry(null)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save</Button>
