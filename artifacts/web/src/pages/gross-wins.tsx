@@ -3,7 +3,7 @@ import {
   useListGrossEntries, useCreateGrossEntry, useUpdateGrossEntry,
   useListWinsEntries, useCreateWinsEntry, useUpdateWinsEntry,
   useListWriters, getListGrossEntriesQueryKey, getListWinsEntriesQueryKey, getListWritersQueryKey,
-  GrossEntry, WinsEntry, useGetSettings,
+  GrossEntry, WinsEntry, useGetSettings, ListGrossEntriesParams, ListWinsEntriesParams,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,10 +32,13 @@ function GrossTab() {
   });
   const filterWriterList = Array.isArray(filterWriters) ? filterWriters : [];
 
-  const { data: entries, isLoading } = useListGrossEntries({
+  const grossParams: ListGrossEntriesParams = {
     writerId: filterWriterId || undefined,
     dateFrom: filterFrom || undefined,
     dateTo: filterTo || undefined,
+  };
+  const { data: entries, isLoading } = useListGrossEntries(grossParams, {
+    query: { queryKey: getListGrossEntriesQueryKey(grossParams), refetchInterval: 30_000 },
   });
 
   const [selectedAgent, setSelectedAgent] = useState("");
@@ -244,10 +247,13 @@ function WinsTab() {
   });
   const filterWriterList = Array.isArray(filterWriters) ? filterWriters : [];
 
-  const { data: entries, isLoading } = useListWinsEntries({
+  const winsParams: ListWinsEntriesParams = {
     writerId: filterWriterId || undefined,
     dateFrom: filterFrom || undefined,
     dateTo: filterTo || undefined,
+  };
+  const { data: entries, isLoading } = useListWinsEntries(winsParams, {
+    query: { queryKey: getListWinsEntriesQueryKey(winsParams), refetchInterval: 30_000 },
   });
 
   const [selectedAgent, setSelectedAgent] = useState("");

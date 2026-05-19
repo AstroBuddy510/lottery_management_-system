@@ -27,7 +27,16 @@ import { MyWriters } from "@/pages/my-writers";
 
 import { Layout } from "@/components/layout";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: true,
+      refetchOnMount: true,
+      retry: 1,
+    },
+  },
+});
 
 function ProtectedRoute({ component: Component, roles }: { component: React.ComponentType, roles?: string[] }) {
   const { user, isLoading } = useAuth();

@@ -6,6 +6,8 @@ import {
   useListCalculations, useListPayments, useListGrossEntries,
   useListWinsEntries, useListSales, useListGames,
   getGetUnreadCountQueryKey, getListCalculationsQueryKey,
+  getListGrossEntriesQueryKey, getListWinsEntriesQueryKey,
+  getListPaymentsQueryKey, getGetReserveBalanceQueryKey,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -230,12 +232,21 @@ function DirectorDashboard() {
 
   const { data: allCalcs, isLoading: loadingCalcs } = useListCalculations(
     {},
-    { query: { queryKey: getListCalculationsQueryKey({}) } }
+    { query: { queryKey: getListCalculationsQueryKey({}), refetchInterval: 60_000 } }
   );
-  const { data: payments } = useListPayments({});
-  const { data: reserve } = useGetReserveBalance();
+  const { data: payments } = useListPayments({}, { query: { queryKey: getListPaymentsQueryKey({}), refetchInterval: 60_000 } });
+  const { data: reserve } = useGetReserveBalance({ query: { queryKey: getGetReserveBalanceQueryKey(), refetchInterval: 60_000 } });
   const { data: games } = useListGames();
   const { agentList, allWriters } = useWriterLookup();
+
+  const { data: liveGross } = useListGrossEntries(
+    {},
+    { query: { queryKey: getListGrossEntriesQueryKey({}), refetchInterval: 30_000 } }
+  );
+  const { data: liveWins } = useListWinsEntries(
+    {},
+    { query: { queryKey: getListWinsEntriesQueryKey({}), refetchInterval: 30_000 } }
+  );
 
   const calcList = Array.isArray(allCalcs) ? allCalcs : [];
   const paymentList = Array.isArray(payments) ? payments : [];
@@ -299,6 +310,27 @@ function DirectorDashboard() {
 
   const accumulatedReserve = Number(reserve?.balance ?? 0);
 
+  const grossToday = useMemo(
+    () => (Array.isArray(liveGross) ? liveGross : []).filter(e => e.entryDate?.startsWith(today)),
+    [liveGross, today]
+  );
+  const winsToday = useMemo(
+    () => (Array.isArray(liveWins) ? liveWins : []).filter(e => e.entryDate?.startsWith(today)),
+    [liveWins, today]
+  );
+  const grossTodayAmount = useMemo(
+    () => grossToday.reduce((s, e) => s + Number(e.grossAmount), 0),
+    [grossToday]
+  );
+  const winsTodayAmount = useMemo(
+    () => winsToday.reduce((s, e) => s + Number(e.winsAmount), 0),
+    [winsToday]
+  );
+  const hasCalcToday = useMemo(
+    () => calcList.some(c => c.calcDate?.startsWith(today)),
+    [calcList, today]
+  );
+
   const pageSize = viewMode === "grid" ? PAGE_SIZE_GRID : PAGE_SIZE_LIST;
   const totalPages = Math.max(1, Math.ceil(agentStats.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -325,11 +357,62 @@ function DirectorDashboard() {
         <div className="ml-auto text-xs text-muted-foreground font-medium">{DAY_NAMES[todayDow]}</div>
       </div>
 
-      {/* Summary cards */}
+      {/* Live Entry Status — real-time, polled every 30s */}
+      <div className="rounded-xl border bg-card px-5 py-3 flex items-center gap-5 flex-wrap">
+        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex-shrink-0">
+          Live Entries Today
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+          <span className="text-xs text-muted-foreground">Gross:</span>
+          <span className="text-sm font-bold">{grossToday.length}</span>
+          <span className="text-xs text-muted-foreground">
+            {grossToday.length === 1 ? "entry" : "entries"}
+          </span>
+          <span className="text-xs font-mono font-semibold text-emerald-700">
+            {fmtGHS(grossTodayAmount)}
+          </span>
+        </div>
+
+        <div className="w-px h-4 bg-border flex-shrink-0" />
+
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0" />
+          <span className="text-xs text-muted-foreground">Wins:</span>
+          <span className="text-sm font-bold">{winsToday.length}</span>
+          <span className="text-xs text-muted-foreground">
+            {winsToday.length === 1 ? "entry" : "entries"}
+          </span>
+          <span className="text-xs font-mono font-semibold text-violet-700">
+            {fmtGHS(winsTodayAmount)}
+          </span>
+        </div>
+
+        <div className="ml-auto flex-shrink-0">
+          {hasCalcToday ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+              Calculation run for today
+            </span>
+          ) : (grossToday.length > 0 || winsToday.length > 0) ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
+              Entries pending calculation
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-full">
+              No entries yet today
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Summary cards — based on last calculation run */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <StatCard label="Today's Gross" value={fmtGHS(totals.gross)} />
-        <StatCard label="Today's Net" value={fmtGHS(totals.net)} />
-        <StatCard label="Today's Reserve" value={fmtGHS(totals.reserve)} />
+        <StatCard label="Calculated Gross" value={fmtGHS(totals.gross)} />
+        <StatCard label="Calculated Net" value={fmtGHS(totals.net)} />
+        <StatCard label="Calculated Reserve" value={fmtGHS(totals.reserve)} />
         <StatCard label="Accumulated Reserve" value={fmtGHS(accumulatedReserve)} accent />
         <StatCard label="Overall Balance" value={fmtGHS(totals.balance)} accent={totals.balance >= 0} />
       </div>
@@ -449,11 +532,11 @@ function EntryDashboard({ type }: { type: "gross" | "wins" }) {
 
   const { data: rawGross } = useListGrossEntries(
     {},
-    { query: { queryKey: ["gross-entries-dashboard"], enabled: isGross } }
+    { query: { queryKey: getListGrossEntriesQueryKey({}), enabled: isGross, refetchInterval: 30_000 } }
   );
   const { data: rawWins } = useListWinsEntries(
     {},
-    { query: { queryKey: ["wins-entries-dashboard"], enabled: !isGross } }
+    { query: { queryKey: getListWinsEntriesQueryKey({}), enabled: !isGross, refetchInterval: 30_000 } }
   );
   const { data: games } = useListGames();
   const { data: unread } = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
