@@ -61,41 +61,49 @@ export function Sales() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">Sales Log</h1>
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-semibold">Sales Log</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">View and record lottery sales by writer</p>
+        </div>
         <Button size="sm" onClick={() => setOpen(true)}>Log Sale</Button>
       </div>
 
-      <div className="flex gap-3 mb-4 flex-wrap items-end">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Agent</Label>
-          <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
-            <SelectTrigger className="h-8 text-sm w-40"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">All agents</SelectItem>
-              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
-            </SelectContent>
-          </Select>
+      <div className="bg-muted/30 border rounded-xl p-4 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filter Sales</span>
+          <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={clearFilter}>Clear filters</Button>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Writer</Label>
-          <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)} disabled={!filterAgentId}>
-            <SelectTrigger className="h-8 text-sm w-44"><SelectValue placeholder="All writers" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">All writers</SelectItem>
-              {filterWriterList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
+            <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
+              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">All agents</SelectItem>
+                {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Writer</Label>
+            <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)} disabled={!filterAgentId}>
+              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="All writers" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">All writers</SelectItem>
+                {filterWriterList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">From</Label>
+            <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 text-sm bg-background" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">To</Label>
+            <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 text-sm bg-background" />
+          </div>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">From</Label>
-          <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-8 text-sm w-36" />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">To</Label>
-          <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-8 text-sm w-36" />
-        </div>
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={clearFilter}>Clear</Button>
       </div>
 
       <div className="border rounded-lg overflow-hidden">

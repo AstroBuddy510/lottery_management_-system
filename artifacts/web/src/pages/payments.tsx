@@ -80,46 +80,54 @@ export function Payments() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold">Payments</h1>
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-semibold">Payments</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Track and record agent cash collections</p>
+        </div>
         <Button size="sm" onClick={() => setOpen(true)}>Record Payment</Button>
       </div>
 
       {(!filterFrom && !filterTo && !filterAgentId) && paymentList.length > 0 && (
         <div className="grid grid-cols-2 gap-3 mb-5">
-          <div className="border rounded-lg p-3">
-            <div className="text-xs text-muted-foreground mb-0.5">Collected Today</div>
-            <div className="text-xl font-bold text-primary">GH₵ {todayTotal.toFixed(2)}</div>
-            <div className="text-xs text-muted-foreground">{todayValid.length} payment{todayValid.length !== 1 ? "s" : ""}</div>
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+            <div className="text-xs font-medium text-muted-foreground mb-1">Collected Today</div>
+            <div className="text-2xl font-bold text-primary">GH₵ {todayTotal.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{todayValid.length} payment{todayValid.length !== 1 ? "s" : ""}</div>
           </div>
-          <div className="border rounded-lg p-3">
-            <div className="text-xs text-muted-foreground mb-0.5">Total (filtered)</div>
-            <div className="text-xl font-bold">GH₵ {paymentList.filter(p => !p.isVoided).reduce((s, p) => s + Number(p.amount), 0).toFixed(2)}</div>
-            <div className="text-xs text-muted-foreground">{paymentList.filter(p => !p.isVoided).length} valid</div>
+          <div className="bg-muted/30 border rounded-xl p-4">
+            <div className="text-xs font-medium text-muted-foreground mb-1">All Valid Payments</div>
+            <div className="text-2xl font-bold">GH₵ {paymentList.filter(p => !p.isVoided).reduce((s, p) => s + Number(p.amount), 0).toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{paymentList.filter(p => !p.isVoided).length} valid entries</div>
           </div>
         </div>
       )}
 
-      <div className="flex gap-3 mb-4 flex-wrap items-end">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">From</Label>
-          <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-8 text-sm w-36" />
+      <div className="bg-muted/30 border rounded-xl p-4 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filter Payments</span>
+          <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>Clear filters</Button>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">To</Label>
-          <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-8 text-sm w-36" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
+            <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
+              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">All agents</SelectItem>
+                {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">From</Label>
+            <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 text-sm bg-background" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">To</Label>
+            <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 text-sm bg-background" />
+          </div>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Agent</Label>
-          <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
-            <SelectTrigger className="h-8 text-sm w-44"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">All agents</SelectItem>
-              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>Clear</Button>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
