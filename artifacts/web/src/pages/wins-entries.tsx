@@ -159,20 +159,22 @@ export function WinsEntries() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Date</TableHead>
+              <TableHead>Entry Date</TableHead>
               <TableHead>Writer</TableHead>
               <TableHead className="text-right">Wins Amount</TableHead>
+              <TableHead>Recorded At</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-20"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
             ) : !Array.isArray(entries) || entries.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No entries found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No entries found.</TableCell></TableRow>
             ) : entries.map(entry => {
               const writer = writerMap[entry.writerId];
+              const ts = entry.createdAt ? new Date(entry.createdAt) : null;
               return (
                 <TableRow key={entry.id} className={entry.locked ? "opacity-60" : ""}>
                   <TableCell className="text-sm">{entry.entryDate?.split("T")[0]}</TableCell>
@@ -181,6 +183,14 @@ export function WinsEntries() {
                     {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                   </TableCell>
                   <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.winsAmount).toFixed(2)}</TableCell>
+                  <TableCell className="text-sm">
+                    {ts ? (
+                      <span className="tabular-nums">
+                        <span className="block">{ts.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                        <span className="block text-xs text-muted-foreground">{ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                      </span>
+                    ) : "—"}
+                  </TableCell>
                   <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
                   <TableCell>
                     {!entry.locked && (
