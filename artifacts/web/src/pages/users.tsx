@@ -25,7 +25,7 @@ const ROLES = [
 const ROLE_LABELS: Record<string, string> = Object.fromEntries(ROLES.map(r => [r.value, r.label]));
 
 type CreateForm = { fullName: string; phone: string; role: string };
-type EditForm = { fullName: string; role: string };
+type EditForm = { fullName: string; phone: string; role: string };
 
 export function Users() {
   const qc = useQueryClient();
@@ -40,7 +40,7 @@ export function Users() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [createForm, setCreateForm] = useState<CreateForm>({ fullName: "", phone: "", role: "cashier" });
-  const [editForm, setEditForm] = useState<EditForm>({ fullName: "", role: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ fullName: "", phone: "", role: "" });
 
   const [newPin, setNewPin] = useState<{ pin: string; name: string } | null>(null);
 
@@ -126,7 +126,7 @@ export function Users() {
                 <TableCell className="text-xs text-muted-foreground">{u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : "—"}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditUser(u); setEditForm({ fullName: u.fullName, role: u.role }); }}>Edit</Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditUser(u); setEditForm({ fullName: u.fullName, phone: u.phone ?? "", role: u.role }); }}>Edit</Button>
                     <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-amber-600" onClick={() => handleRegeneratePin(u)}>Reset PIN</Button>
                     {u.isActive && <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeactivate(u)}>Deactivate</Button>}
                   </div>
@@ -176,6 +176,10 @@ export function Users() {
               <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
+              <Label className="text-xs">Phone Number</Label>
+              <Input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} className="h-9 text-sm" placeholder="e.g. 0240546338" />
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs">Role</Label>
               <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
@@ -184,7 +188,7 @@ export function Users() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditUser(null)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save</Button>
+              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save Changes</Button>
             </DialogFooter>
           </form>
         </DialogContent>

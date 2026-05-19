@@ -95,8 +95,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="text-xs font-semibold text-sidebar-foreground truncate">{user?.fullName}</div>
             <div className="text-xs text-sidebar-foreground/60 truncate">{ROLE_LABELS[user?.role ?? ""] ?? user?.role}</div>
           </div>
-          <Button size="sm" variant="outline" className="w-full text-xs h-7" onClick={logout}>
-            Sign out
+          <Button
+            size="sm"
+            className="w-full text-xs h-8 bg-accent hover:bg-accent/90 text-accent-foreground font-semibold"
+            onClick={logout}
+          >
+            Sign Out
           </Button>
         </div>
       </aside>

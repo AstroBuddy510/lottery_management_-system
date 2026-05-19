@@ -127,6 +127,7 @@ export const UserUpdateRole = {
 
 export interface UserUpdate {
   fullName?: string;
+  phone?: string;
   role?: UserUpdateRole;
   isActive?: boolean;
 }

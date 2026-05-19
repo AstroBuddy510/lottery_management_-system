@@ -132,6 +132,7 @@ router.patch(
     }
     const updates: Record<string, unknown> = {};
     if (bodyResult.data.fullName) updates.fullName = bodyResult.data.fullName;
+    if (bodyResult.data.phone) updates.phone = bodyResult.data.phone;
     if (bodyResult.data.role) updates.role = bodyResult.data.role;
     if (bodyResult.data.isActive !== undefined)
       updates.isActive = bodyResult.data.isActive;

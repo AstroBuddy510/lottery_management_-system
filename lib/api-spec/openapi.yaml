@@ -1185,6 +1185,8 @@ components:
       properties:
         fullName:
           type: string
+        phone:
+          type: string
         role:
           type: string
           enum: [director, administrator, cashier, gross_entry, wins_entry, agent]

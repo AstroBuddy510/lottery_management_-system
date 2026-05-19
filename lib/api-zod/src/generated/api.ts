@@ -132,6 +132,7 @@ export const UpdateUserParams = zod.object({
 
 export const UpdateUserBody = zod.object({
   "fullName": zod.string().optional(),
+  "phone": zod.string().optional(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']).optional(),
   "isActive": zod.boolean().optional()
 })
