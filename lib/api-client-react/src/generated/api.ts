@@ -24,6 +24,8 @@ import type {
   AgentReport,
   AgentUpdate,
   AgentWithUser,
+  AllocateReserveBody,
+  AllocateReserveResult,
   AuthTokens,
   CalcRunInput,
   CalcRunResult,
@@ -59,6 +61,7 @@ import type {
   PinRegenResponse,
   RefreshInput,
   ReserveAllocation,
+  ReserveDebt,
   ReserveSummary,
   SalesLog,
   SalesLogInput,
@@ -3874,6 +3877,154 @@ export function useListReserveAllocations<TData = Awaited<ReturnType<typeof list
 
 
 
+
+export const getListReserveDebtsUrl = () => {
+
+
+
+
+  return `/api/reserve/debts`
+}
+
+/**
+ * @summary List outstanding debt records from calculations with negative writer balance
+ */
+export const listReserveDebts = async ( options?: RequestInit): Promise<ReserveDebt[]> => {
+
+  return customFetch<ReserveDebt[]>(getListReserveDebtsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListReserveDebtsQueryKey = () => {
+    return [
+    `/api/reserve/debts`
+    ] as const;
+    }
+
+
+export const getListReserveDebtsQueryOptions = <TData = Awaited<ReturnType<typeof listReserveDebts>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReserveDebts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListReserveDebtsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listReserveDebts>>> = ({ signal }) => listReserveDebts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listReserveDebts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListReserveDebtsQueryResult = NonNullable<Awaited<ReturnType<typeof listReserveDebts>>>
+export type ListReserveDebtsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List outstanding debt records from calculations with negative writer balance
+ */
+
+export function useListReserveDebts<TData = Awaited<ReturnType<typeof listReserveDebts>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReserveDebts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListReserveDebtsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getApplyReserveAllocationUrl = () => {
+
+
+
+
+  return `/api/reserve/allocate`
+}
+
+/**
+ * @summary Apply a debt repayment strategy using reserve funds
+ */
+export const applyReserveAllocation = async (allocateReserveBody: AllocateReserveBody, options?: RequestInit): Promise<AllocateReserveResult> => {
+
+  return customFetch<AllocateReserveResult>(getApplyReserveAllocationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      allocateReserveBody,)
+  }
+);}
+
+
+
+
+export const getApplyReserveAllocationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyReserveAllocation>>, TError,{data: BodyType<AllocateReserveBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyReserveAllocation>>, TError,{data: BodyType<AllocateReserveBody>}, TContext> => {
+
+const mutationKey = ['applyReserveAllocation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyReserveAllocation>>, {data: BodyType<AllocateReserveBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  applyReserveAllocation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyReserveAllocationMutationResult = NonNullable<Awaited<ReturnType<typeof applyReserveAllocation>>>
+    export type ApplyReserveAllocationMutationBody = BodyType<AllocateReserveBody>
+    export type ApplyReserveAllocationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Apply a debt repayment strategy using reserve funds
+ */
+export const useApplyReserveAllocation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyReserveAllocation>>, TError,{data: BodyType<AllocateReserveBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyReserveAllocation>>,
+        TError,
+        {data: BodyType<AllocateReserveBody>},
+        TContext
+      > => {
+      return useMutation(getApplyReserveAllocationMutationOptions(options));
+    }
 
 export const getListNotificationsUrl = () => {
 

@@ -448,12 +448,20 @@ export interface OrgReport {
   agents: OrgAgentSummary[];
 }
 
-export interface ReserveSummary {
+export interface ReservePeriod {
+  id: string;
+  periodDate: string;
   totalContributed: string;
   totalAllocated: string;
   balance: string;
-  /** @nullable */
-  latestPeriod?: string | null;
+  updatedAt: string;
+}
+
+export interface ReserveSummary {
+  totalContributed: number;
+  totalAllocated: number;
+  balance: number;
+  periods: ReservePeriod[];
 }
 
 export interface ReserveAllocation {
@@ -465,6 +473,59 @@ export interface ReserveAllocation {
   reason?: string | null;
   reserveBalanceAfter: string;
   createdAt: string;
+  /** @nullable */
+  writerFullCode?: string | null;
+  /** @nullable */
+  writerFullName?: string | null;
+}
+
+export interface ReserveDebt {
+  id: string;
+  calcDate: string;
+  writerId: string;
+  writerFullCode: string;
+  writerFullName: string;
+  agentId: string;
+  agentFullCode: string;
+  agentName: string;
+  grossSales: string;
+  netGross: string;
+  winsAmount: string;
+  reserveAmount: string;
+  writerBalance: string;
+  deficitAmount: string;
+  amountCovered: string;
+  outstandingAmount: string;
+  agentTotalGross: string;
+}
+
+export type AllocateReserveBodyStrategy = typeof AllocateReserveBodyStrategy[keyof typeof AllocateReserveBodyStrategy];
+
+
+export const AllocateReserveBodyStrategy = {
+  fifo: 'fifo',
+  lifo: 'lifo',
+  best_performer: 'best_performer',
+} as const;
+
+export interface AllocateReserveBody {
+  strategy: AllocateReserveBodyStrategy;
+  maxAmount?: number;
+}
+
+export type AllocateReserveResultItemsItem = {
+  calcId: string;
+  writerId: string;
+  agentId: string;
+  amountApplied: string;
+  outstanding: string;
+};
+
+export interface AllocateReserveResult {
+  allocatedCount: number;
+  totalAllocated: string;
+  newBalance: string;
+  items: AllocateReserveResultItemsItem[];
 }
 
 export type NotificationMessageType = typeof NotificationMessageType[keyof typeof NotificationMessageType];

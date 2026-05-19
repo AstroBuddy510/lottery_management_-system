@@ -983,10 +983,17 @@ export const GetOrgReportResponse = zod.object({
  * @summary Get current reserve fund balance
  */
 export const GetReserveBalanceResponse = zod.object({
+  "totalContributed": zod.number(),
+  "totalAllocated": zod.number(),
+  "balance": zod.number(),
+  "periods": zod.array(zod.object({
+  "id": zod.string(),
+  "periodDate": zod.string(),
   "totalContributed": zod.string(),
   "totalAllocated": zod.string(),
   "balance": zod.string(),
-  "latestPeriod": zod.string().nullish()
+  "updatedAt": zod.string()
+}))
 })
 
 
@@ -1005,9 +1012,58 @@ export const ListReserveAllocationsResponseItem = zod.object({
   "amountDrawn": zod.string(),
   "reason": zod.string().nullish(),
   "reserveBalanceAfter": zod.string(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "writerFullCode": zod.string().nullish(),
+  "writerFullName": zod.string().nullish()
 })
 export const ListReserveAllocationsResponse = zod.array(ListReserveAllocationsResponseItem)
+
+
+/**
+ * @summary List outstanding debt records from calculations with negative writer balance
+ */
+export const ListReserveDebtsResponseItem = zod.object({
+  "id": zod.string(),
+  "calcDate": zod.string(),
+  "writerId": zod.string(),
+  "writerFullCode": zod.string(),
+  "writerFullName": zod.string(),
+  "agentId": zod.string(),
+  "agentFullCode": zod.string(),
+  "agentName": zod.string(),
+  "grossSales": zod.string(),
+  "netGross": zod.string(),
+  "winsAmount": zod.string(),
+  "reserveAmount": zod.string(),
+  "writerBalance": zod.string(),
+  "deficitAmount": zod.string(),
+  "amountCovered": zod.string(),
+  "outstandingAmount": zod.string(),
+  "agentTotalGross": zod.string()
+})
+export const ListReserveDebtsResponse = zod.array(ListReserveDebtsResponseItem)
+
+
+/**
+ * @summary Apply a debt repayment strategy using reserve funds
+ */
+export const ApplyReserveAllocationBody = zod.object({
+  "strategy": zod.enum(['fifo', 'lifo', 'best_performer']),
+  "maxAmount": zod.number().optional()
+})
+
+export const ApplyReserveAllocationResponse = zod.object({
+  "allocatedCount": zod.number(),
+  "totalAllocated": zod.string(),
+  "newBalance": zod.string(),
+  "items": zod.array(zod.object({
+  "calcId": zod.string(),
+  "writerId": zod.string(),
+  "agentId": zod.string(),
+  "amountApplied": zod.string(),
+  "outstanding": zod.string()
+}))
+})
 
 
 /**
