@@ -443,24 +443,275 @@ function CashierDashboard() {
 }
 
 function EntryDashboard({ type }: { type: "gross" | "wins" }) {
-  const { data: gross } = useListGrossEntries(
-    {},
-    { query: { queryKey: ["gross-entries-dashboard"], enabled: type === "gross" } }
-  );
-  const { data: wins } = useListWinsEntries(
-    {},
-    { query: { queryKey: ["wins-entries-dashboard"], enabled: type === "wins" } }
-  );
-  const { data: unread } = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
-  const entries = type === "gross" ? gross : wins;
   const today = new Date().toISOString().split("T")[0];
-  const todayEntries = Array.isArray(entries) ? entries.filter(e => e.entryDate?.startsWith(today)) : [];
+  const todayDow = new Date().getDay();
+  const isGross = type === "gross";
+
+  const { data: rawGross } = useListGrossEntries(
+    {},
+    { query: { queryKey: ["gross-entries-dashboard"], enabled: isGross } }
+  );
+  const { data: rawWins } = useListWinsEntries(
+    {},
+    { query: { queryKey: ["wins-entries-dashboard"], enabled: !isGross } }
+  );
+  const { data: games } = useListGames();
+  const { data: unread } = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
+  const { writerMap } = useWriterLookup();
+
+  const gameList = Array.isArray(games) ? games : [];
+  const currentGame = useMemo(() => {
+    const active = gameList.filter(g => g.isActive);
+    return active.find(g => g.dayOfWeek === todayDow) ?? active.find(g => g.dayOfWeek == null) ?? null;
+  }, [gameList, todayDow]);
+
+  const grossList = Array.isArray(rawGross) ? rawGross : [];
+  const winsList = Array.isArray(rawWins) ? rawWins : [];
+  const allEntries = isGross ? grossList : winsList;
+
+  const getAmount = (e: (typeof allEntries)[0]) =>
+    isGross ? Number((e as { grossAmount?: string }).grossAmount ?? 0)
+            : Number((e as { winsAmount?: string }).winsAmount ?? 0);
+
+  const todayEntries = useMemo(
+    () => allEntries.filter(e => e.entryDate?.startsWith(today)),
+    [allEntries, today]
+  );
+
+  const todayAmount = useMemo(
+    () => todayEntries.reduce((s, e) => s + getAmount(e), 0),
+    [todayEntries]
+  );
+
+  const writersToday = useMemo(
+    () => new Set(todayEntries.map(e => e.writerId)).size,
+    [todayEntries]
+  );
+
+  const openToday  = todayEntries.filter(e => !e.locked).length;
+  const lockedToday = todayEntries.filter(e =>  e.locked).length;
+
+  const recentEntries = useMemo(
+    () => [...todayEntries]
+      .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+      .slice(0, 7),
+    [todayEntries]
+  );
+
+  const weekAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const weekEntries = allEntries.filter(e => (e.entryDate ?? "") >= weekAgo);
+  const weekAmount  = weekEntries.reduce((s, e) => s + getAmount(e), 0);
+  const allAmount   = allEntries.reduce((s, e) => s + getAmount(e), 0);
+
+  const dateStr = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
+  }).format(new Date());
+
+  const accentText = isGross ? "text-emerald-700" : "text-violet-700";
+  const accentBg   = isGross ? "bg-emerald-50 border-emerald-200" : "bg-violet-50 border-violet-200";
+  const accentPill = isGross ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700";
+  const dotColor   = isGross ? "bg-emerald-500" : "bg-violet-500";
+  const icon       = isGross ? "📊" : "🏆";
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-      <StatCard label={`${type === "gross" ? "Gross" : "Wins"} Entries Today`} value={todayEntries.length} />
-      <StatCard label="Total Entries" value={Array.isArray(entries) ? entries.length : 0} />
-      <StatCard label="Unread Notifications" value={unread?.count ?? 0} />
+    <div className="space-y-5">
+
+      {/* ── Context banner ── */}
+      <div className={`rounded-xl border px-5 py-3.5 flex items-center gap-4 ${accentBg}`}>
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl flex-shrink-0 ${isGross ? "bg-emerald-100" : "bg-violet-100"}`}>
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className={`text-sm font-bold ${accentText}`}>
+            {isGross ? "Gross Entry Portal" : "Wins Entry Portal"}
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5 truncate">
+            {dateStr}
+            {currentGame && <span className="ml-2 font-medium text-foreground">· 🎮 {currentGame.name}</span>}
+          </div>
+        </div>
+        {(unread?.count ?? 0) > 0 && (
+          <div className="flex-shrink-0 bg-destructive text-destructive-foreground text-xs font-bold px-2.5 py-1 rounded-full">
+            {unread!.count} unread
+          </div>
+        )}
+      </div>
+
+      {/* ── Stat cards ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+
+        <div className="rounded-xl border bg-card p-4 space-y-1">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Logged Today</div>
+          <div className="text-2xl font-bold">{todayEntries.length}</div>
+          <div className="text-[11px] text-muted-foreground">entr{todayEntries.length === 1 ? "y" : "ies"} submitted</div>
+        </div>
+
+        <div className={`rounded-xl border p-4 space-y-1 ${accentBg}`}>
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            {isGross ? "Gross Sales Today" : "Total Wins Today"}
+          </div>
+          <div className={`text-2xl font-bold ${accentText}`}>{fmtGHS(todayAmount)}</div>
+          <div className="text-[11px] text-muted-foreground">sum of today's amounts</div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 space-y-1">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Writers Covered</div>
+          <div className="text-2xl font-bold">{writersToday}</div>
+          <div className="text-[11px] text-muted-foreground">unique writer{writersToday !== 1 ? "s" : ""} today</div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 space-y-1">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Entry Status</div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold text-primary">{openToday}</span>
+            <span className="text-xs text-muted-foreground">open</span>
+            {lockedToday > 0 && (
+              <>
+                <span className="text-xs text-muted-foreground">·</span>
+                <span className="text-sm font-semibold text-muted-foreground">{lockedToday}</span>
+                <span className="text-xs text-muted-foreground">locked</span>
+              </>
+            )}
+          </div>
+          <div className="text-[11px] text-muted-foreground">of today's entries</div>
+        </div>
+
+        <div className="rounded-xl border bg-card p-4 space-y-1">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Notifications</div>
+          <div className={`text-2xl font-bold ${(unread?.count ?? 0) > 0 ? "text-destructive" : ""}`}>
+            {unread?.count ?? 0}
+          </div>
+          <div className="text-[11px] text-muted-foreground">unread message{(unread?.count ?? 0) !== 1 ? "s" : ""}</div>
+        </div>
+
+      </div>
+
+      {/* ── Activity + Summaries ── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+
+        {/* Today's entries feed */}
+        <div className="lg:col-span-2 rounded-xl border bg-card overflow-hidden">
+          <div className="px-5 py-3.5 border-b flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold">Today's Entries</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {todayEntries.length === 0
+                  ? "No entries logged yet — start adding entries for today"
+                  : `${todayEntries.length} entr${todayEntries.length === 1 ? "y" : "ies"} · most recent first`}
+              </div>
+            </div>
+            {todayEntries.length > 0 && (
+              <div className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg ${accentPill}`}>
+                {fmtGHS(todayAmount)}
+              </div>
+            )}
+          </div>
+
+          {recentEntries.length === 0 ? (
+            <div className="py-14 flex flex-col items-center gap-3 text-center px-6">
+              <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center text-2xl">{icon}</div>
+              <div>
+                <div className="text-sm font-medium">No entries for today yet</div>
+                <div className="text-xs text-muted-foreground mt-1 max-w-xs">
+                  Use the <span className="font-semibold">Add Entry</span> button in the{" "}
+                  {isGross ? "Gross Entries" : "Wins Entries"} page to start recording today's data.
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {recentEntries.map(e => {
+                const writer = writerMap[e.writerId];
+                const ts = e.createdAt ? new Date(e.createdAt) : null;
+                const amount = getAmount(e);
+                return (
+                  <div
+                    key={e.id}
+                    className={`px-5 py-3 flex items-center gap-3 transition-colors hover:bg-muted/30 ${e.locked ? "opacity-55" : ""}`}
+                  >
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${e.locked ? "bg-muted-foreground/40" : dotColor}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm font-mono font-semibold flex-shrink-0">
+                          {writer?.fullCode ?? e.writerId.slice(0, 8) + "…"}
+                        </span>
+                        {writer && (
+                          <span className="text-xs text-muted-foreground truncate">{writer.fullName}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className={`text-sm font-mono font-bold flex-shrink-0 ${accentText}`}>
+                      {fmtGHS(amount)}
+                    </div>
+                    <div className="text-xs text-muted-foreground w-12 text-right tabular-nums flex-shrink-0">
+                      {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"}
+                    </div>
+                    <div className="w-14 flex-shrink-0 text-right">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                        e.locked ? "bg-muted text-muted-foreground" : accentPill
+                      }`}>
+                        {e.locked ? "Locked" : "Open"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+              {todayEntries.length > 7 && (
+                <div className="px-5 py-2.5 text-xs text-muted-foreground text-center bg-muted/20">
+                  Showing 7 of {todayEntries.length} entries — view all in the Entries page
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Weekly + All-Time summaries */}
+        <div className="space-y-4">
+
+          <div className="rounded-xl border bg-card p-5">
+            <div className="text-sm font-semibold">7-Day Summary</div>
+            <div className="text-xs text-muted-foreground mt-0.5 mb-4">Last 7 days including today</div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Total Entries</span>
+                <span className="text-sm font-bold">{weekEntries.length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{isGross ? "Total Gross" : "Total Wins"}</span>
+                <span className={`text-sm font-bold ${accentText}`}>{fmtGHS(weekAmount)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2.5">
+                <span className="text-xs text-muted-foreground">Daily Avg</span>
+                <span className="text-sm font-semibold">{fmtGHS(weekAmount / 7)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-card p-5">
+            <div className="text-sm font-semibold">All-Time</div>
+            <div className="text-xs text-muted-foreground mt-0.5 mb-4">All recorded entries</div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Total Entries</span>
+                <span className="text-sm font-bold">{allEntries.length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{isGross ? "Total Gross" : "Total Wins"}</span>
+                <span className={`text-sm font-bold ${accentText}`}>{fmtGHS(allAmount)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2.5">
+                <span className="text-xs text-muted-foreground">Locked Entries</span>
+                <span className="text-sm font-semibold">{allEntries.filter(e => e.locked).length}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Open Entries</span>
+                <span className="text-sm font-semibold text-primary">{allEntries.filter(e => !e.locked).length}</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
   );
 }
