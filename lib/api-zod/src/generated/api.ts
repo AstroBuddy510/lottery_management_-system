@@ -634,6 +634,65 @@ export const UpdateWinsEntryResponse = zod.object({
 
 
 /**
+ * @summary List expense categories
+ */
+export const ListExpenseCategoriesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "defaultAmount": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional()
+})
+export const ListExpenseCategoriesResponse = zod.array(ListExpenseCategoriesResponseItem)
+
+
+/**
+ * @summary Create an expense category
+ */
+export const CreateExpenseCategoryBody = zod.object({
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "defaultAmount": zod.string().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Update an expense category
+ */
+export const UpdateExpenseCategoryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateExpenseCategoryBody = zod.object({
+  "name": zod.string().optional(),
+  "description": zod.string().nullish(),
+  "defaultAmount": zod.string().nullish(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateExpenseCategoryResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "defaultAmount": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete an expense category
+ */
+export const DeleteExpenseCategoryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+/**
  * @summary List payments
  */
 export const ListPaymentsQueryParams = zod.object({
@@ -646,8 +705,16 @@ export const ListPaymentsResponseItem = zod.object({
   "id": zod.string(),
   "agentId": zod.string(),
   "cashierId": zod.string(),
+  "transactionType": zod.enum(['pay_in', 'pay_out']),
+  "grossAmount": zod.string().nullish(),
   "amount": zod.string(),
+  "expenseItems": zod.array(zod.object({
+  "expenseCategoryId": zod.string(),
+  "name": zod.string(),
+  "amount": zod.string()
+})).nullish(),
   "paymentDate": zod.string(),
+  "receiptNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "isVoided": zod.boolean(),
   "voidedBy": zod.string().nullish(),
@@ -662,7 +729,13 @@ export const ListPaymentsResponse = zod.array(ListPaymentsResponseItem)
  */
 export const CreatePaymentBody = zod.object({
   "agentId": zod.string(),
-  "amount": zod.string(),
+  "transactionType": zod.enum(['pay_in', 'pay_out']),
+  "grossAmount": zod.string(),
+  "expenseItems": zod.array(zod.object({
+  "expenseCategoryId": zod.string(),
+  "name": zod.string(),
+  "amount": zod.string()
+})).optional(),
   "paymentDate": zod.string(),
   "notes": zod.string().optional()
 })
@@ -683,8 +756,16 @@ export const VoidPaymentResponse = zod.object({
   "id": zod.string(),
   "agentId": zod.string(),
   "cashierId": zod.string(),
+  "transactionType": zod.enum(['pay_in', 'pay_out']),
+  "grossAmount": zod.string().nullish(),
   "amount": zod.string(),
+  "expenseItems": zod.array(zod.object({
+  "expenseCategoryId": zod.string(),
+  "name": zod.string(),
+  "amount": zod.string()
+})).nullish(),
   "paymentDate": zod.string(),
+  "receiptNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "isVoided": zod.boolean(),
   "voidedBy": zod.string().nullish(),

@@ -12,6 +12,7 @@ import reportsRouter from "./reports";
 import reserveRouter from "./reserve";
 import notificationsRouter from "./notifications";
 import gamesRouter from "./games";
+import expensesRouter from "./expenses";
 
 const router: IRouter = Router();
 
@@ -22,6 +23,7 @@ router.use(agentsRouter);
 router.use(settingsRouter);
 router.use(salesRouter);
 router.use(entriesRouter);
+router.use(expensesRouter);
 router.use(paymentsRouter);
 router.use(calculationsRouter);
 router.use(reportsRouter);

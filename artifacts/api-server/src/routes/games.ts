@@ -45,7 +45,7 @@ router.put(
   requireAuth,
   requireRole("director", "administrator"),
   async (req, res) => {
-    const { id } = req.params;
+    const id = req.params["id"] as string;
     const { name, dayOfWeek, isActive } = req.body as {
       name?: string;
       dayOfWeek?: number | null;
@@ -74,7 +74,7 @@ router.delete(
   requireAuth,
   requireRole("director", "administrator"),
   async (req, res) => {
-    const { id } = req.params;
+    const id = req.params["id"] as string;
     await db.delete(gamesTable).where(eq(gamesTable.id, id));
     res.status(204).send();
   },

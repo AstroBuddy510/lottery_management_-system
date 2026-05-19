@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, paymentsTable, cashierTimeWindowsTable, agentsTable } from "@workspace/db";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import {
   CreatePaymentBody,
   VoidPaymentParams,
@@ -34,6 +34,14 @@ function isWithinTimeWindow(
       timeStr >= w.windowOpen.slice(0, 5) &&
       timeStr <= w.windowClose.slice(0, 5),
   );
+}
+
+async function generateReceiptNumber(): Promise<string> {
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(paymentsTable);
+  const next = (count ?? 0) + 1;
+  return `REC-${String(next).padStart(6, "0")}`;
 }
 
 router.get(
@@ -87,9 +95,27 @@ router.post(
       return;
     }
 
+    const gross = Number(parse.data.grossAmount);
+    const expenseTotal = (parse.data.expenseItems ?? []).reduce(
+      (sum, item) => sum + Number(item.amount),
+      0,
+    );
+    const netAmount = (gross - expenseTotal).toFixed(2);
+
+    const receiptNumber = await generateReceiptNumber();
+
     const [payment] = await db
       .insert(paymentsTable)
-      .values({ ...parse.data, cashierId: req.user!.userId })
+      .values({
+        agentId: parse.data.agentId,
+        cashierId: req.user!.userId,
+        transactionType: parse.data.transactionType,
+        grossAmount: String(gross.toFixed(2)),
+        amount: netAmount,
+        expenseItems: parse.data.expenseItems ?? [],
+        paymentDate: parse.data.paymentDate,
+        receiptNumber,
+      })
       .returning();
     res.status(201).json(payment);
   },

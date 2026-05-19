@@ -3,7 +3,8 @@ import {
   useGetSettings, useCreateSettings,
   useListTimeWindows, useCreateTimeWindow, useUpdateTimeWindow, useDeleteTimeWindow,
   useListGames, useCreateGame, useUpdateGame, useDeleteGame,
-  getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListGamesQueryKey,
+  useListExpenseCategories, useCreateExpenseCategory, useUpdateExpenseCategory, useDeleteExpenseCategory,
+  getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListGamesQueryKey, getListExpenseCategoriesQueryKey,
   TimeWindow, Game,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,6 +42,17 @@ const RATES: { key: RateKey; label: string; description: string; color: string }
 ];
 
 const EMPTY_GAME = { name: "", dayOfWeek: "", isActive: true };
+const EMPTY_EXPENSE = { name: "", description: "", defaultAmount: "", isActive: true };
+
+type ExpenseCategoryRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  defaultAmount?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+};
 
 export function Settings() {
   const qc = useQueryClient();
@@ -50,6 +62,7 @@ export function Settings() {
   const { data: settings, isLoading: loadingSettings } = useGetSettings();
   const { data: windows, isLoading: loadingWindows } = useListTimeWindows();
   const { data: games, isLoading: loadingGames } = useListGames();
+  const { data: expenseCategories, isLoading: loadingExpenses } = useListExpenseCategories();
 
   // ── Mutations ──
   const createSettingsMutation = useCreateSettings();
@@ -59,6 +72,9 @@ export function Settings() {
   const createGameMutation = useCreateGame();
   const updateGameMutation = useUpdateGame();
   const deleteGameMutation = useDeleteGame();
+  const createExpenseMutation = useCreateExpenseCategory();
+  const updateExpenseMutation = useUpdateExpenseCategory();
+  const deleteExpenseMutation = useDeleteExpenseCategory();
 
   // ── Rates state ──
   const [ratesOpen, setRatesOpen] = useState(false);
@@ -76,6 +92,12 @@ export function Settings() {
   const [editGame, setEditGame] = useState<Game | null>(null);
   const [gameForm, setGameForm] = useState(EMPTY_GAME);
 
+  // ── Expense category state ──
+  const [expenseCreateOpen, setExpenseCreateOpen] = useState(false);
+  const [editExpense, setEditExpense] = useState<ExpenseCategoryRow | null>(null);
+  const [expenseForm, setExpenseForm] = useState(EMPTY_EXPENSE);
+
+  const expenseList = Array.isArray(expenseCategories) ? expenseCategories : [];
   const gameList = Array.isArray(games) ? games : [];
 
   // ─────────── Handlers ───────────
@@ -215,6 +237,68 @@ export function Settings() {
     setGameForm({ name: g.name, dayOfWeek: g.dayOfWeek != null ? String(g.dayOfWeek) : "", isActive: g.isActive });
   };
 
+  const handleCreateExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createExpenseMutation.mutateAsync({
+        data: {
+          name: expenseForm.name,
+          description: expenseForm.description || undefined,
+          defaultAmount: expenseForm.defaultAmount || undefined,
+          isActive: expenseForm.isActive,
+        },
+      });
+      toast({ title: "Expense category created" });
+      setExpenseCreateOpen(false);
+      setExpenseForm(EMPTY_EXPENSE);
+      qc.invalidateQueries({ queryKey: getListExpenseCategoriesQueryKey() });
+    } catch {
+      toast({ title: "Failed to create expense category", variant: "destructive" });
+    }
+  };
+
+  const handleEditExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editExpense) return;
+    try {
+      await updateExpenseMutation.mutateAsync({
+        id: editExpense.id,
+        data: {
+          name: expenseForm.name,
+          description: expenseForm.description || null,
+          defaultAmount: expenseForm.defaultAmount || null,
+          isActive: expenseForm.isActive,
+        },
+      });
+      toast({ title: "Expense category updated" });
+      setEditExpense(null);
+      qc.invalidateQueries({ queryKey: getListExpenseCategoriesQueryKey() });
+    } catch {
+      toast({ title: "Failed to update expense category", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteExpense = async (exp: ExpenseCategoryRow) => {
+    if (!confirm(`Delete "${exp.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteExpenseMutation.mutateAsync({ id: exp.id });
+      toast({ title: "Expense category deleted" });
+      qc.invalidateQueries({ queryKey: getListExpenseCategoriesQueryKey() });
+    } catch {
+      toast({ title: "Failed to delete expense category", variant: "destructive" });
+    }
+  };
+
+  const openEditExpense = (exp: ExpenseCategoryRow) => {
+    setEditExpense(exp);
+    setExpenseForm({
+      name: exp.name,
+      description: exp.description ?? "",
+      defaultAmount: exp.defaultAmount ?? "",
+      isActive: exp.isActive,
+    });
+  };
+
   // ─────────── Sub-forms ───────────
 
   const WindowForm = ({ onSubmit, onCancel, isPending }: { onSubmit: (e: React.FormEvent) => void; onCancel: () => void; isPending: boolean }) => (
@@ -271,6 +355,31 @@ export function Settings() {
     </form>
   );
 
+  const ExpenseForm = ({ onSubmit, onCancel, isPending }: { onSubmit: (e: React.FormEvent) => void; onCancel: () => void; isPending: boolean }) => (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="space-y-1.5">
+        <Label className="text-xs">Category Name</Label>
+        <Input value={expenseForm.name} onChange={e => setExpenseForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Transport, Administration Fee" />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Description (optional)</Label>
+        <Input value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="h-9 text-sm" placeholder="Brief description of this expense" />
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Default Amount (GH₵, optional)</Label>
+        <Input type="number" step="0.01" min="0" value={expenseForm.defaultAmount} onChange={e => setExpenseForm(f => ({ ...f, defaultAmount: e.target.value }))} className="h-9 text-sm" placeholder="0.00" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Switch checked={expenseForm.isActive} onCheckedChange={v => setExpenseForm(f => ({ ...f, isActive: v }))} />
+        <Label className="text-xs">Active (visible to cashiers)</Label>
+      </div>
+      <DialogFooter>
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" size="sm" disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
+      </DialogFooter>
+    </form>
+  );
+
   // ─────────── Render ───────────
 
   return (
@@ -278,7 +387,7 @@ export function Settings() {
       <div>
         <h1 className="text-xl font-semibold">Settings</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Manage commission rates, reserve percentages, cashier hours, and games.
+          Manage commission rates, reserve percentages, cashier hours, expense categories, and games.
         </p>
       </div>
 
@@ -286,6 +395,7 @@ export function Settings() {
         <TabsList className="mb-4">
           <TabsTrigger value="rates">Commission Rates</TabsTrigger>
           <TabsTrigger value="hours">Cashier Hours</TabsTrigger>
+          <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
           <TabsTrigger value="games">Games</TabsTrigger>
         </TabsList>
 
@@ -372,6 +482,64 @@ export function Settings() {
                           <div className="flex gap-1">
                             <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditWindow(w)}>Edit</Button>
                             <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteWindow(w)}>Delete</Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Expense Categories ── */}
+        <TabsContent value="expenses">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Expense Categories</CardTitle>
+                  <CardDescription className="text-xs mt-1">
+                    Define expense types that cashiers can apply when recording payments. Active categories appear in the payment form.
+                  </CardDescription>
+                </div>
+                <Button size="sm" onClick={() => { setExpenseForm(EMPTY_EXPENSE); setExpenseCreateOpen(true); }}>+ Add Category</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Default Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-28">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingExpenses ? (
+                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell></TableRow>
+                    ) : expenseList.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No expense categories yet. Add your first category.</TableCell></TableRow>
+                    ) : expenseList.map(exp => (
+                      <TableRow key={exp.id}>
+                        <TableCell className="font-medium text-sm">{exp.name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{exp.description ?? <span className="italic">—</span>}</TableCell>
+                        <TableCell className="text-sm text-right font-mono">
+                          {exp.defaultAmount ? `GH₵ ${Number(exp.defaultAmount).toFixed(2)}` : <span className="text-muted-foreground italic">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={exp.isActive ? "default" : "secondary"} className="text-xs">
+                            {exp.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditExpense(exp as ExpenseCategoryRow)}>Edit</Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteExpense(exp as ExpenseCategoryRow)}>Delete</Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -501,6 +669,20 @@ export function Settings() {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Game</DialogTitle></DialogHeader>
           <GameForm onSubmit={handleEditGame} onCancel={() => setEditGame(null)} isPending={updateGameMutation.isPending} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={expenseCreateOpen} onOpenChange={setExpenseCreateOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Expense Category</DialogTitle></DialogHeader>
+          <ExpenseForm onSubmit={handleCreateExpense} onCancel={() => setExpenseCreateOpen(false)} isPending={createExpenseMutation.isPending} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editExpense} onOpenChange={open => !open && setEditExpense(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Expense Category</DialogTitle></DialogHeader>
+          <ExpenseForm onSubmit={handleEditExpense} onCancel={() => setEditExpense(null)} isPending={updateExpenseMutation.isPending} />
         </DialogContent>
       </Dialog>
     </div>

@@ -300,12 +300,61 @@ export interface WinsEntryUpdate {
   winsAmount: string;
 }
 
+export interface ExpenseLineItem {
+  expenseCategoryId: string;
+  name: string;
+  amount: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  defaultAmount?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateExpenseCategoryBody {
+  name: string;
+  description?: string;
+  defaultAmount?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateExpenseCategoryBody {
+  name?: string;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  defaultAmount?: string | null;
+  isActive?: boolean;
+}
+
+export type PaymentTransactionType = typeof PaymentTransactionType[keyof typeof PaymentTransactionType];
+
+
+export const PaymentTransactionType = {
+  pay_in: 'pay_in',
+  pay_out: 'pay_out',
+} as const;
+
 export interface Payment {
   id: string;
   agentId: string;
   cashierId: string;
+  transactionType: PaymentTransactionType;
+  /** @nullable */
+  grossAmount?: string | null;
   amount: string;
+  /** @nullable */
+  expenseItems?: ExpenseLineItem[] | null;
   paymentDate: string;
+  /** @nullable */
+  receiptNumber?: string | null;
   /** @nullable */
   notes?: string | null;
   isVoided: boolean;
@@ -316,9 +365,19 @@ export interface Payment {
   createdAt: string;
 }
 
+export type PaymentInputTransactionType = typeof PaymentInputTransactionType[keyof typeof PaymentInputTransactionType];
+
+
+export const PaymentInputTransactionType = {
+  pay_in: 'pay_in',
+  pay_out: 'pay_out',
+} as const;
+
 export interface PaymentInput {
   agentId: string;
-  amount: string;
+  transactionType: PaymentInputTransactionType;
+  grossAmount: string;
+  expenseItems?: ExpenseLineItem[];
   paymentDate: string;
   notes?: string;
 }
