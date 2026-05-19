@@ -22,6 +22,7 @@ import { Calculations } from "@/pages/calculations";
 import { Reports } from "@/pages/reports";
 import { Reserve } from "@/pages/reserve";
 import { Notifications } from "@/pages/notifications";
+import { MyWriters } from "@/pages/my-writers";
 
 import { Layout } from "@/components/layout";
 
@@ -108,6 +109,10 @@ function Router() {
 
       <Route path="/reserve">
         {() => <ProtectedRoute component={Reserve} roles={['director', 'administrator']} />}
+      </Route>
+
+      <Route path="/my-writers">
+        {() => <ProtectedRoute component={MyWriters} roles={["agent"]} />}
       </Route>
 
       <Route path="/notifications">

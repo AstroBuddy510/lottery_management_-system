@@ -267,6 +267,27 @@ export const CreateAgentBody = zod.object({
 
 
 /**
+ * @summary Get the agent record for the currently authenticated agent user
+ */
+export const GetMyAgentResponse = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "agentCode": zod.string(),
+  "fullCode": zod.string(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string(),
+  "user": zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "phone": zod.string(),
+  "role": zod.string(),
+  "isActive": zod.boolean(),
+  "profilePicture": zod.string().nullish()
+})
+})
+
+
+/**
  * @summary Get agent detail
  */
 export const GetAgentParams = zod.object({

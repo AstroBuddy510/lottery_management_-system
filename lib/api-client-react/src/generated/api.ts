@@ -1271,6 +1271,83 @@ export const useCreateAgent = <TError = ErrorType<unknown>,
       return useMutation(getCreateAgentMutationOptions(options));
     }
 
+export const getGetMyAgentUrl = () => {
+
+
+
+
+  return `/api/agents/me`
+}
+
+/**
+ * @summary Get the agent record for the currently authenticated agent user
+ */
+export const getMyAgent = async ( options?: RequestInit): Promise<AgentWithUser> => {
+
+  return customFetch<AgentWithUser>(getGetMyAgentUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyAgentQueryKey = () => {
+    return [
+    `/api/agents/me`
+    ] as const;
+    }
+
+
+export const getGetMyAgentQueryOptions = <TData = Awaited<ReturnType<typeof getMyAgent>>, TError = ErrorType<ErrorResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyAgent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyAgentQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyAgent>>> = ({ signal }) => getMyAgent({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyAgent>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyAgentQueryResult = NonNullable<Awaited<ReturnType<typeof getMyAgent>>>
+export type GetMyAgentQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get the agent record for the currently authenticated agent user
+ */
+
+export function useGetMyAgent<TData = Awaited<ReturnType<typeof getMyAgent>>, TError = ErrorType<ErrorResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyAgent>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyAgentQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getGetAgentUrl = (id: string,) => {
 
 
