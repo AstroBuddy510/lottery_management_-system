@@ -15,7 +15,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
   { label: "Users", path: "/users", roles: ["director", "administrator"] },
   { label: "Agents", path: "/agents", roles: ["director", "administrator"] },
-  { label: "Games", path: "/games", roles: ["director", "administrator"] },
   { label: "Settings", path: "/settings", roles: ["director", "administrator"] },
   { label: "Sales Log", path: "/sales", roles: ["agent", "administrator"] },
   { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "administrator"] },
