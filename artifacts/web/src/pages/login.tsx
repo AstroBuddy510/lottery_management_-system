@@ -92,7 +92,7 @@ export function Login() {
                 value={phone}
                 onChange={e => setPhone(e.target.value)}
                 required
-                placeholder="e.g. 8000001"
+                placeholder="e.g. 0244000001"
                 className="h-10 text-sm bg-white/20 border-white/30 text-white placeholder:text-white/50 focus:bg-white/30 focus:border-white/60"
               />
             </div>

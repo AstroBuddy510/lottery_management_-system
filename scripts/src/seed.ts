@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 async function seed() {
   console.log("Seeding database...");
 
-  const directorPhone = "8000001";
+  const directorPhone = "0244000001";
   const [existing] = await db
     .select({ id: usersTable.id })
     .from(usersTable)
@@ -17,56 +17,56 @@ async function seed() {
       .insert(usersTable)
       .values({
         fullName: "System Director",
-        phone: "8000001",
+        phone: "0244000001",
         pinHash: await bcrypt.hash("0001", 10),
         role: "director",
       })
       .returning({ id: usersTable.id, phone: usersTable.phone });
-    console.log(`Created director: phone=8000001  PIN=0001`);
+    console.log(`Created director: phone=0244000001  PIN=0001`);
 
     await db.insert(usersTable).values({
       fullName: "Head Administrator",
-      phone: "8000002",
-      pinHash: await bcrypt.hash("0002", 10),
+      phone: "0240546338",
+      pinHash: await bcrypt.hash("1010", 10),
       role: "administrator",
     });
-    console.log(`Created administrator: phone=8000002  PIN=0002`);
+    console.log(`Created administrator: phone=0240546338  PIN=1010`);
 
     await db.insert(usersTable).values({
       fullName: "Maria Cashier",
-      phone: "8000003",
+      phone: "0274000003",
       pinHash: await bcrypt.hash("0003", 10),
       role: "cashier",
     });
-    console.log(`Created cashier: phone=8000003  PIN=0003`);
+    console.log(`Created cashier: phone=0274000003  PIN=0003`);
 
     await db.insert(usersTable).values({
       fullName: "Juan Gross Entry",
-      phone: "8000004",
+      phone: "0544000004",
       pinHash: await bcrypt.hash("0004", 10),
       role: "gross_entry",
     });
-    console.log(`Created gross_entry: phone=8000004  PIN=0004`);
+    console.log(`Created gross_entry: phone=0544000004  PIN=0004`);
 
     await db.insert(usersTable).values({
       fullName: "Ana Wins Entry",
-      phone: "8000005",
+      phone: "0204000005",
       pinHash: await bcrypt.hash("0005", 10),
       role: "wins_entry",
     });
-    console.log(`Created wins_entry: phone=8000005  PIN=0005`);
+    console.log(`Created wins_entry: phone=0204000005  PIN=0005`);
 
     const [agentUser] = await db
       .insert(usersTable)
       .values({
         fullName: "Pedro Agent",
-        phone: "8000006",
+        phone: "0264000006",
         pinHash: await bcrypt.hash("0006", 10),
         role: "agent",
       })
       .returning({ id: usersTable.id });
 
-    console.log(`Created agent: phone=8000006  PIN=0006`);
+    console.log(`Created agent: phone=0264000006  PIN=0006`);
 
     const [settings] = await db
       .insert(systemSettingsTable)
@@ -97,14 +97,14 @@ async function seed() {
     console.log("Created 2 writers for VS-PA");
 
     console.log("\n=== TEST CREDENTIALS ===");
-    console.log("Phone    | Role          | PIN");
-    console.log("---------|---------------|----");
-    console.log("8000001  | director      | 0001");
-    console.log("8000002  | administrator | 0002");
-    console.log("8000003  | cashier       | 0003");
-    console.log("8000004  | gross_entry   | 0004");
-    console.log("8000005  | wins_entry    | 0005");
-    console.log("8000006  | agent         | 0006");
+    console.log("Phone        | Role          | PIN");
+    console.log("-------------|---------------|----");
+    console.log("0244000001   | director      | 0001");
+    console.log("0240546338   | administrator | 1010");
+    console.log("0274000003   | cashier       | 0003");
+    console.log("0544000004   | gross_entry   | 0004");
+    console.log("0204000005   | wins_entry    | 0005");
+    console.log("0264000006   | agent         | 0006");
   } else {
     console.log("Seed data already exists, skipping.");
   }

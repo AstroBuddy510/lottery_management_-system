@@ -55,12 +55,12 @@ A full-stack lottery operations management platform for 6 user roles: Director, 
 
 | Role | Phone | PIN |
 |------|-------|-----|
-| Director | 8000001 | 0001 |
-| Administrator | 8000002 | 0002 |
-| Cashier | 8000003 | 0003 |
-| Gross Entry | 8000004 | 0004 |
-| Wins Entry | 8000005 | 0005 |
-| Agent | 8000006 | 0006 |
+| Director | 0244000001 | 0001 |
+| Administrator | 0240546338 | 1010 |
+| Cashier | 0274000003 | 0003 |
+| Gross Entry | 0544000004 | 0004 |
+| Wins Entry | 0204000005 | 0005 |
+| Agent | 0264000006 | 0006 |
 
 ## Seeded data
 
