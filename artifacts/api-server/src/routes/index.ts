@@ -11,6 +11,7 @@ import calculationsRouter from "./calculations";
 import reportsRouter from "./reports";
 import reserveRouter from "./reserve";
 import notificationsRouter from "./notifications";
+import gamesRouter from "./games";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(calculationsRouter);
 router.use(reportsRouter);
 router.use(reserveRouter);
 router.use(notificationsRouter);
+router.use(gamesRouter);
 
 export default router;

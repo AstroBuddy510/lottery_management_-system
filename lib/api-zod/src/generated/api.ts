@@ -9,6 +9,59 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary List all games
+ */
+export const ListGamesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "dayOfWeek": zod.number().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string()
+})
+export const ListGamesResponse = zod.array(ListGamesResponseItem)
+
+
+/**
+ * @summary Create a game
+ */
+export const CreateGameBody = zod.object({
+  "name": zod.string(),
+  "dayOfWeek": zod.number().nullish(),
+  "isActive": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Update a game
+ */
+export const UpdateGameParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateGameBody = zod.object({
+  "name": zod.string().optional(),
+  "dayOfWeek": zod.number().nullish(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateGameResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "dayOfWeek": zod.number().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a game
+ */
+export const DeleteGameParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({

@@ -34,6 +34,84 @@ tags:
     description: Communications and notifications
 
 paths:
+  /games:
+    get:
+      operationId: listGames
+      tags: [settings]
+      summary: List all games
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Game"
+    post:
+      operationId: createGame
+      tags: [settings]
+      summary: Create a game
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGameBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+
+  /games/{id}:
+    put:
+      operationId: updateGame
+      tags: [settings]
+      summary: Update a game
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGameBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+    delete:
+      operationId: deleteGame
+      tags: [settings]
+      summary: Delete a game
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
   /healthz:
     get:
       operationId: healthCheck
@@ -1724,4 +1802,40 @@ components:
       properties:
         count:
           type: integer
+
+    Game:
+      type: object
+      required: [id, name, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        dayOfWeek:
+          type: ["integer", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    CreateGameBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        dayOfWeek:
+          type: ["integer", "null"]
+        isActive:
+          type: boolean
+
+    UpdateGameBody:
+      type: object
+      properties:
+        name:
+          type: string
+        dayOfWeek:
+          type: ["integer", "null"]
+        isActive:
+          type: boolean
 

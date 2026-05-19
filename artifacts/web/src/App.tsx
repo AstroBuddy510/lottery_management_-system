@@ -12,6 +12,8 @@ import { Dashboard } from "@/pages/dashboard";
 import { Users } from "@/pages/users";
 import { Agents } from "@/pages/agents";
 import { Settings } from "@/pages/settings";
+import { Games } from "@/pages/games";
+import { AgentDetail } from "@/pages/agent-detail";
 import { Sales } from "@/pages/sales";
 import { GrossEntries } from "@/pages/gross-entries";
 import { WinsEntries } from "@/pages/wins-entries";
@@ -66,6 +68,14 @@ function Router() {
 
       <Route path="/agents">
         {() => <ProtectedRoute component={Agents} roles={['director', 'administrator']} />}
+      </Route>
+
+      <Route path="/agents/:agentId/detail">
+        {() => <ProtectedRoute component={AgentDetail} roles={['director', 'administrator']} />}
+      </Route>
+
+      <Route path="/games">
+        {() => <ProtectedRoute component={Games} roles={['director', 'administrator']} />}
       </Route>
 
       <Route path="/settings">

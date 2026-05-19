@@ -485,6 +485,29 @@ export interface UnreadCount {
   count: number;
 }
 
+export interface Game {
+  id: string;
+  name: string;
+  /** @nullable */
+  dayOfWeek?: number | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateGameBody {
+  name: string;
+  /** @nullable */
+  dayOfWeek?: number | null;
+  isActive?: boolean;
+}
+
+export interface UpdateGameBody {
+  name?: string;
+  /** @nullable */
+  dayOfWeek?: number | null;
+  isActive?: boolean;
+}
+
 export type ListUsersParams = {
 role?: string;
 isActive?: boolean;
