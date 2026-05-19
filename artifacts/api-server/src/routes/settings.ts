@@ -28,7 +28,7 @@ router.get("/settings", requireAuth, async (req, res) => {
 router.post(
   "/settings",
   requireAuth,
-  requireRole("director"),
+  requireRole("director", "administrator"),
   async (req, res) => {
     const parse = CreateSettingsBody.safeParse(req.body);
     if (!parse.success) {

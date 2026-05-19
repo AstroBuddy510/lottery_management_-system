@@ -1347,11 +1347,15 @@ components:
 
     SystemSettings:
       type: object
-      required: [id, commissionPct, reservePct, effectiveDate, updatedAt]
+      required: [id, commissionPct, agentCommissionPct, writerCommissionPct, reservePct, effectiveDate, updatedAt]
       properties:
         id:
           type: string
         commissionPct:
+          type: string
+        agentCommissionPct:
+          type: string
+        writerCommissionPct:
           type: string
         reservePct:
           type: string
@@ -1364,9 +1368,13 @@ components:
 
     SystemSettingsInput:
       type: object
-      required: [commissionPct, reservePct, effectiveDate]
+      required: [commissionPct, agentCommissionPct, writerCommissionPct, reservePct, effectiveDate]
       properties:
         commissionPct:
+          type: string
+        agentCommissionPct:
+          type: string
+        writerCommissionPct:
           type: string
         reservePct:
           type: string

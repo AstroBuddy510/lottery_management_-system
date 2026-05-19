@@ -15,6 +15,8 @@ import { usersTable } from "./users";
 export const systemSettingsTable = pgTable("system_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   commissionPct: decimal("commission_pct", { precision: 5, scale: 4 }).notNull(),
+  agentCommissionPct: decimal("agent_commission_pct", { precision: 5, scale: 4 }).notNull().default("0"),
+  writerCommissionPct: decimal("writer_commission_pct", { precision: 5, scale: 4 }).notNull().default("0"),
   reservePct: decimal("reserve_pct", { precision: 5, scale: 4 }).notNull(),
   updatedBy: uuid("updated_by").notNull().references(() => usersTable.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

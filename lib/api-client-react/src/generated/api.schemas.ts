@@ -182,6 +182,8 @@ export interface WriterUpdate {
 export interface SystemSettings {
   id: string;
   commissionPct: string;
+  agentCommissionPct: string;
+  writerCommissionPct: string;
   reservePct: string;
   effectiveDate: string;
   updatedAt: string;
@@ -190,6 +192,8 @@ export interface SystemSettings {
 
 export interface SystemSettingsInput {
   commissionPct: string;
+  agentCommissionPct: string;
+  writerCommissionPct: string;
   reservePct: string;
   effectiveDate: string;
 }

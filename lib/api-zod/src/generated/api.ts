@@ -386,6 +386,8 @@ export const UpdateWriterResponse = zod.object({
 export const GetSettingsResponse = zod.object({
   "id": zod.string(),
   "commissionPct": zod.string(),
+  "agentCommissionPct": zod.string(),
+  "writerCommissionPct": zod.string(),
   "reservePct": zod.string(),
   "effectiveDate": zod.string(),
   "updatedAt": zod.string(),
@@ -398,6 +400,8 @@ export const GetSettingsResponse = zod.object({
  */
 export const CreateSettingsBody = zod.object({
   "commissionPct": zod.string(),
+  "agentCommissionPct": zod.string(),
+  "writerCommissionPct": zod.string(),
   "reservePct": zod.string(),
   "effectiveDate": zod.string()
 })
