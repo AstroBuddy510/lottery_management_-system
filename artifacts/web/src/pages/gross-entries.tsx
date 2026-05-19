@@ -162,9 +162,9 @@ export function GrossEntries() {
               <TableHead>Entry Date</TableHead>
               <TableHead>Writer</TableHead>
               <TableHead className="text-right">Gross Amount</TableHead>
-              <TableHead>Recorded At</TableHead>
+              <TableHead className="pl-8">Recorded At</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-20"></TableHead>
+              <TableHead className="w-24">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -183,7 +183,7 @@ export function GrossEntries() {
                     {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                   </TableCell>
                   <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.grossAmount).toFixed(2)}</TableCell>
-                  <TableCell className="text-sm tabular-nums">
+                  <TableCell className="text-sm tabular-nums pl-8">
                     {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>
                   <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
