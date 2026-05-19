@@ -214,7 +214,7 @@ export function Agents() {
                   </TableCell>
                   <TableCell className="font-mono text-sm font-medium">{a.fullCode}</TableCell>
                   <TableCell className="text-sm">{a.user?.fullName ?? "—"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{a.user?.email ?? "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground font-mono">{a.user?.phone ?? "—"}</TableCell>
                   <TableCell><Badge variant={a.isActive ? "default" : "secondary"} className="text-xs">{a.isActive ? "Active" : "Inactive"}</Badge></TableCell>
                   <TableCell>
                     <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditAgent(a); setEditIsActive(a.isActive); }}>Edit</Button>
@@ -241,7 +241,7 @@ export function Agents() {
               <Label className="text-xs">Agent User (must have role = Agent)</Label>
               <Select value={createForm.userId} onValueChange={v => setCreateForm(f => ({ ...f, userId: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select user..." /></SelectTrigger>
-                <SelectContent>{agentRoleUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.fullName} — {u.email}</SelectItem>)}</SelectContent>
+                <SelectContent>{agentRoleUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.fullName} — {u.phone ?? ""}</SelectItem>)}</SelectContent>
               </Select>
               {agentRoleUsers.length === 0 && (
                 <p className="text-xs text-muted-foreground">No available agent-role users. Create a user with role "Agent" first.</p>
@@ -266,7 +266,7 @@ export function Agents() {
           <form onSubmit={handleEdit} className="space-y-4">
             <div className="text-sm text-muted-foreground">
               <div>Name: <span className="text-foreground font-medium">{editAgent?.user?.fullName}</span></div>
-              <div>Email: <span className="text-foreground">{editAgent?.user?.email}</span></div>
+              <div>Phone: <span className="text-foreground font-mono">{editAgent?.user?.phone}</span></div>
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={editIsActive} onCheckedChange={setEditIsActive} />

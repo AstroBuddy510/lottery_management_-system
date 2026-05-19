@@ -151,7 +151,7 @@ paths:
     post:
       operationId: createUser
       tags: [users]
-      summary: Create a user
+      summary: Create a user (PIN auto-generated and returned once)
       security:
         - bearerAuth: []
       requestBody:
@@ -162,11 +162,38 @@ paths:
               $ref: "#/components/schemas/UserInput"
       responses:
         "201":
-          description: Created
+          description: Created — includes one-time PIN
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                $ref: "#/components/schemas/UserCreated"
+
+  /users/{id}/regenerate-pin:
+    post:
+      operationId: regeneratePin
+      tags: [users]
+      summary: Regenerate a user's PIN (director/administrator only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: New PIN generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PinRegenResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /users/{id}:
     patch:
@@ -1063,12 +1090,17 @@ components:
 
     LoginInput:
       type: object
-      required: [email, password]
+      required: [phone, role, pin]
       properties:
-        email:
+        phone:
           type: string
-        password:
+        role:
           type: string
+          enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
+        pin:
+          type: string
+          minLength: 4
+          maxLength: 4
 
     RefreshInput:
       type: object
@@ -1090,13 +1122,13 @@ components:
 
     User:
       type: object
-      required: [id, fullName, email, role, isActive, createdAt]
+      required: [id, fullName, phone, role, isActive, createdAt]
       properties:
         id:
           type: string
         fullName:
           type: string
-        email:
+        phone:
           type: string
         role:
           type: string
@@ -1108,15 +1140,41 @@ components:
         lastLogin:
           type: ["string", "null"]
 
+    UserCreated:
+      type: object
+      required: [id, fullName, phone, role, isActive, createdAt, pin]
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+        pin:
+          type: string
+          description: "Auto-generated 4-digit PIN — show once and communicate to user"
+
+    PinRegenResponse:
+      type: object
+      required: [pin]
+      properties:
+        pin:
+          type: string
+
     UserInput:
       type: object
-      required: [fullName, email, password, role]
+      required: [fullName, phone, role]
       properties:
         fullName:
           type: string
-        email:
-          type: string
-        password:
+        phone:
           type: string
         role:
           type: string
@@ -1127,15 +1185,11 @@ components:
       properties:
         fullName:
           type: string
-        email:
-          type: string
         role:
           type: string
           enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
         isActive:
           type: boolean
-        password:
-          type: string
 
     AgentWithUser:
       type: object

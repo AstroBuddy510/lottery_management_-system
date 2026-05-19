@@ -7,10 +7,15 @@ import {
   UpdateUserBody,
   UpdateUserParams,
   DeactivateUserParams,
+  RegeneratePinParams,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
+
+function generatePin(): string {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
 
 router.get(
   "/users",
@@ -27,7 +32,7 @@ router.get(
       .select({
         id: usersTable.id,
         fullName: usersTable.fullName,
-        email: usersTable.email,
+        phone: usersTable.phone,
         role: usersTable.role,
         isActive: usersTable.isActive,
         createdAt: usersTable.createdAt,
@@ -49,29 +54,64 @@ router.post(
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
-    const { fullName, email, password, role } = parse.data;
+    const { fullName, phone, role } = parse.data;
+
     const [existing] = await db
       .select({ id: usersTable.id })
       .from(usersTable)
-      .where(eq(usersTable.email, email))
+      .where(eq(usersTable.phone, phone))
       .limit(1);
     if (existing) {
-      res.status(409).json({ error: "Email already in use" });
+      res.status(409).json({ error: "Phone number already in use" });
       return;
     }
-    const passwordHash = await bcrypt.hash(password, 12);
+
+    const pin = generatePin();
+    const pinHash = await bcrypt.hash(pin, 10);
+
     const [user] = await db
       .insert(usersTable)
-      .values({ fullName, email, passwordHash, role })
+      .values({ fullName, phone, pinHash, role })
       .returning();
+
     res.status(201).json({
       id: user!.id,
       fullName: user!.fullName,
-      email: user!.email,
+      phone: user!.phone,
       role: user!.role,
       isActive: user!.isActive,
       createdAt: user!.createdAt,
+      pin,
     });
+  },
+);
+
+router.post(
+  "/users/:id/regenerate-pin",
+  requireAuth,
+  requireRole("director", "administrator"),
+  async (req, res) => {
+    const parse = RegeneratePinParams.safeParse(req.params);
+    if (!parse.success) {
+      res.status(400).json({ error: "Invalid params" });
+      return;
+    }
+
+    const pin = generatePin();
+    const pinHash = await bcrypt.hash(pin, 10);
+
+    const [user] = await db
+      .update(usersTable)
+      .set({ pinHash })
+      .where(eq(usersTable.id, parse.data.id))
+      .returning({ id: usersTable.id });
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    res.json({ pin });
   },
 );
 
@@ -92,12 +132,9 @@ router.patch(
     }
     const updates: Record<string, unknown> = {};
     if (bodyResult.data.fullName) updates.fullName = bodyResult.data.fullName;
-    if (bodyResult.data.email) updates.email = bodyResult.data.email;
     if (bodyResult.data.role) updates.role = bodyResult.data.role;
     if (bodyResult.data.isActive !== undefined)
       updates.isActive = bodyResult.data.isActive;
-    if (bodyResult.data.password)
-      updates.passwordHash = await bcrypt.hash(bodyResult.data.password, 12);
 
     const [user] = await db
       .update(usersTable)
@@ -111,7 +148,7 @@ router.patch(
     res.json({
       id: user.id,
       fullName: user.fullName,
-      email: user.email,
+      phone: user.phone,
       role: user.role,
       isActive: user.isActive,
     });

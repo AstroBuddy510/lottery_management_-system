@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { LoginBody, RefreshTokenBody } from "@workspace/api-zod";
 import { requireAuth } from "../middleware/auth";
 import type { JwtPayload } from "../middleware/auth";
@@ -15,7 +15,7 @@ const REFRESH_TOKEN_EXPIRY = "7d";
 
 const refreshTokenStore = new Map<
   string,
-  { userId: string; role: string; email: string; expiresAt: number }
+  { userId: string; role: string; phone: string; expiresAt: number }
 >();
 
 function generateTokens(payload: JwtPayload): {
@@ -39,29 +39,39 @@ router.post("/auth/login", async (req, res) => {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
-  const { email, password } = parse.data;
+  const { phone, role, pin } = parse.data;
+
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.email, email))
+    .where(and(eq(usersTable.phone, phone), eq(usersTable.role, role)))
     .limit(1);
+
   if (!user || !user.isActive) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
-  const valid = await bcrypt.compare(password, user.passwordHash);
+
+  if (!user.pinHash) {
+    res.status(401).json({ error: "Account not configured — contact your administrator" });
+    return;
+  }
+
+  const valid = await bcrypt.compare(pin, user.pinHash);
   if (!valid) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
+
   await db
     .update(usersTable)
     .set({ lastLogin: new Date() })
     .where(eq(usersTable.id, user.id));
+
   const payload: JwtPayload = {
     userId: user.id,
     role: user.role,
-    email: user.email,
+    phone: user.phone!,
   };
   const { accessToken, refreshToken } = generateTokens(payload);
   res.json({
@@ -70,7 +80,7 @@ router.post("/auth/login", async (req, res) => {
     user: {
       id: user.id,
       fullName: user.fullName,
-      email: user.email,
+      phone: user.phone,
       role: user.role,
     },
   });
@@ -100,10 +110,9 @@ router.post("/auth/refresh", (req, res) => {
   const payload: JwtPayload = {
     userId: stored.userId,
     role: stored.role,
-    email: stored.email,
+    phone: stored.phone,
   };
-  const { accessToken, refreshToken: newRefreshToken } =
-    generateTokens(payload);
+  const { accessToken, refreshToken: newRefreshToken } = generateTokens(payload);
   res.json({ accessToken, refreshToken: newRefreshToken });
 });
 
@@ -126,7 +135,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
   res.json({
     id: user.id,
     fullName: user.fullName,
-    email: user.email,
+    phone: user.phone,
     role: user.role,
     isActive: user.isActive,
     lastLogin: user.lastLogin,

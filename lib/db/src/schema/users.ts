@@ -14,8 +14,10 @@ export const userRoleEnum = pgEnum("user_role", [
 export const usersTable = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   fullName: varchar("full_name", { length: 100 }).notNull(),
-  email: varchar("email", { length: 100 }).notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  phone: varchar("phone", { length: 20 }).unique(),
+  email: varchar("email", { length: 100 }).unique(),
+  pinHash: text("pin_hash"),
+  passwordHash: text("password_hash"),
   role: userRoleEnum("role").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

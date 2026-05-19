@@ -6,7 +6,7 @@ const JWT_SECRET = process.env["SESSION_SECRET"] ?? "dev-secret-change-in-prod";
 export interface JwtPayload {
   userId: string;
   role: string;
-  email: string;
+  phone: string;
 }
 
 declare global {

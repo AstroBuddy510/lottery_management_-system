@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  useListUsers, useCreateUser, useUpdateUser, useDeactivateUser,
+  useListUsers, useCreateUser, useUpdateUser, useDeactivateUser, useRegeneratePin,
   getListUsersQueryKey, User, UserInput, UserUpdate,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,7 +24,7 @@ const ROLES = [
 
 const ROLE_LABELS: Record<string, string> = Object.fromEntries(ROLES.map(r => [r.value, r.label]));
 
-type CreateForm = { fullName: string; email: string; password: string; role: string };
+type CreateForm = { fullName: string; phone: string; role: string };
 type EditForm = { fullName: string; role: string };
 
 export function Users() {
@@ -35,22 +35,25 @@ export function Users() {
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
   const deactivateMutation = useDeactivateUser();
+  const regenPinMutation = useRegeneratePin();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
-  const [createForm, setCreateForm] = useState<CreateForm>({ fullName: "", email: "", password: "", role: "cashier" });
+  const [createForm, setCreateForm] = useState<CreateForm>({ fullName: "", phone: "", role: "cashier" });
   const [editForm, setEditForm] = useState<EditForm>({ fullName: "", role: "" });
+
+  const [newPin, setNewPin] = useState<{ pin: string; name: string } | null>(null);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListUsersQueryKey({}) });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await createMutation.mutateAsync({ data: createForm as UserInput });
-      toast({ title: "User created" });
+      const result = await createMutation.mutateAsync({ data: createForm as UserInput });
       setCreateOpen(false);
-      setCreateForm({ fullName: "", email: "", password: "", role: "cashier" });
+      setCreateForm({ fullName: "", phone: "", role: "cashier" });
       invalidate();
+      setNewPin({ pin: result.pin, name: result.fullName });
     } catch {
       toast({ title: "Failed to create user", variant: "destructive" });
     }
@@ -80,6 +83,16 @@ export function Users() {
     }
   };
 
+  const handleRegeneratePin = async (u: User) => {
+    if (!confirm(`Regenerate PIN for ${u.fullName}? Their current PIN will stop working immediately.`)) return;
+    try {
+      const result = await regenPinMutation.mutateAsync({ id: u.id });
+      setNewPin({ pin: result.pin, name: u.fullName });
+    } catch {
+      toast({ title: "Failed to regenerate PIN", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -92,11 +105,11 @@ export function Users() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
+              <TableHead>Phone</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Last Login</TableHead>
-              <TableHead className="w-24"></TableHead>
+              <TableHead className="w-40"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -107,13 +120,14 @@ export function Users() {
             ) : users.map(u => (
               <TableRow key={u.id} className={!u.isActive ? "opacity-50" : ""}>
                 <TableCell className="font-medium text-sm">{u.fullName}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
+                <TableCell className="text-sm text-muted-foreground font-mono">{u.phone ?? "—"}</TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{ROLE_LABELS[u.role] ?? u.role}</Badge></TableCell>
                 <TableCell><Badge variant={u.isActive ? "default" : "secondary"} className="text-xs">{u.isActive ? "Active" : "Inactive"}</Badge></TableCell>
                 <TableCell className="text-xs text-muted-foreground">{u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : "—"}</TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditUser(u); setEditForm({ fullName: u.fullName, role: u.role }); }}>Edit</Button>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-amber-600" onClick={() => handleRegeneratePin(u)}>Reset PIN</Button>
                     {u.isActive && <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeactivate(u)}>Deactivate</Button>}
                   </div>
                 </TableCell>
@@ -123,13 +137,20 @@ export function Users() {
         </Table>
       </div>
 
+      {/* Create User Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add User</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">A 4-digit PIN will be auto-generated. Record it and share it with the user — it will only be shown once.</p>
           <form onSubmit={handleCreate} className="space-y-4">
-            <div className="space-y-1.5"><Label className="text-xs">Full Name</Label><Input value={createForm.fullName} onChange={e => setCreateForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Email</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Password</Label><Input type="password" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Full Name</Label>
+              <Input value={createForm.fullName} onChange={e => setCreateForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" placeholder="Jane Doe" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Phone Number</Label>
+              <Input type="tel" value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. 8005551234" />
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Role</Label>
               <Select value={createForm.role} onValueChange={v => setCreateForm(f => ({ ...f, role: v }))}>
@@ -139,17 +160,21 @@ export function Users() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending}>Create</Button>
+              <Button type="submit" size="sm" disabled={createMutation.isPending}>Create &amp; Generate PIN</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
+      {/* Edit User Dialog */}
       <Dialog open={!!editUser} onOpenChange={open => !open && setEditUser(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit User</DialogTitle></DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4">
-            <div className="space-y-1.5"><Label className="text-xs">Full Name</Label><Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Full Name</Label>
+              <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Role</Label>
               <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
@@ -162,6 +187,27 @@ export function Users() {
               <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* PIN Display Dialog — shown after create or regen */}
+      <Dialog open={!!newPin} onOpenChange={open => !open && setNewPin(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>PIN Generated</DialogTitle></DialogHeader>
+          <div className="text-center py-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              The PIN for <span className="font-semibold text-foreground">{newPin?.name}</span> is:
+            </p>
+            <div className="text-5xl font-mono font-bold tracking-[0.3em] text-primary select-all">
+              {newPin?.pin}
+            </div>
+            <p className="text-xs text-destructive font-medium">
+              Record this PIN now — it will not be shown again.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button className="w-full" onClick={() => setNewPin(null)}>I have recorded the PIN</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

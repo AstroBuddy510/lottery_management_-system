@@ -52,6 +52,7 @@ import type {
   OrgReport,
   Payment,
   PaymentInput,
+  PinRegenResponse,
   RefreshInput,
   ReserveAllocation,
   ReserveSummary,
@@ -64,6 +65,7 @@ import type {
   TimeWindowUpdate,
   UnreadCount,
   User,
+  UserCreated,
   UserInput,
   UserUpdate,
   VoidInput,
@@ -547,11 +549,11 @@ export const getCreateUserUrl = () => {
 }
 
 /**
- * @summary Create a user
+ * @summary Create a user (PIN auto-generated and returned once)
  */
-export const createUser = async (userInput: UserInput, options?: RequestInit): Promise<User> => {
+export const createUser = async (userInput: UserInput, options?: RequestInit): Promise<UserCreated> => {
 
-  return customFetch<User>(getCreateUserUrl(),
+  return customFetch<UserCreated>(getCreateUserUrl(),
   {
     ...options,
     method: 'POST',
@@ -596,7 +598,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateUserMutationError = ErrorType<unknown>
 
     /**
- * @summary Create a user
+ * @summary Create a user (PIN auto-generated and returned once)
  */
 export const useCreateUser = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createUser>>, TError,{data: BodyType<UserInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -607,6 +609,76 @@ export const useCreateUser = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateUserMutationOptions(options));
+    }
+
+export const getRegeneratePinUrl = (id: string,) => {
+
+
+
+
+  return `/api/users/${id}/regenerate-pin`
+}
+
+/**
+ * @summary Regenerate a user's PIN (director/administrator only)
+ */
+export const regeneratePin = async (id: string, options?: RequestInit): Promise<PinRegenResponse> => {
+
+  return customFetch<PinRegenResponse>(getRegeneratePinUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRegeneratePinMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof regeneratePin>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof regeneratePin>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['regeneratePin'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof regeneratePin>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  regeneratePin(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegeneratePinMutationResult = NonNullable<Awaited<ReturnType<typeof regeneratePin>>>
+
+    export type RegeneratePinMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Regenerate a user's PIN (director/administrator only)
+ */
+export const useRegeneratePin = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof regeneratePin>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof regeneratePin>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRegeneratePinMutationOptions(options));
     }
 
 export const getUpdateUserUrl = (id: string,) => {

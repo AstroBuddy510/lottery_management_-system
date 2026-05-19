@@ -19,9 +19,15 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Log in and receive tokens
  */
+export const loginBodyPinMin = 4;
+export const loginBodyPinMax = 4;
+
+
+
 export const LoginBody = zod.object({
-  "email": zod.string(),
-  "password": zod.string()
+  "phone": zod.string(),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "pin": zod.string().min(loginBodyPinMin).max(loginBodyPinMax)
 })
 
 export const LoginResponse = zod.object({
@@ -30,7 +36,7 @@ export const LoginResponse = zod.object({
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -52,7 +58,7 @@ export const RefreshTokenResponse = zod.object({
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -67,7 +73,7 @@ export const RefreshTokenResponse = zod.object({
 export const GetMeResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -86,7 +92,7 @@ export const ListUsersQueryParams = zod.object({
 export const ListUsersResponseItem = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -96,13 +102,24 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem)
 
 
 /**
- * @summary Create a user
+ * @summary Create a user (PIN auto-generated and returned once)
  */
 export const CreateUserBody = zod.object({
   "fullName": zod.string(),
-  "email": zod.string(),
-  "password": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent'])
+})
+
+
+/**
+ * @summary Regenerate a user's PIN (director/administrator only)
+ */
+export const RegeneratePinParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RegeneratePinResponse = zod.object({
+  "pin": zod.string()
 })
 
 
@@ -115,16 +132,14 @@ export const UpdateUserParams = zod.object({
 
 export const UpdateUserBody = zod.object({
   "fullName": zod.string().optional(),
-  "email": zod.string().optional(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']).optional(),
-  "isActive": zod.boolean().optional(),
-  "password": zod.string().optional()
+  "isActive": zod.boolean().optional()
 })
 
 export const UpdateUserResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -142,7 +157,7 @@ export const DeactivateUserParams = zod.object({
 export const DeactivateUserResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -167,7 +182,7 @@ export const ListAgentsResponseItem = zod.object({
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -208,7 +223,7 @@ export const GetAgentResponse = zod.object({
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -238,7 +253,7 @@ export const UpdateAgentResponse = zod.object({
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -714,7 +729,7 @@ export const GetAgentReportResponse = zod.object({
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),
@@ -782,7 +797,7 @@ export const GetOrgReportResponse = zod.object({
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
-  "email": zod.string(),
+  "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
   "createdAt": zod.string(),

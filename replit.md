@@ -51,16 +51,16 @@ A full-stack lottery operations management platform for 6 user roles: Director, 
 - **Wins Entry Team**: enter and edit wins entries
 - **Agent**: sales log entry (mobile/web), notifications inbox
 
-## Test credentials (all password: `Admin1234!`)
+## Test credentials (phone + role + PIN)
 
-| Role | Email |
-|------|-------|
-| Director | director@vs2000.com |
-| Administrator | admin@vs2000.com |
-| Cashier | cashier@vs2000.com |
-| Gross Entry | gross@vs2000.com |
-| Wins Entry | wins@vs2000.com |
-| Agent | agent@vs2000.com |
+| Role | Phone | PIN |
+|------|-------|-----|
+| Director | 8000001 | 0001 |
+| Administrator | 8000002 | 0002 |
+| Cashier | 8000003 | 0003 |
+| Gross Entry | 8000004 | 0004 |
+| Wins Entry | 8000005 | 0005 |
+| Agent | 8000006 | 0006 |
 
 ## Seeded data
 

@@ -13,9 +13,26 @@ export interface ErrorResponse {
   error: string;
 }
 
+export type LoginInputRole = typeof LoginInputRole[keyof typeof LoginInputRole];
+
+
+export const LoginInputRole = {
+  director: 'director',
+  administrator: 'administrator',
+  cashier: 'cashier',
+  gross_entry: 'gross_entry',
+  wins_entry: 'wins_entry',
+  agent: 'agent',
+} as const;
+
 export interface LoginInput {
-  email: string;
-  password: string;
+  phone: string;
+  role: LoginInputRole;
+  /**
+     * @minLength 4
+     * @maxLength 4
+     */
+  pin: string;
 }
 
 export interface RefreshInput {
@@ -37,7 +54,7 @@ export const UserRole = {
 export interface User {
   id: string;
   fullName: string;
-  email: string;
+  phone: string;
   role: UserRole;
   isActive: boolean;
   createdAt: string;
@@ -49,6 +66,33 @@ export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
   user: User;
+}
+
+export type UserCreatedRole = typeof UserCreatedRole[keyof typeof UserCreatedRole];
+
+
+export const UserCreatedRole = {
+  director: 'director',
+  administrator: 'administrator',
+  cashier: 'cashier',
+  gross_entry: 'gross_entry',
+  wins_entry: 'wins_entry',
+  agent: 'agent',
+} as const;
+
+export interface UserCreated {
+  id: string;
+  fullName: string;
+  phone: string;
+  role: UserCreatedRole;
+  isActive: boolean;
+  createdAt: string;
+  /** Auto-generated 4-digit PIN — show once and communicate to user */
+  pin: string;
+}
+
+export interface PinRegenResponse {
+  pin: string;
 }
 
 export type UserInputRole = typeof UserInputRole[keyof typeof UserInputRole];
@@ -65,8 +109,7 @@ export const UserInputRole = {
 
 export interface UserInput {
   fullName: string;
-  email: string;
-  password: string;
+  phone: string;
   role: UserInputRole;
 }
 
@@ -84,10 +127,8 @@ export const UserUpdateRole = {
 
 export interface UserUpdate {
   fullName?: string;
-  email?: string;
   role?: UserUpdateRole;
   isActive?: boolean;
-  password?: string;
 }
 
 export interface AgentWithUser {
