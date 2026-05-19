@@ -86,23 +86,32 @@ export function Calculations() {
       </Card>
 
       <div>
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <h2 className="text-base font-medium">Results</h2>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
-              <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_all">All agents</SelectItem>
-                {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Label className="text-xs text-muted-foreground">From:</Label>
-            <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-7 text-xs w-36" />
-            <Label className="text-xs text-muted-foreground">To:</Label>
-            <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-7 text-xs w-36" />
+        <div className="bg-muted/30 border rounded-xl p-4 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filter Results</span>
             {(filterFrom || filterTo || filterAgentId) && (
-              <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setFilterFrom(""); setFilterTo(""); setFilterAgentId(""); }}>Clear</Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFilterFrom(""); setFilterTo(""); setFilterAgentId(""); }}>Clear filters</Button>
             )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
+              <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
+                <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All agents</SelectItem>
+                  {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">From</Label>
+              <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 text-sm bg-background" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">To</Label>
+              <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 text-sm bg-background" />
+            </div>
           </div>
         </div>
 
