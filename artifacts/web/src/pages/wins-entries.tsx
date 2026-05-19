@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   useListWinsEntries, useCreateWinsEntry, useUpdateWinsEntry,
   useListWriters, getListWinsEntriesQueryKey, getListWritersQueryKey,
@@ -14,30 +14,305 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { fmtGHS } from "@/lib/utils";
 
-export function WinsEntries() {
+function PlusIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function relDate(s: string) {
+  const today = new Date().toISOString().split("T")[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const d = s.split("T")[0];
+  if (d === today) return "Today";
+  if (d === yesterday) return "Yesterday";
+  return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function AgentWinsView() {
   const qc = useQueryClient();
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const isAgent = user?.role === "agent";
+  const { data: myAgent } = useGetMyAgent({ query: { queryKey: getGetMyAgentQueryKey() } });
 
-  const { writerMap, agentList } = useWriterLookup();
+  const [filterWriterId, setFilterWriterId] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+  const [showFilter, setShowFilter] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState<WinsEntry | null>(null);
 
-  // For agent role: load their own agent record to pre-select
-  const { data: myAgent } = useGetMyAgent({
-    query: { queryKey: getGetMyAgentQueryKey(), enabled: isAgent }
+  const { data: writers } = useListWriters(myAgent?.id ?? "", {}, {
+    query: { queryKey: getListWritersQueryKey(myAgent?.id ?? "", {}), enabled: !!myAgent?.id }
   });
+  const writerList = Array.isArray(writers) ? writers : [];
+
+  const { data: entries, isLoading } = useListWinsEntries({
+    writerId: filterWriterId || undefined,
+    dateFrom: filterFrom || undefined,
+    dateTo: filterTo || undefined,
+  });
+  const entryList = Array.isArray(entries) ? entries : [];
+
+  const today = new Date().toISOString().split("T")[0];
+  const todayTotal = entryList.filter(e => e.entryDate?.startsWith(today)).reduce((s, e) => s + Number(e.winsAmount ?? 0), 0);
+
+  const createMutation = useCreateWinsEntry();
+  const updateMutation = useUpdateWinsEntry();
+  const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
+  const [editForm, setEditForm] = useState({ winsAmount: "" });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: getListWinsEntriesQueryKey({}) });
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createMutation.mutateAsync({ data: { writerId: form.writerId, entryDate: form.entryDate, winsAmount: form.winsAmount } });
+      toast.success("Wins entry created");
+      setCreateOpen(false);
+      setForm({ writerId: "", entryDate: today, winsAmount: "" });
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to create entry");
+    }
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editEntry) return;
+    try {
+      await updateMutation.mutateAsync({ id: editEntry.id, data: { winsAmount: editForm.winsAmount } });
+      toast.success("Entry updated");
+      setEditEntry(null);
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to update entry");
+    }
+  };
+
+  const hasFilter = !!(filterWriterId || filterFrom || filterTo);
+  const clearFilter = () => { setFilterWriterId(""); setFilterFrom(""); setFilterTo(""); };
+
+  return (
+    <div className="pb-4">
+      {/* Sticky header */}
+      <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-border z-10 px-4 py-3">
+        <div className="flex items-center gap-3 max-w-xl mx-auto md:max-w-2xl">
+          <div className="flex-1">
+            <h1 className="text-base font-semibold">Wins Entries</h1>
+            <p className="text-xs text-muted-foreground">{entryList.length} entries</p>
+          </div>
+          <button
+            onClick={() => setShowFilter(f => !f)}
+            className={`p-2 rounded-xl transition-colors active:scale-95 ${showFilter || hasFilter ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+          >
+            <FilterIcon />
+          </button>
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-1.5 bg-amber-600 text-white px-3 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform shadow-sm"
+          >
+            <PlusIcon /> Add
+          </button>
+        </div>
+      </div>
+
+      <div className="px-4 max-w-xl mx-auto md:max-w-2xl">
+        {/* Filter */}
+        {showFilter && (
+          <div className="mt-3 bg-muted/30 border border-border rounded-2xl p-4 space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Writer</Label>
+              <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)}>
+                <SelectTrigger className="h-11 text-sm bg-background rounded-xl"><SelectValue placeholder="All writers" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All writers</SelectItem>
+                  {writerList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">From</Label>
+                <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-11 text-sm bg-background rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">To</Label>
+                <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-11 text-sm bg-background rounded-xl" />
+              </div>
+            </div>
+            {hasFilter && <button onClick={clearFilter} className="text-xs text-primary font-medium active:opacity-70">Clear filters</button>}
+          </div>
+        )}
+
+        {/* Today summary */}
+        {!hasFilter && (
+          <div className="mt-4 flex items-center gap-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-2xl px-4 py-3">
+            <div className="flex-1">
+              <div className="text-xs font-medium text-amber-700 dark:text-amber-300">Today's Wins</div>
+              <div className="text-lg font-bold text-amber-900 dark:text-amber-100 tabular-nums">{todayTotal > 0 ? fmtGHS(todayTotal) : "—"}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-medium text-amber-700 dark:text-amber-300">All-time</div>
+              <div className="text-sm font-bold text-amber-900 dark:text-amber-100 tabular-nums">
+                {fmtGHS(entryList.reduce((s, e) => s + Number(e.winsAmount ?? 0), 0))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Entry cards */}
+        <div className="mt-4 space-y-2.5">
+          {isLoading ? (
+            [1,2,3].map(i => <Skeleton key={i} className="h-20 rounded-2xl" />)
+          ) : entryList.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <div className="text-4xl mb-3">🏆</div>
+              <div className="font-medium text-sm">No wins entries yet</div>
+              <div className="text-xs mt-1">Tap Add to record a wins entry</div>
+            </div>
+          ) : entryList.map(entry => {
+            const writer = writerList.find(w => w.id === entry.writerId);
+            return (
+              <div key={entry.id} className={`bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3 ${entry.locked ? "opacity-60" : ""}`}>
+                <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-white flex-shrink-0">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                    <path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+                    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+                    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm font-semibold font-mono">{writer?.fullCode ?? entry.writerId.slice(0,8)}</span>
+                    {writer && <span className="text-xs text-muted-foreground truncate hidden sm:inline">{writer.fullName}</span>}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs text-muted-foreground">{relDate(entry.entryDate ?? "")}</span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                      entry.locked
+                        ? "bg-muted text-muted-foreground"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+                    }`}>
+                      {entry.locked ? "Locked" : "Open"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="text-right">
+                    <div className="text-sm font-bold tabular-nums">{fmtGHS(Number(entry.winsAmount ?? 0))}</div>
+                  </div>
+                  {!entry.locked && (
+                    <button
+                      onClick={() => { setEditEntry(entry); setEditForm({ winsAmount: entry.winsAmount }); }}
+                      className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
+                    >
+                      <EditIcon />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Create dialog */}
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) setForm({ writerId: "", entryDate: today, winsAmount: "" }); setCreateOpen(o); }}>
+        <DialogContent className="max-w-sm mx-4 rounded-2xl">
+          <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
+          {myAgent && (
+            <div className="flex items-center gap-2 py-1 px-3 bg-muted/40 rounded-xl border text-sm">
+              <span className="text-muted-foreground text-xs">Agent:</span>
+              <span className="font-mono font-semibold">{myAgent.fullCode}</span>
+            </div>
+          )}
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Writer</Label>
+              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))}>
+                <SelectTrigger className="h-11 text-sm rounded-xl"><SelectValue placeholder="Select writer…" /></SelectTrigger>
+                <SelectContent>
+                  {writerList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Date</Label>
+              <Input type="date" value={form.entryDate} onChange={e => setForm(f => ({ ...f, entryDate: e.target.value }))} required className="h-11 text-sm rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Wins Amount (GH₵)</Label>
+              <Input type="number" step="0.01" min="0" value={form.winsAmount} onChange={e => setForm(f => ({ ...f, winsAmount: e.target.value }))} required className="h-11 text-sm rounded-xl" placeholder="0.00" inputMode="decimal" />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" className="flex-1 h-11 rounded-xl font-semibold bg-amber-600 hover:bg-amber-700" disabled={createMutation.isPending || !form.writerId}>
+                {createMutation.isPending ? "Saving…" : "Add Entry"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editEntry} onOpenChange={o => !o && setEditEntry(null)}>
+        <DialogContent className="max-w-sm mx-4 rounded-2xl">
+          <DialogHeader><DialogTitle>Edit Entry</DialogTitle></DialogHeader>
+          {editEntry && (
+            <div className="text-sm text-muted-foreground">
+              Writer: <span className="text-foreground font-mono font-medium">{writerList.find(w => w.id === editEntry.writerId)?.fullCode ?? editEntry.writerId}</span>
+              {" · "}Date: <span className="text-foreground">{relDate(editEntry.entryDate ?? "")}</span>
+            </div>
+          )}
+          <form onSubmit={handleEdit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Wins Amount (GH₵)</Label>
+              <Input type="number" step="0.01" min="0" value={editForm.winsAmount} onChange={e => setEditForm({ winsAmount: e.target.value })} required className="h-11 text-sm rounded-xl" inputMode="decimal" />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setEditEntry(null)}>Cancel</Button>
+              <Button type="submit" className="flex-1 h-11 rounded-xl font-semibold" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? "Saving…" : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function AdminWinsView() {
+  const qc = useQueryClient();
+  const { writerMap, agentList } = useWriterLookup();
 
   const [filterAgentId, setFilterAgentId] = useState("");
   const [filterWriterId, setFilterWriterId] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
-
-  // Auto-set filter agent for agent role
-  useEffect(() => {
-    if (isAgent && myAgent?.id) setFilterAgentId(myAgent.id);
-  }, [isAgent, myAgent?.id]);
 
   const { data: filterWriters } = useListWriters(filterAgentId, {}, {
     query: { queryKey: getListWritersQueryKey(filterAgentId, {}), enabled: !!filterAgentId }
@@ -50,12 +325,7 @@ export function WinsEntries() {
     dateTo: filterTo || undefined,
   });
 
-  // For create dialog: agent is pre-selected for agent role
   const [selectedAgent, setSelectedAgent] = useState("");
-  useEffect(() => {
-    if (isAgent && myAgent?.id) setSelectedAgent(myAgent.id);
-  }, [isAgent, myAgent?.id]);
-
   const { data: writers } = useListWriters(selectedAgent, {}, {
     query: { queryKey: getListWritersQueryKey(selectedAgent, {}), enabled: !!selectedAgent }
   });
@@ -65,7 +335,8 @@ export function WinsEntries() {
   const updateMutation = useUpdateWinsEntry();
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<WinsEntry | null>(null);
-  const [form, setForm] = useState({ writerId: "", entryDate: new Date().toISOString().split("T")[0], winsAmount: "" });
+  const today = new Date().toISOString().split("T")[0];
+  const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
   const [editForm, setEditForm] = useState({ winsAmount: "" });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWinsEntriesQueryKey({}) });
@@ -74,14 +345,13 @@ export function WinsEntries() {
     e.preventDefault();
     try {
       await createMutation.mutateAsync({ data: { writerId: form.writerId, entryDate: form.entryDate, winsAmount: form.winsAmount } });
-      toast({ title: "Entry created" });
+      toast.success("Entry created");
       setCreateOpen(false);
-      setForm({ writerId: "", entryDate: new Date().toISOString().split("T")[0], winsAmount: "" });
-      if (!isAgent) setSelectedAgent("");
+      setSelectedAgent("");
+      setForm({ writerId: "", entryDate: today, winsAmount: "" });
       invalidate();
     } catch (err: any) {
-      const msg = err?.data?.error ?? "Failed to create entry";
-      toast({ title: msg, variant: "destructive" });
+      toast.error(err?.data?.error ?? "Failed to create entry");
     }
   };
 
@@ -90,21 +360,15 @@ export function WinsEntries() {
     if (!editEntry) return;
     try {
       await updateMutation.mutateAsync({ id: editEntry.id, data: { winsAmount: editForm.winsAmount } });
-      toast({ title: "Entry updated" });
+      toast.success("Entry updated");
       setEditEntry(null);
       invalidate();
     } catch (err: any) {
-      const msg = err?.data?.error ?? "Failed to update entry";
-      toast({ title: msg, variant: "destructive" });
+      toast.error(err?.data?.error ?? "Failed to update entry");
     }
   };
 
-  const clearFilter = () => {
-    if (!isAgent) setFilterAgentId("");
-    setFilterWriterId("");
-    setFilterFrom("");
-    setFilterTo("");
-  };
+  const clearFilter = () => { setFilterAgentId(""); setFilterWriterId(""); setFilterFrom(""); setFilterTo(""); };
 
   return (
     <div className="p-6">
@@ -121,19 +385,17 @@ export function WinsEntries() {
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filter Entries</span>
           <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={clearFilter}>Clear filters</Button>
         </div>
-        <div className={`grid gap-3 ${isAgent ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
-          {!isAgent && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
-              <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
-                <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_all">All agents</SelectItem>
-                  {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
+            <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
+              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">All agents</SelectItem>
+                {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">Writer</Label>
             <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)} disabled={!filterAgentId}>
@@ -159,12 +421,10 @@ export function WinsEntries() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Entry Date</TableHead>
-              <TableHead>Writer</TableHead>
+              <TableHead>Entry Date</TableHead><TableHead>Writer</TableHead>
               <TableHead className="text-right">Wins Amount</TableHead>
               <TableHead className="pl-8">Recorded At</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-24">Action</TableHead>
+              <TableHead>Status</TableHead><TableHead className="w-24">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -199,32 +459,17 @@ export function WinsEntries() {
         </Table>
       </div>
 
-      {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={open => {
-        if (!open) {
-          if (!isAgent) setSelectedAgent("");
-          setForm(f => ({ ...f, writerId: "" }));
-        }
-        setCreateOpen(open);
-      }}>
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm(f => ({ ...f, writerId: "" })); } setCreateOpen(o); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
-            {!isAgent && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Agent</Label>
-                <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-                  <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            )}
-            {isAgent && myAgent && (
-              <div className="flex items-center gap-2 py-1 px-3 bg-muted/40 rounded-md border">
-                <span className="text-xs text-muted-foreground">Agent:</span>
-                <span className="text-sm font-mono font-semibold">{myAgent.fullCode}</span>
-              </div>
-            )}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Agent</Label>
+              <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
+                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Writer</Label>
               <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={!selectedAgent}>
@@ -248,17 +493,16 @@ export function WinsEntries() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit dialog */}
-      <Dialog open={!!editEntry} onOpenChange={open => !open && setEditEntry(null)}>
+      <Dialog open={!!editEntry} onOpenChange={o => !o && setEditEntry(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Entry</DialogTitle></DialogHeader>
+          {editEntry && (
+            <div className="text-sm text-muted-foreground">
+              Writer: <span className="text-foreground font-mono font-medium">{writerMap[editEntry.writerId]?.fullCode ?? editEntry.writerId}</span>
+              {" · "}Date: <span className="text-foreground">{editEntry.entryDate?.split("T")[0]}</span>
+            </div>
+          )}
           <form onSubmit={handleEdit} className="space-y-4">
-            {editEntry && (
-              <div className="text-sm text-muted-foreground">
-                Writer: <span className="text-foreground font-mono font-medium">{writerMap[editEntry.writerId]?.fullCode ?? editEntry.writerId}</span>
-                {" · "}Date: <span className="text-foreground">{editEntry.entryDate?.split("T")[0]}</span>
-              </div>
-            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Wins Amount (GH₵)</Label>
               <Input type="number" step="0.01" min="0" value={editForm.winsAmount} onChange={e => setEditForm({ winsAmount: e.target.value })} required className="h-9 text-sm" />
@@ -272,4 +516,10 @@ export function WinsEntries() {
       </Dialog>
     </div>
   );
+}
+
+export function WinsEntries() {
+  const { user } = useAuth();
+  if (user?.role === "agent") return <AgentWinsView />;
+  return <AdminWinsView />;
 }

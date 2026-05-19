@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { AgentDashboard } from "@/pages/agent-dashboard";
 import {
   useListAgents, useGetReserveBalance, useGetUnreadCount,
   useListCalculations, useListPayments, useListGrossEntries,
@@ -842,21 +843,6 @@ function EntryDashboard({ type }: { type: "gross" | "wins" }) {
 
         </div>
       </div>
-    </div>
-  );
-}
-
-function AgentDashboard() {
-  const { data: sales } = useListSales({});
-  const { data: unread } = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
-  const today = new Date().toISOString().split("T")[0];
-  const todaySales = Array.isArray(sales) ? sales.filter(s => s.saleDate?.startsWith(today)) : [];
-
-  return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-      <StatCard label="Sales Today" value={todaySales.length} />
-      <StatCard label="Total Sales" value={Array.isArray(sales) ? sales.length : 0} />
-      <StatCard label="Unread Notifications" value={unread?.count ?? 0} />
     </div>
   );
 }

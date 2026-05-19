@@ -4,6 +4,7 @@ import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-cli
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AgentLayout } from "@/components/agent-layout";
 
 interface NavItem {
   label: string;
@@ -57,6 +58,7 @@ function NavLink({ item }: { item: NavItem }) {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  if (user?.role === "agent") return <AgentLayout>{children}</AgentLayout>;
   const { data: unread } = useGetUnreadCount({
     query: { queryKey: getGetUnreadCountQueryKey(), refetchInterval: 30000 }
   });
