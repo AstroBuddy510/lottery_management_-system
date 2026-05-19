@@ -35,7 +35,7 @@ function DirectorDashboard() {
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
       <StatCard label="Active Users" value={activeUsers} sub={`of ${Array.isArray(users) ? users.length : 0} total`} />
       <StatCard label="Active Agents" value={activeAgents} />
-      <StatCard label="Reserve Balance" value={reserve ? `$${Number(reserve.balance).toFixed(2)}` : "—"} />
+      <StatCard label="Reserve Balance" value={reserve ? `GH₵ ${Number(reserve.balance).toFixed(2)}` : "—"} />
       <StatCard label="Unread Notifications" value={unread?.count ?? 0} />
       <StatCard label="Calculations Run" value={Array.isArray(calcs) ? calcs.length : 0} sub="all time" />
     </div>
@@ -52,7 +52,7 @@ function CashierDashboard() {
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
       <StatCard label="Payments Today" value={todayPayments.length} />
-      <StatCard label="Total Collected Today" value={`$${total.toFixed(2)}`} />
+      <StatCard label="Total Collected Today" value={`GH₵ ${total.toFixed(2)}`} />
       <StatCard label="Unread Notifications" value={unread?.count ?? 0} />
     </div>
   );

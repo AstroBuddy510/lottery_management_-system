@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 function Fmt({ v }: { v: string; negative?: boolean }) {
   const n = Number(v);
-  return <span className={`font-mono ${n < 0 ? "text-destructive" : ""}`}>${n.toFixed(2)}</span>;
+  return <span className={`font-mono ${n < 0 ? "text-destructive" : ""}`}>GH₵ {n.toFixed(2)}</span>;
 }
 
 function TotalsCard({ title, t }: { title: string; t: WriterReport["totals"] }) {

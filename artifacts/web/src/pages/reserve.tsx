@@ -24,7 +24,7 @@ export function Reserve() {
           <CardContent className="px-4 pb-4">
             {loadingBalance ? <span className="text-muted-foreground text-sm">Loading...</span> : (
               <div className={`text-2xl font-bold ${Number(balance?.balance ?? 0) < 0 ? "text-destructive" : "text-primary"}`}>
-                ${Number(balance?.balance ?? 0).toFixed(2)}
+                GH₵ {Number(balance?.balance ?? 0).toFixed(2)}
               </div>
             )}
           </CardContent>
@@ -35,7 +35,7 @@ export function Reserve() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             {loadingBalance ? <span className="text-muted-foreground text-sm">Loading...</span> : (
-              <div className="text-2xl font-bold">${Number(balance?.totalContributed ?? 0).toFixed(2)}</div>
+              <div className="text-2xl font-bold">GH₵ {Number(balance?.totalContributed ?? 0).toFixed(2)}</div>
             )}
           </CardContent>
         </Card>
@@ -45,7 +45,7 @@ export function Reserve() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             {loadingBalance ? <span className="text-muted-foreground text-sm">Loading...</span> : (
-              <div className="text-2xl font-bold text-destructive">${Number(balance?.totalAllocated ?? 0).toFixed(2)}</div>
+              <div className="text-2xl font-bold text-destructive">GH₵ {Number(balance?.totalAllocated ?? 0).toFixed(2)}</div>
             )}
           </CardContent>
         </Card>
@@ -78,8 +78,8 @@ export function Reserve() {
                       <span className="font-mono">{writer?.fullCode ?? a.writerId.slice(0, 8) + "…"}</span>
                       {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                     </TableCell>
-                    <TableCell className="text-sm text-right font-mono text-destructive">${Number(a.amountDrawn).toFixed(2)}</TableCell>
-                    <TableCell className="text-sm text-right font-mono">${Number(a.reserveBalanceAfter).toFixed(2)}</TableCell>
+                    <TableCell className="text-sm text-right font-mono text-destructive">GH₵ {Number(a.amountDrawn).toFixed(2)}</TableCell>
+                    <TableCell className="text-sm text-right font-mono">GH₵ {Number(a.reserveBalanceAfter).toFixed(2)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{a.reason ?? "—"}</TableCell>
                   </TableRow>
                 );

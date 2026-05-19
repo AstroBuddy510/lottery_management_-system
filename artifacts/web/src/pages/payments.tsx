@@ -89,12 +89,12 @@ export function Payments() {
         <div className="grid grid-cols-2 gap-3 mb-5">
           <div className="border rounded-lg p-3">
             <div className="text-xs text-muted-foreground mb-0.5">Collected Today</div>
-            <div className="text-xl font-bold text-primary">${todayTotal.toFixed(2)}</div>
+            <div className="text-xl font-bold text-primary">GH₵ {todayTotal.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground">{todayValid.length} payment{todayValid.length !== 1 ? "s" : ""}</div>
           </div>
           <div className="border rounded-lg p-3">
             <div className="text-xs text-muted-foreground mb-0.5">Total (filtered)</div>
-            <div className="text-xl font-bold">${paymentList.filter(p => !p.isVoided).reduce((s, p) => s + Number(p.amount), 0).toFixed(2)}</div>
+            <div className="text-xl font-bold">GH₵ {paymentList.filter(p => !p.isVoided).reduce((s, p) => s + Number(p.amount), 0).toFixed(2)}</div>
             <div className="text-xs text-muted-foreground">{paymentList.filter(p => !p.isVoided).length} valid</div>
           </div>
         </div>
@@ -143,7 +143,7 @@ export function Payments() {
               <TableRow key={p.id} className={p.isVoided ? "opacity-50" : ""}>
                 <TableCell className="text-sm">{p.paymentDate?.split("T")[0]}</TableCell>
                 <TableCell className="text-sm font-mono font-medium">{agentMap[p.agentId] ?? p.agentId.slice(0, 8) + "…"}</TableCell>
-                <TableCell className="text-sm text-right font-mono">${Number(p.amount).toFixed(2)}</TableCell>
+                <TableCell className="text-sm text-right font-mono">GH₵ {Number(p.amount).toFixed(2)}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{p.notes ?? "—"}</TableCell>
                 <TableCell><Badge variant={p.isVoided ? "destructive" : "default"} className="text-xs">{p.isVoided ? "Voided" : "Valid"}</Badge></TableCell>
                 <TableCell>

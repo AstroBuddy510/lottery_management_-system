@@ -104,7 +104,7 @@ export function Users() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold">Users</h1>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>Add User</Button>
+        <Button size="sm" className="bg-accent hover:bg-accent/90 text-white font-semibold" onClick={() => setCreateOpen(true)}>+ Add User</Button>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
@@ -156,7 +156,8 @@ export function Users() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Phone Number</Label>
-              <Input type="tel" value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. 8005551234" />
+              <Input type="tel" value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. 0244123456" maxLength={10} />
+              <p className="text-xs text-muted-foreground">Ghana number — 10 digits starting with 0 (e.g. 024, 054, 020)</p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Role</Label>
@@ -184,7 +185,8 @@ export function Users() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Phone Number</Label>
-              <Input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} className="h-9 text-sm" placeholder="e.g. 0240546338" />
+              <Input type="tel" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} className="h-9 text-sm" placeholder="e.g. 0244123456" maxLength={10} />
+              <p className="text-xs text-muted-foreground">Ghana number — 10 digits starting with 0</p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Role</Label>

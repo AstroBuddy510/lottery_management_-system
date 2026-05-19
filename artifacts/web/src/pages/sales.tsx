@@ -123,7 +123,7 @@ export function Sales() {
                     {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                   </TableCell>
                   <TableCell className="text-sm">{s.gameType}</TableCell>
-                  <TableCell className="text-sm text-right font-mono">${Number(s.ticketAmount).toFixed(2)}</TableCell>
+                  <TableCell className="text-sm text-right font-mono">GH₵ {Number(s.ticketAmount).toFixed(2)}</TableCell>
                 </TableRow>
               );
             })}

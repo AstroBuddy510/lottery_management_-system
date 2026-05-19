@@ -136,13 +136,13 @@ export function Calculations() {
                           <span className="font-mono">{writer?.fullCode ?? c.writerId.slice(0, 8) + "…"}</span>
                           {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                         </TableCell>
-                        <TableCell className="text-sm text-right font-mono">${Number(c.grossSales).toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-muted-foreground">${Number(c.commissionAmount).toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono">${Number(c.netGross).toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-destructive">${Number(c.winsAmount).toFixed(2)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-muted-foreground">${Number(c.reserveAmount).toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-right font-mono">GH₵ {Number(c.grossSales).toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-right font-mono text-muted-foreground">GH₵ {Number(c.commissionAmount).toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-right font-mono">GH₵ {Number(c.netGross).toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-right font-mono text-destructive">GH₵ {Number(c.winsAmount).toFixed(2)}</TableCell>
+                        <TableCell className="text-sm text-right font-mono text-muted-foreground">GH₵ {Number(c.reserveAmount).toFixed(2)}</TableCell>
                         <TableCell className={`text-sm text-right font-mono font-semibold ${Number(c.writerBalance) < 0 ? "text-destructive" : "text-primary"}`}>
-                          ${Number(c.writerBalance).toFixed(2)}
+                          GH₵ {Number(c.writerBalance).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     );
@@ -150,12 +150,12 @@ export function Calculations() {
                   {filteredCalcs.length > 1 && (
                     <TableRow className="bg-muted/40 font-semibold">
                       <TableCell className="text-xs text-muted-foreground" colSpan={2}>Totals ({filteredCalcs.length} rows)</TableCell>
-                      <TableCell className="text-right font-mono text-sm">${totals.gross.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-muted-foreground">${totals.commission.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm">${totals.net.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-destructive">${totals.wins.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-muted-foreground">${totals.reserve.toFixed(2)}</TableCell>
-                      <TableCell className={`text-right font-mono text-sm ${totals.balance < 0 ? "text-destructive" : "text-primary"}`}>${totals.balance.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm">GH₵ {totals.gross.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-muted-foreground">GH₵ {totals.commission.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm">GH₵ {totals.net.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-destructive">GH₵ {totals.wins.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-muted-foreground">GH₵ {totals.reserve.toFixed(2)}</TableCell>
+                      <TableCell className={`text-right font-mono text-sm ${totals.balance < 0 ? "text-destructive" : "text-primary"}`}>GH₵ {totals.balance.toFixed(2)}</TableCell>
                     </TableRow>
                   )}
                 </>
