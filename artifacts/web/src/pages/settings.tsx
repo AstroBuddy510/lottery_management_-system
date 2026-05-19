@@ -354,7 +354,7 @@ export function Settings() {
                       <TableHead>Opens</TableHead>
                       <TableHead>Closes</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="w-24"></TableHead>
+                      <TableHead className="w-24">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -405,7 +405,7 @@ export function Settings() {
                       <TableHead>Game Name</TableHead>
                       <TableHead>Day Assigned</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="w-28"></TableHead>
+                      <TableHead className="w-28">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

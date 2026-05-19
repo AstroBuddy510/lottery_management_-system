@@ -139,7 +139,7 @@ export function Payments() {
               <TableHead className="text-right">Amount</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-20"></TableHead>
+              <TableHead className="w-20">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

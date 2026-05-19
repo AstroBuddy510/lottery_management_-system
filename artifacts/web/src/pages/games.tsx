@@ -164,7 +164,7 @@ export function Games() {
               <TableHead>Game Name</TableHead>
               <TableHead>Day Assigned</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-28"></TableHead>
+              <TableHead className="w-28">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

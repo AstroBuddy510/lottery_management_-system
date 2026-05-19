@@ -196,7 +196,7 @@ export function Agents() {
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-20"></TableHead>
+              <TableHead className="w-20">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

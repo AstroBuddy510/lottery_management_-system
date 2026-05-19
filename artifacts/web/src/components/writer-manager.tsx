@@ -103,7 +103,7 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
               <TableHead>Writer Code</TableHead>
               <TableHead>Full Name</TableHead>
               <TableHead>Status</TableHead>
-              {!readOnly && <TableHead className="w-20"></TableHead>}
+              {!readOnly && <TableHead className="w-20">Action</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>

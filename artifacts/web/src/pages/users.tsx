@@ -152,7 +152,7 @@ export function Users() {
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Last Login</TableHead>
-              <TableHead className="w-44"></TableHead>
+              <TableHead className="w-44">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
