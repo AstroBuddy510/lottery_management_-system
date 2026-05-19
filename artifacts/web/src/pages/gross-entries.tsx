@@ -183,13 +183,8 @@ export function GrossEntries() {
                     {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                   </TableCell>
                   <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.grossAmount).toFixed(2)}</TableCell>
-                  <TableCell className="text-sm">
-                    {ts ? (
-                      <span className="tabular-nums">
-                        <span className="block">{ts.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
-                        <span className="block text-xs text-muted-foreground">{ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-                      </span>
-                    ) : "—"}
+                  <TableCell className="text-sm tabular-nums">
+                    {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>
                   <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
                   <TableCell>
