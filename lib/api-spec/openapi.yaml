@@ -1213,6 +1213,8 @@ components:
           enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
         isActive:
           type: boolean
+        profilePicture:
+          type: ["string", "null"]
         createdAt:
           type: string
         lastLogin:
@@ -1270,10 +1272,12 @@ components:
           enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
         isActive:
           type: boolean
+        profilePicture:
+          type: ["string", "null"]
 
     AgentWithUser:
       type: object
-      required: [id, userId, agentCode, fullCode, isActive, createdAt]
+      required: [id, userId, agentCode, fullCode, isActive, createdAt, user]
       properties:
         id:
           type: string
@@ -1288,7 +1292,21 @@ components:
         createdAt:
           type: string
         user:
-          $ref: "#/components/schemas/User"
+          type: object
+          required: [id, fullName, phone, role, isActive]
+          properties:
+            id:
+              type: string
+            fullName:
+              type: string
+            phone:
+              type: string
+            role:
+              type: string
+            isActive:
+              type: boolean
+            profilePicture:
+              type: ["string", "null"]
 
     AgentInput:
       type: object

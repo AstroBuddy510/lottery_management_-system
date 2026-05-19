@@ -57,6 +57,8 @@ export interface User {
   phone: string;
   role: UserRole;
   isActive: boolean;
+  /** @nullable */
+  profilePicture?: string | null;
   createdAt: string;
   /** @nullable */
   lastLogin?: string | null;
@@ -130,7 +132,19 @@ export interface UserUpdate {
   phone?: string;
   role?: UserUpdateRole;
   isActive?: boolean;
+  /** @nullable */
+  profilePicture?: string | null;
 }
+
+export type AgentWithUserUser = {
+  id: string;
+  fullName: string;
+  phone: string;
+  role: string;
+  isActive: boolean;
+  /** @nullable */
+  profilePicture?: string | null;
+};
 
 export interface AgentWithUser {
   id: string;
@@ -139,7 +153,7 @@ export interface AgentWithUser {
   fullCode: string;
   isActive: boolean;
   createdAt: string;
-  user?: User;
+  user: AgentWithUserUser;
 }
 
 export interface AgentInput {

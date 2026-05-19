@@ -92,6 +92,7 @@ export const LoginResponse = zod.object({
   "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
+  "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
   "lastLogin": zod.string().nullish()
 })
@@ -114,6 +115,7 @@ export const RefreshTokenResponse = zod.object({
   "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
+  "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
   "lastLogin": zod.string().nullish()
 })
@@ -129,6 +131,7 @@ export const GetMeResponse = zod.object({
   "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
+  "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
   "lastLogin": zod.string().nullish()
 })
@@ -148,6 +151,7 @@ export const ListUsersResponseItem = zod.object({
   "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
+  "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
   "lastLogin": zod.string().nullish()
 })
@@ -187,7 +191,8 @@ export const UpdateUserBody = zod.object({
   "fullName": zod.string().optional(),
   "phone": zod.string().optional(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']).optional(),
-  "isActive": zod.boolean().optional()
+  "isActive": zod.boolean().optional(),
+  "profilePicture": zod.string().nullish()
 })
 
 export const UpdateUserResponse = zod.object({
@@ -196,6 +201,7 @@ export const UpdateUserResponse = zod.object({
   "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
+  "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
   "lastLogin": zod.string().nullish()
 })
@@ -214,6 +220,7 @@ export const DeactivateUserResponse = zod.object({
   "phone": zod.string(),
   "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
   "isActive": zod.boolean(),
+  "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
   "lastLogin": zod.string().nullish()
 })
@@ -237,11 +244,10 @@ export const ListAgentsResponseItem = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
-}).optional()
+  "profilePicture": zod.string().nullish()
+})
 })
 export const ListAgentsResponse = zod.array(ListAgentsResponseItem)
 
@@ -278,11 +284,10 @@ export const GetAgentResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
-}).optional()
+  "profilePicture": zod.string().nullish()
+})
 })
 
 
@@ -308,11 +313,10 @@ export const UpdateAgentResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
-}).optional()
+  "profilePicture": zod.string().nullish()
+})
 })
 
 
@@ -788,11 +792,10 @@ export const GetAgentReportResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
-}).optional()
+  "profilePicture": zod.string().nullish()
+})
 }),
   "totals": zod.object({
   "calcDate": zod.string().optional(),
@@ -856,11 +859,10 @@ export const GetOrgReportResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
-}).optional()
+  "profilePicture": zod.string().nullish()
+})
 }),
   "totals": zod.object({
   "calcDate": zod.string().optional(),

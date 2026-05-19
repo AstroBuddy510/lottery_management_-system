@@ -35,6 +35,7 @@ router.get(
         phone: usersTable.phone,
         role: usersTable.role,
         isActive: usersTable.isActive,
+        profilePicture: usersTable.profilePicture,
         createdAt: usersTable.createdAt,
         lastLogin: usersTable.lastLogin,
       })
@@ -134,8 +135,8 @@ router.patch(
     if (bodyResult.data.fullName) updates.fullName = bodyResult.data.fullName;
     if (bodyResult.data.phone) updates.phone = bodyResult.data.phone;
     if (bodyResult.data.role) updates.role = bodyResult.data.role;
-    if (bodyResult.data.isActive !== undefined)
-      updates.isActive = bodyResult.data.isActive;
+    if (bodyResult.data.isActive !== undefined) updates.isActive = bodyResult.data.isActive;
+    if ("profilePicture" in bodyResult.data) updates.profilePicture = bodyResult.data.profilePicture;
 
     const [user] = await db
       .update(usersTable)

@@ -20,6 +20,7 @@ export const usersTable = pgTable("users", {
   passwordHash: text("password_hash"),
   role: userRoleEnum("role").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  profilePicture: text("profile_picture"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastLogin: timestamp("last_login", { withTimezone: true }),
 });
