@@ -25,7 +25,7 @@ router.get(
           isNull(notificationReceiptsTable.readAt),
         ),
       );
-    res.json({ unreadCount: Number(result?.count ?? 0) });
+    res.json({ count: Number(result?.count ?? 0) });
   },
 );
 

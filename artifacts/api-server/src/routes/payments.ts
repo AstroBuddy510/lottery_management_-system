@@ -7,6 +7,7 @@ import {
   VoidPaymentBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { dispatchSystemNotification } from "../lib/notify";
 
 const router = Router();
 
@@ -117,6 +118,31 @@ router.post(
         receiptNumber,
       })
       .returning();
+
+    // Notify the agent of the payment
+    const [agentRow] = await db
+      .select({ userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, parse.data.agentId))
+      .limit(1);
+    if (agentRow) {
+      const txLabel =
+        parse.data.transactionType === "pay_in" ? "Payment Received" : "Pay-Out Issued";
+      const direction =
+        parse.data.transactionType === "pay_in"
+          ? `GH₵${Number(netAmount).toFixed(2)} has been received from you.`
+          : `GH₵${Number(netAmount).toFixed(2)} has been paid out to you.`;
+      await dispatchSystemNotification({
+        sentBy: req.user!.userId,
+        messageType: "payment_received",
+        title: `${txLabel} — Receipt ${receiptNumber}`,
+        body: `${direction} Gross: GH₵${gross.toFixed(2)}. Date: ${parse.data.paymentDate}.`,
+        targetType: "agent",
+        targetId: parse.data.agentId,
+        recipientUserIds: [agentRow.userId],
+      });
+    }
+
     res.status(201).json(payment);
   },
 );

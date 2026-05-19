@@ -2078,7 +2078,7 @@ components:
           type: string
         messageType:
           type: string
-          enum: [announcement, alert, reminder]
+          enum: [announcement, alert, reminder, payment_received, wins_summary, deficit_alert, debt_query]
         title:
           type: string
         body:
@@ -2101,7 +2101,7 @@ components:
           type: string
         messageType:
           type: string
-          enum: [announcement, alert, reminder]
+          enum: [announcement, alert, reminder, payment_received, wins_summary, deficit_alert, debt_query]
         title:
           type: string
         body:
@@ -2122,7 +2122,7 @@ components:
       properties:
         messageType:
           type: string
-          enum: [announcement, alert, reminder]
+          enum: [announcement, alert, reminder, payment_received, wins_summary, deficit_alert, debt_query]
         title:
           type: string
         body:
@@ -2142,37 +2142,53 @@ components:
 
     Game:
       type: object
-      required: [id, name, isActive, createdAt]
+      required: [id, eventNumber, name, goLiveAt, closeAt, status, createdAt]
       properties:
         id:
           type: string
+        eventNumber:
+          type: string
         name:
           type: string
-        dayOfWeek:
-          type: ["integer", "null"]
-        isActive:
-          type: boolean
+        description:
+          type: ["string", "null"]
+        goLiveAt:
+          type: string
+        closeAt:
+          type: string
+        status:
+          type: string
+          enum: [offline, live, closed]
         createdAt:
+          type: string
+        updatedAt:
           type: string
 
     CreateGameBody:
       type: object
-      required: [name]
+      required: [name, goLiveAt, closeAt]
       properties:
         name:
           type: string
-        dayOfWeek:
-          type: ["integer", "null"]
-        isActive:
-          type: boolean
+        description:
+          type: string
+        goLiveAt:
+          type: string
+        closeAt:
+          type: string
 
     UpdateGameBody:
       type: object
       properties:
         name:
           type: string
-        dayOfWeek:
-          type: ["integer", "null"]
-        isActive:
-          type: boolean
+        description:
+          type: ["string", "null"]
+        goLiveAt:
+          type: string
+        closeAt:
+          type: string
+        status:
+          type: string
+          enum: [offline, live]
 

@@ -81,6 +81,63 @@ const TYPE_CFG = {
       </svg>
     ),
   },
+  payment_received: {
+    label: "Payment Received",
+    border: "border-l-emerald-500",
+    bg: "bg-emerald-50",
+    dot: "bg-emerald-500",
+    badgeBg: "bg-emerald-100 text-emerald-700",
+    iconBg: "bg-emerald-500",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} className="w-4 h-4">
+        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+        <line x1="1" y1="10" x2="23" y2="10"/>
+      </svg>
+    ),
+  },
+  wins_summary: {
+    label: "Wins Summary",
+    border: "border-l-violet-500",
+    bg: "bg-violet-50",
+    dot: "bg-violet-500",
+    badgeBg: "bg-violet-100 text-violet-700",
+    iconBg: "bg-violet-500",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} className="w-4 h-4">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+    ),
+  },
+  deficit_alert: {
+    label: "Deficit Alert",
+    border: "border-l-rose-600",
+    bg: "bg-rose-50",
+    dot: "bg-rose-600",
+    badgeBg: "bg-rose-100 text-rose-700",
+    iconBg: "bg-rose-600",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} className="w-4 h-4">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    ),
+  },
+  debt_query: {
+    label: "Debt Query",
+    border: "border-l-orange-500",
+    bg: "bg-orange-50",
+    dot: "bg-orange-500",
+    badgeBg: "bg-orange-100 text-orange-700",
+    iconBg: "bg-orange-500",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} className="w-4 h-4">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    ),
+  },
 } as const;
 
 const TARGET_LABELS: Record<string, string> = {
@@ -452,6 +509,10 @@ export function Notifications() {
     announcement: notifList.filter(n => n.messageType === "announcement").length,
     alert: notifList.filter(n => n.messageType === "alert").length,
     reminder: notifList.filter(n => n.messageType === "reminder").length,
+    payment_received: notifList.filter(n => n.messageType === "payment_received").length,
+    wins_summary: notifList.filter(n => n.messageType === "wins_summary").length,
+    deficit_alert: notifList.filter(n => n.messageType === "deficit_alert").length,
+    debt_query: notifList.filter(n => n.messageType === "debt_query").length,
   }), [notifList]);
 
   const unreadByType = useMemo(() => ({
@@ -459,6 +520,10 @@ export function Notifications() {
     announcement: notifList.filter(n => n.messageType === "announcement" && !n.readAt).length,
     alert: notifList.filter(n => n.messageType === "alert" && !n.readAt).length,
     reminder: notifList.filter(n => n.messageType === "reminder" && !n.readAt).length,
+    payment_received: notifList.filter(n => n.messageType === "payment_received" && !n.readAt).length,
+    wins_summary: notifList.filter(n => n.messageType === "wins_summary" && !n.readAt).length,
+    deficit_alert: notifList.filter(n => n.messageType === "deficit_alert" && !n.readAt).length,
+    debt_query: notifList.filter(n => n.messageType === "debt_query" && !n.readAt).length,
   }), [notifList]);
 
   const filtered = tab === "all" ? notifList : notifList.filter(n => n.messageType === tab);
@@ -487,6 +552,10 @@ export function Notifications() {
     { id: "announcement", label: "Announcements", icon: "📢" },
     { id: "alert", label: "Alerts", icon: "🚨" },
     { id: "reminder", label: "Reminders", icon: "🔔" },
+    { id: "payment_received", label: "Payments", icon: "💳" },
+    { id: "deficit_alert", label: "Deficits", icon: "⚠️" },
+    { id: "wins_summary", label: "Wins", icon: "🏆" },
+    { id: "debt_query", label: "Debt", icon: "📋" },
   ];
 
   return (

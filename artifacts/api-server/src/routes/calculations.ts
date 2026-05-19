@@ -7,11 +7,14 @@ import {
   systemSettingsTable,
   reserveFundTable,
   reserveAllocationsTable,
+  writersTable,
+  agentsTable,
 } from "@workspace/db";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { RunCalculationsBody } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
+import { dispatchSystemNotification } from "../lib/notify";
 
 const router = Router();
 
@@ -73,7 +76,7 @@ router.post(
       .limit(1);
     let reserveBalance = reserveFund ? parseFloat(reserveFund.balance) : 0;
 
-    const results = [];
+    const results: (typeof dailyCalculationsTable.$inferSelect)[] = [];
     const allocations: Array<{
       writerId: string;
       amountDrawn: number;
@@ -186,6 +189,50 @@ router.post(
         totalAllocated: String(totalAllocatedNew),
         balance: String(totalContributedNew - totalAllocatedNew),
       });
+    }
+
+    // Dispatch deficit alerts to affected agents
+    const deficitWriterIds = results
+      .filter((r) => r && parseFloat(r.writerBalance) < 0)
+      .map((r) => r!.writerId);
+
+    if (deficitWriterIds.length > 0) {
+      const writerRows = await db
+        .select({ id: writersTable.id, agentId: writersTable.agentId, fullCode: writersTable.fullCode })
+        .from(writersTable)
+        .where(inArray(writersTable.id, deficitWriterIds));
+
+      const agentIdSet = [...new Set(writerRows.map((w) => w.agentId))];
+      const agentRows = await db
+        .select({ id: agentsTable.id, userId: agentsTable.userId, fullCode: agentsTable.fullCode })
+        .from(agentsTable)
+        .where(inArray(agentsTable.id, agentIdSet));
+
+      const agentMap = new Map(agentRows.map((a) => [a.id, a]));
+      const writersByAgent = new Map<string, typeof writerRows>();
+      for (const w of writerRows) {
+        if (!writersByAgent.has(w.agentId)) writersByAgent.set(w.agentId, []);
+        writersByAgent.get(w.agentId)!.push(w);
+      }
+
+      for (const [agentId, writers] of writersByAgent) {
+        const agentRow = agentMap.get(agentId);
+        if (!agentRow) continue;
+        const writerList = writers.map((w) => {
+          const calc = results.find((r) => r?.writerId === w.id);
+          const deficit = calc ? Math.abs(parseFloat(calc.writerBalance)).toFixed(2) : "0.00";
+          return `${w.fullCode}: deficit GH₵${deficit}`;
+        });
+        await dispatchSystemNotification({
+          sentBy: req.user!.userId,
+          messageType: "deficit_alert",
+          title: `Deficit Alert — ${calcDate}`,
+          body: `One or more of your writers ran a deficit on ${calcDate}. ${writerList.join("; ")}.`,
+          targetType: "agent",
+          targetId: agentId,
+          recipientUserIds: [agentRow.userId],
+        });
+      }
     }
 
     res.json({

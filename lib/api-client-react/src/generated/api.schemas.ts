@@ -535,6 +535,10 @@ export const NotificationMessageType = {
   announcement: 'announcement',
   alert: 'alert',
   reminder: 'reminder',
+  payment_received: 'payment_received',
+  wins_summary: 'wins_summary',
+  deficit_alert: 'deficit_alert',
+  debt_query: 'debt_query',
 } as const;
 
 export type NotificationTargetType = typeof NotificationTargetType[keyof typeof NotificationTargetType];
@@ -566,6 +570,10 @@ export const NotificationWithReceiptMessageType = {
   announcement: 'announcement',
   alert: 'alert',
   reminder: 'reminder',
+  payment_received: 'payment_received',
+  wins_summary: 'wins_summary',
+  deficit_alert: 'deficit_alert',
+  debt_query: 'debt_query',
 } as const;
 
 export type NotificationWithReceiptTargetType = typeof NotificationWithReceiptTargetType[keyof typeof NotificationWithReceiptTargetType];
@@ -599,6 +607,10 @@ export const NotificationInputMessageType = {
   announcement: 'announcement',
   alert: 'alert',
   reminder: 'reminder',
+  payment_received: 'payment_received',
+  wins_summary: 'wins_summary',
+  deficit_alert: 'deficit_alert',
+  debt_query: 'debt_query',
 } as const;
 
 export type NotificationInputTargetType = typeof NotificationInputTargetType[keyof typeof NotificationInputTargetType];
@@ -623,27 +635,50 @@ export interface UnreadCount {
   count: number;
 }
 
+export type GameStatus = typeof GameStatus[keyof typeof GameStatus];
+
+
+export const GameStatus = {
+  offline: 'offline',
+  live: 'live',
+  closed: 'closed',
+} as const;
+
 export interface Game {
   id: string;
+  eventNumber: string;
   name: string;
   /** @nullable */
-  dayOfWeek?: number | null;
-  isActive: boolean;
+  description?: string | null;
+  goLiveAt: string;
+  closeAt: string;
+  status: GameStatus;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CreateGameBody {
   name: string;
-  /** @nullable */
-  dayOfWeek?: number | null;
-  isActive?: boolean;
+  description?: string;
+  goLiveAt: string;
+  closeAt: string;
 }
+
+export type UpdateGameBodyStatus = typeof UpdateGameBodyStatus[keyof typeof UpdateGameBodyStatus];
+
+
+export const UpdateGameBodyStatus = {
+  offline: 'offline',
+  live: 'live',
+} as const;
 
 export interface UpdateGameBody {
   name?: string;
   /** @nullable */
-  dayOfWeek?: number | null;
-  isActive?: boolean;
+  description?: string | null;
+  goLiveAt?: string;
+  closeAt?: string;
+  status?: UpdateGameBodyStatus;
 }
 
 export type ListUsersParams = {

@@ -287,9 +287,8 @@ function DirectorDashboard() {
   const viewDate = selectedDate || mostRecentDate;
 
   const currentGame = useMemo(() => {
-    const active = gameList.filter(g => g.isActive);
-    return active.find(g => g.dayOfWeek === todayDow) ?? active.find(g => g.dayOfWeek == null) ?? null;
-  }, [gameList, todayDow]);
+    return gameList.find(g => g.status === "live") ?? null;
+  }, [gameList]);
 
   const dateCalcs = useMemo(() =>
     calcList.filter(c => c.calcDate?.startsWith(viewDate)),
@@ -592,9 +591,8 @@ function EntryDashboard({ type }: { type: "gross" | "wins" }) {
 
   const gameList = Array.isArray(games) ? games : [];
   const currentGame = useMemo(() => {
-    const active = gameList.filter(g => g.isActive);
-    return active.find(g => g.dayOfWeek === todayDow) ?? active.find(g => g.dayOfWeek == null) ?? null;
-  }, [gameList, todayDow]);
+    return gameList.find(g => g.status === "live") ?? null;
+  }, [gameList]);
 
   const grossList = Array.isArray(rawGross) ? rawGross : [];
   const winsList = Array.isArray(rawWins) ? rawWins : [];

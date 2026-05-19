@@ -2,10 +2,9 @@ import { useState } from "react";
 import {
   useGetSettings, useCreateSettings,
   useListTimeWindows, useCreateTimeWindow, useUpdateTimeWindow, useDeleteTimeWindow,
-  useListGames, useCreateGame, useUpdateGame, useDeleteGame,
   useListExpenseCategories, useCreateExpenseCategory, useUpdateExpenseCategory, useDeleteExpenseCategory,
-  getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListGamesQueryKey, getListExpenseCategoriesQueryKey,
-  TimeWindow, Game,
+  getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListExpenseCategoriesQueryKey,
+  TimeWindow,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function pctDisplay(raw: string | undefined) {
   if (!raw) return "—";
@@ -41,7 +39,6 @@ const RATES: { key: RateKey; label: string; description: string; color: string }
   { key: "reservePct", label: "Reserve", description: "Percentage of net gross set aside into the reserve fund.", color: "text-violet-600" },
 ];
 
-const EMPTY_GAME = { name: "", dayOfWeek: "", isActive: true };
 const EMPTY_EXPENSE = { name: "", description: "", defaultAmount: "", isActive: true };
 
 type ExpenseCategoryRow = {
@@ -61,7 +58,6 @@ export function Settings() {
   // ── Settings data ──
   const { data: settings, isLoading: loadingSettings } = useGetSettings();
   const { data: windows, isLoading: loadingWindows } = useListTimeWindows();
-  const { data: games, isLoading: loadingGames } = useListGames();
   const { data: expenseCategories, isLoading: loadingExpenses } = useListExpenseCategories();
 
   // ── Mutations ──
@@ -69,9 +65,6 @@ export function Settings() {
   const createWindowMutation = useCreateTimeWindow();
   const updateWindowMutation = useUpdateTimeWindow();
   const deleteWindowMutation = useDeleteTimeWindow();
-  const createGameMutation = useCreateGame();
-  const updateGameMutation = useUpdateGame();
-  const deleteGameMutation = useDeleteGame();
   const createExpenseMutation = useCreateExpenseCategory();
   const updateExpenseMutation = useUpdateExpenseCategory();
   const deleteExpenseMutation = useDeleteExpenseCategory();
@@ -87,18 +80,12 @@ export function Settings() {
   const [editWindow, setEditWindow] = useState<TimeWindow | null>(null);
   const [windowForm, setWindowForm] = useState({ dayOfWeek: "", windowOpen: "", windowClose: "", isActive: true });
 
-  // ── Game state ──
-  const [gameCreateOpen, setGameCreateOpen] = useState(false);
-  const [editGame, setEditGame] = useState<Game | null>(null);
-  const [gameForm, setGameForm] = useState(EMPTY_GAME);
-
   // ── Expense category state ──
   const [expenseCreateOpen, setExpenseCreateOpen] = useState(false);
   const [editExpense, setEditExpense] = useState<ExpenseCategoryRow | null>(null);
   const [expenseForm, setExpenseForm] = useState(EMPTY_EXPENSE);
 
   const expenseList = Array.isArray(expenseCategories) ? expenseCategories : [];
-  const gameList = Array.isArray(games) ? games : [];
 
   // ─────────── Handlers ───────────
 
@@ -188,53 +175,6 @@ export function Settings() {
   const openEditWindow = (w: TimeWindow) => {
     setEditWindow(w);
     setWindowForm({ dayOfWeek: w.dayOfWeek != null ? String(w.dayOfWeek) : "", windowOpen: w.windowOpen, windowClose: w.windowClose, isActive: w.isActive });
-  };
-
-  const handleCreateGame = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createGameMutation.mutateAsync({
-        data: { name: gameForm.name, dayOfWeek: gameForm.dayOfWeek !== "" ? Number(gameForm.dayOfWeek) : null, isActive: gameForm.isActive },
-      });
-      toast({ title: "Game created" });
-      setGameCreateOpen(false);
-      setGameForm(EMPTY_GAME);
-      qc.invalidateQueries({ queryKey: getListGamesQueryKey() });
-    } catch {
-      toast({ title: "Failed to create game", variant: "destructive" });
-    }
-  };
-
-  const handleEditGame = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editGame) return;
-    try {
-      await updateGameMutation.mutateAsync({
-        id: editGame.id,
-        data: { name: gameForm.name, dayOfWeek: gameForm.dayOfWeek !== "" ? Number(gameForm.dayOfWeek) : null, isActive: gameForm.isActive },
-      });
-      toast({ title: "Game updated" });
-      setEditGame(null);
-      qc.invalidateQueries({ queryKey: getListGamesQueryKey() });
-    } catch {
-      toast({ title: "Failed to update game", variant: "destructive" });
-    }
-  };
-
-  const handleDeleteGame = async (g: Game) => {
-    if (!confirm(`Delete "${g.name}"? This cannot be undone.`)) return;
-    try {
-      await deleteGameMutation.mutateAsync({ id: g.id });
-      toast({ title: "Game deleted" });
-      qc.invalidateQueries({ queryKey: getListGamesQueryKey() });
-    } catch {
-      toast({ title: "Failed to delete game", variant: "destructive" });
-    }
-  };
-
-  const openEditGame = (g: Game) => {
-    setEditGame(g);
-    setGameForm({ name: g.name, dayOfWeek: g.dayOfWeek != null ? String(g.dayOfWeek) : "", isActive: g.isActive });
   };
 
   const handleCreateExpense = async (e: React.FormEvent) => {
@@ -331,30 +271,6 @@ export function Settings() {
     </form>
   );
 
-  const GameForm = ({ onSubmit, onCancel, isPending }: { onSubmit: (e: React.FormEvent) => void; onCancel: () => void; isPending: boolean }) => (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label className="text-xs">Game Name</Label>
-        <Input value={gameForm.name} onChange={e => setGameForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Monday Special, Evening Draw" />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs">Day of Week (leave blank to run every day)</Label>
-        <select value={gameForm.dayOfWeek} onChange={e => setGameForm(f => ({ ...f, dayOfWeek: e.target.value }))} className="w-full h-9 rounded border border-input bg-background px-3 text-sm">
-          <option value="">Every Day</option>
-          {DAY_FULL.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
-        </select>
-      </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={gameForm.isActive} onCheckedChange={v => setGameForm(f => ({ ...f, isActive: v }))} />
-        <Label className="text-xs">Active</Label>
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
-      </DialogFooter>
-    </form>
-  );
-
   const ExpenseForm = ({ onSubmit, onCancel, isPending }: { onSubmit: (e: React.FormEvent) => void; onCancel: () => void; isPending: boolean }) => (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-1.5">
@@ -396,7 +312,6 @@ export function Settings() {
           <TabsTrigger value="rates">Commission Rates</TabsTrigger>
           <TabsTrigger value="hours">Cashier Hours</TabsTrigger>
           <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
-          <TabsTrigger value="games">Games</TabsTrigger>
         </TabsList>
 
         {/* ── Commission Rates ── */}
@@ -551,57 +466,6 @@ export function Settings() {
           </Card>
         </TabsContent>
 
-        {/* ── Games ── */}
-        <TabsContent value="games">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">Games Management</CardTitle>
-                  <CardDescription className="text-xs mt-1">
-                    Define games and assign them to specific days. The active game for today appears on the dashboard.
-                  </CardDescription>
-                </div>
-                <Button size="sm" onClick={() => { setGameForm(EMPTY_GAME); setGameCreateOpen(true); }}>+ Add Game</Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Game Name</TableHead>
-                      <TableHead>Day Assigned</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-28">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loadingGames ? (
-                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell></TableRow>
-                    ) : gameList.length === 0 ? (
-                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-sm">No games yet. Add your first game.</TableCell></TableRow>
-                    ) : gameList.map(g => (
-                      <TableRow key={g.id}>
-                        <TableCell className="font-medium text-sm">🎮 {g.name}</TableCell>
-                        <TableCell className="text-sm">
-                          {g.dayOfWeek != null ? DAY_FULL[g.dayOfWeek] : <span className="text-muted-foreground italic">Every day</span>}
-                        </TableCell>
-                        <TableCell><Badge variant={g.isActive ? "default" : "secondary"} className="text-xs">{g.isActive ? "Active" : "Inactive"}</Badge></TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditGame(g)}>Edit</Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteGame(g)}>Delete</Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       {/* ── Dialogs ── */}
@@ -655,20 +519,6 @@ export function Settings() {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Time Window</DialogTitle></DialogHeader>
           <WindowForm onSubmit={handleEditWindow} onCancel={() => setEditWindow(null)} isPending={updateWindowMutation.isPending} />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={gameCreateOpen} onOpenChange={setGameCreateOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Add Game</DialogTitle></DialogHeader>
-          <GameForm onSubmit={handleCreateGame} onCancel={() => setGameCreateOpen(false)} isPending={createGameMutation.isPending} />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!editGame} onOpenChange={open => !open && setEditGame(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Edit Game</DialogTitle></DialogHeader>
-          <GameForm onSubmit={handleEditGame} onCancel={() => setEditGame(null)} isPending={updateGameMutation.isPending} />
         </DialogContent>
       </Dialog>
 

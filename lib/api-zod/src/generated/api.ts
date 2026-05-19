@@ -13,10 +13,14 @@ import * as zod from 'zod';
  */
 export const ListGamesResponseItem = zod.object({
   "id": zod.string(),
+  "eventNumber": zod.string(),
   "name": zod.string(),
-  "dayOfWeek": zod.number().nullish(),
-  "isActive": zod.boolean(),
-  "createdAt": zod.string()
+  "description": zod.string().nullish(),
+  "goLiveAt": zod.string(),
+  "closeAt": zod.string(),
+  "status": zod.enum(['offline', 'live', 'closed']),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional()
 })
 export const ListGamesResponse = zod.array(ListGamesResponseItem)
 
@@ -26,8 +30,9 @@ export const ListGamesResponse = zod.array(ListGamesResponseItem)
  */
 export const CreateGameBody = zod.object({
   "name": zod.string(),
-  "dayOfWeek": zod.number().nullish(),
-  "isActive": zod.boolean().optional()
+  "description": zod.string().optional(),
+  "goLiveAt": zod.string(),
+  "closeAt": zod.string()
 })
 
 
@@ -40,16 +45,22 @@ export const UpdateGameParams = zod.object({
 
 export const UpdateGameBody = zod.object({
   "name": zod.string().optional(),
-  "dayOfWeek": zod.number().nullish(),
-  "isActive": zod.boolean().optional()
+  "description": zod.string().nullish(),
+  "goLiveAt": zod.string().optional(),
+  "closeAt": zod.string().optional(),
+  "status": zod.enum(['offline', 'live']).optional()
 })
 
 export const UpdateGameResponse = zod.object({
   "id": zod.string(),
+  "eventNumber": zod.string(),
   "name": zod.string(),
-  "dayOfWeek": zod.number().nullish(),
-  "isActive": zod.boolean(),
-  "createdAt": zod.string()
+  "description": zod.string().nullish(),
+  "goLiveAt": zod.string(),
+  "closeAt": zod.string(),
+  "status": zod.enum(['offline', 'live', 'closed']),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional()
 })
 
 
@@ -1072,7 +1083,7 @@ export const ApplyReserveAllocationResponse = zod.object({
 export const ListNotificationsResponseItem = zod.object({
   "id": zod.string(),
   "sentBy": zod.string(),
-  "messageType": zod.enum(['announcement', 'alert', 'reminder']),
+  "messageType": zod.enum(['announcement', 'alert', 'reminder', 'payment_received', 'wins_summary', 'deficit_alert', 'debt_query']),
   "title": zod.string(),
   "body": zod.string(),
   "targetType": zod.enum(['all', 'all_agents', 'agent', 'writer']),
@@ -1087,7 +1098,7 @@ export const ListNotificationsResponse = zod.array(ListNotificationsResponseItem
  * @summary Send a notification
  */
 export const SendNotificationBody = zod.object({
-  "messageType": zod.enum(['announcement', 'alert', 'reminder']),
+  "messageType": zod.enum(['announcement', 'alert', 'reminder', 'payment_received', 'wins_summary', 'deficit_alert', 'debt_query']),
   "title": zod.string(),
   "body": zod.string(),
   "targetType": zod.enum(['all', 'all_agents', 'agent', 'writer']),
@@ -1105,7 +1116,7 @@ export const MarkNotificationReadParams = zod.object({
 export const MarkNotificationReadResponse = zod.object({
   "id": zod.string(),
   "sentBy": zod.string(),
-  "messageType": zod.enum(['announcement', 'alert', 'reminder']),
+  "messageType": zod.enum(['announcement', 'alert', 'reminder', 'payment_received', 'wins_summary', 'deficit_alert', 'debt_query']),
   "title": zod.string(),
   "body": zod.string(),
   "targetType": zod.enum(['all', 'all_agents', 'agent', 'writer']),

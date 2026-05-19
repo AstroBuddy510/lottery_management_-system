@@ -3,7 +3,15 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 
-export const messageTypeEnum = pgEnum("message_type", ["announcement", "alert", "reminder"]);
+export const messageTypeEnum = pgEnum("message_type", [
+  "announcement",
+  "alert",
+  "reminder",
+  "payment_received",
+  "wins_summary",
+  "deficit_alert",
+  "debt_query",
+]);
 export const targetTypeEnum = pgEnum("target_type", ["all", "all_agents", "agent", "writer"]);
 
 export const notificationsTable = pgTable("notifications", {
