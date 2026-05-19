@@ -1,19 +1,10 @@
-import React, { createContext, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { setAuthTokenGetter, useGetMe, useLogin, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
-import type { User, LoginInput } from "@workspace/api-client-react";
-
-export interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
-  login: (data: LoginInput) => Promise<void>;
-  logout: () => Promise<void>;
-}
-
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import { AuthContext } from "./auth-context";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<import("@workspace/api-client-react").User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [, setLocation] = useLocation();
 
@@ -26,7 +17,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       queryKey: getGetMeQueryKey(),
       enabled: hasToken,
       retry: false,
-    }
+    },
   });
 
   useEffect(() => {
@@ -34,12 +25,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (me) {
-      setUser(me);
-    }
-    if (!isLoadingMe) {
-      setIsInitializing(false);
-    }
+    if (me) setUser(me);
+    if (!isLoadingMe) setIsInitializing(false);
     if (isError) {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
@@ -48,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [me, isLoadingMe, isError]);
 
-  const login = async (data: LoginInput) => {
+  const login = async (data: import("@workspace/api-client-react").LoginInput) => {
     const res = await loginMutation.mutateAsync({ data });
     localStorage.setItem("accessToken", res.accessToken);
     localStorage.setItem("refreshToken", res.refreshToken);
@@ -60,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await logoutMutation.mutateAsync();
     } catch {
-      // Ignore errors on logout
+      // ignore
     } finally {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
