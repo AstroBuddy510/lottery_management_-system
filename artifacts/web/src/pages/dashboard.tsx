@@ -8,6 +8,7 @@ import {
   getGetUnreadCountQueryKey, getListCalculationsQueryKey,
   getListGrossEntriesQueryKey, getListWinsEntriesQueryKey,
   getListPaymentsQueryKey, getGetReserveBalanceQueryKey,
+  useGetSettings, getGetSettingsQueryKey,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -89,10 +90,11 @@ type AgentStat = {
   agent: { id: string; agentCode: string; fullCode: string; isActive: boolean; user: { fullName: string; profilePicture?: string | null } };
   gross: number; commission: number; net: number; wins: number; reserve: number; balance: number;
   submittedWriters: number; totalWriters: number; hasPaid: boolean;
+  isPending: boolean;
 };
 
 function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void }) {
-  const { agent, gross, commission, net, wins, reserve, balance, submittedWriters, totalWriters, hasPaid } = stat;
+  const { agent, gross, commission, net, wins, reserve, balance, submittedWriters, totalWriters, hasPaid, isPending } = stat;
   const name = agent.user.fullName;
   return (
     <Card
@@ -104,7 +106,6 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
         <div className="bg-muted/40 border-b px-5 pt-5 pb-4 flex items-start gap-4">
           <div className="relative">
             <AgentAvatar name={name} picture={agent.user.profilePicture} size="lg" />
-            {/* Fallback initials div hidden by default, shown when img errors */}
             {agent.user.profilePicture && (
               <div
                 style={{ display: "none" }}
@@ -124,12 +125,18 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
               <Badge variant={hasPaid ? "default" : "destructive"} className="text-xs h-5">
                 Reserve: {hasPaid ? "Paid" : "Not Paid"}
               </Badge>
+              {isPending && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                  <span className="w-1 h-1 rounded-full bg-amber-500 inline-block animate-pulse" />
+                  Est. · Pending Calc
+                </span>
+              )}
             </div>
           </div>
         </div>
 
         {/* Financials grid */}
-        <div className="px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-2.5">
+        <div className={`px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-2.5 ${isPending ? "bg-amber-50/30" : ""}`}>
           {[
             ["Gross Sales", gross, false],
             ["Net Gross", net, false],
@@ -139,8 +146,14 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
             ["Balance", balance, true],
           ].map(([label, val, isBalance]) => (
             <div key={label as string} className="flex flex-col">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{label as string}</span>
-              <span className={`text-sm font-bold font-mono ${isBalance && Number(val) < 0 ? "text-destructive" : isBalance ? "text-primary" : ""}`}>
+              <span className={`text-[10px] uppercase tracking-wide font-medium ${isPending ? "text-amber-700/70" : "text-muted-foreground"}`}>
+                {label as string}{isPending ? " ~" : ""}
+              </span>
+              <span className={`text-sm font-bold font-mono ${
+                isBalance && Number(val) < 0 ? "text-destructive"
+                : isBalance ? "text-primary"
+                : isPending ? "text-amber-800" : ""
+              }`}>
                 {fmtGHS(val as number)}
               </span>
             </div>
@@ -161,11 +174,11 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
 }
 
 function AgentListRow({ stat, onClick }: { stat: AgentStat; onClick: () => void }) {
-  const { agent, gross, net, balance, submittedWriters, totalWriters, hasPaid } = stat;
+  const { agent, gross, net, balance, submittedWriters, totalWriters, hasPaid, isPending } = stat;
   const name = agent.user.fullName;
   return (
     <tr
-      className="border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors"
+      className={`border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors ${isPending ? "bg-amber-50/20" : ""}`}
       onClick={onClick}
     >
       <td className="py-3 pl-4 pr-2">
@@ -177,19 +190,28 @@ function AgentListRow({ stat, onClick }: { stat: AgentStat; onClick: () => void 
           </div>
         </div>
       </td>
-      <td className="py-3 px-3 text-sm font-mono text-right">{fmtGHS(gross)}</td>
-      <td className="py-3 px-3 text-sm font-mono text-right">{fmtGHS(net)}</td>
-      <td className={`py-3 px-3 text-sm font-mono font-bold text-right ${balance < 0 ? "text-destructive" : "text-primary"}`}>{fmtGHS(balance)}</td>
+      <td className={`py-3 px-3 text-sm font-mono text-right ${isPending ? "text-amber-800" : ""}`}>
+        {fmtGHS(gross)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
+      </td>
+      <td className={`py-3 px-3 text-sm font-mono text-right ${isPending ? "text-amber-800" : ""}`}>
+        {fmtGHS(net)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
+      </td>
+      <td className={`py-3 px-3 text-sm font-mono font-bold text-right ${balance < 0 ? "text-destructive" : "text-primary"}`}>
+        {fmtGHS(balance)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
+      </td>
       <td className="py-3 px-3 text-center text-xs text-muted-foreground">
         <span className="font-semibold text-foreground">{submittedWriters}</span>/{totalWriters}
       </td>
       <td className="py-3 px-3">
         <Badge variant={agent.isActive ? "default" : "secondary"} className="text-xs">{agent.isActive ? "Active" : "Inactive"}</Badge>
       </td>
-      <td className="py-3 px-3">
+      <td className="py-3 px-3 space-y-0.5">
         <Badge variant={hasPaid ? "default" : "destructive"} className="text-xs">
           {hasPaid ? "Paid" : "Not Paid"}
         </Badge>
+        {isPending && (
+          <div className="text-[10px] text-amber-600 font-medium">Est. pending calc</div>
+        )}
       </td>
       <td className="py-3 pl-2 pr-4 text-xs text-primary font-medium text-right">View →</td>
     </tr>
@@ -247,6 +269,7 @@ function DirectorDashboard() {
     {},
     { query: { queryKey: getListWinsEntriesQueryKey({}), refetchInterval: 30_000 } }
   );
+  const { data: settings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
 
   const calcList = Array.isArray(allCalcs) ? allCalcs : [];
   const paymentList = Array.isArray(payments) ? payments : [];
@@ -272,35 +295,59 @@ function DirectorDashboard() {
     [calcList, viewDate]
   );
 
+  const commPct = Number(settings?.commissionPct ?? 0);
+  const resvPct = Number(settings?.reservePct ?? 0);
+  const liveGrossList = Array.isArray(liveGross) ? liveGross : [];
+  const liveWinsList  = Array.isArray(liveWins)  ? liveWins  : [];
+
   const agentStats: AgentStat[] = useMemo(() =>
     agentList.map(agent => {
       const writerIds = new Set(allWriters.filter(w => w.agentId === agent.id).map(w => w.id));
       const totalWriters = allWriters.filter(w => w.agentId === agent.id && w.isActive).length;
       const agentCalcs = dateCalcs.filter(c => writerIds.has(c.writerId));
 
+      const hasPaid = paymentList.some(p => p.agentId === agent.id && !p.isVoided && p.paymentDate?.startsWith(viewDate));
+      const agentInfo = {
+        id: agent.id, agentCode: agent.agentCode, fullCode: agent.fullCode, isActive: agent.isActive,
+        user: { fullName: agent.user?.fullName ?? agent.fullCode, profilePicture: agent.user?.profilePicture },
+      };
+
+      if (agentCalcs.length > 0) {
+        return {
+          agent: agentInfo,
+          gross:      agentCalcs.reduce((s, c) => s + Number(c.grossSales),      0),
+          commission: agentCalcs.reduce((s, c) => s + Number(c.commissionAmount), 0),
+          net:        agentCalcs.reduce((s, c) => s + Number(c.netGross),         0),
+          reserve:    agentCalcs.reduce((s, c) => s + Number(c.reserveAmount),    0),
+          wins:       agentCalcs.reduce((s, c) => s + Number(c.winsAmount),       0),
+          balance:    agentCalcs.reduce((s, c) => s + Number(c.writerBalance),    0),
+          submittedWriters: agentCalcs.length,
+          totalWriters, hasPaid, isPending: false,
+        };
+      }
+
+      const liveGrossEntries = liveGrossList.filter(e => writerIds.has(e.writerId) && e.entryDate?.startsWith(viewDate));
+      const liveWinsEntries  = liveWinsList.filter( e => writerIds.has(e.writerId) && e.entryDate?.startsWith(viewDate));
+      const gross      = liveGrossEntries.reduce((s, e) => s + Number(e.grossAmount), 0);
+      const wins       = liveWinsEntries.reduce( (s, e) => s + Number(e.winsAmount),  0);
+      const commission = gross * commPct;
+      const net        = gross - commission;
+      const reserve    = net   * resvPct;
+      const balance    = net   - wins - reserve;
+      const isPending  = gross > 0 || wins > 0;
+      const writersWithEntries = new Set([
+        ...liveGrossEntries.map(e => e.writerId),
+        ...liveWinsEntries.map(e => e.writerId),
+      ]);
+
       return {
-        agent: {
-          id: agent.id,
-          agentCode: agent.agentCode,
-          fullCode: agent.fullCode,
-          isActive: agent.isActive,
-          user: {
-            fullName: agent.user?.fullName ?? agent.fullCode,
-            profilePicture: agent.user?.profilePicture,
-          },
-        },
-        gross: agentCalcs.reduce((s, c) => s + Number(c.grossSales), 0),
-        commission: agentCalcs.reduce((s, c) => s + Number(c.commissionAmount), 0),
-        net: agentCalcs.reduce((s, c) => s + Number(c.netGross), 0),
-        reserve: agentCalcs.reduce((s, c) => s + Number(c.reserveAmount), 0),
-        wins: agentCalcs.reduce((s, c) => s + Number(c.winsAmount), 0),
-        balance: agentCalcs.reduce((s, c) => s + Number(c.writerBalance), 0),
-        submittedWriters: agentCalcs.length,
-        totalWriters,
-        hasPaid: paymentList.some(p => p.agentId === agent.id && !p.isVoided && p.paymentDate?.startsWith(viewDate)),
+        agent: agentInfo,
+        gross, commission, net, reserve, wins, balance,
+        submittedWriters: writersWithEntries.size,
+        totalWriters, hasPaid, isPending,
       };
     }),
-    [agentList, allWriters, dateCalcs, paymentList, viewDate]
+    [agentList, allWriters, dateCalcs, paymentList, viewDate, liveGrossList, liveWinsList, commPct, resvPct]
   );
 
   const totals = useMemo(() => agentStats.reduce(
