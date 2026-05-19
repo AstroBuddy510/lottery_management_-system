@@ -17,6 +17,7 @@ import { AgentDetail } from "@/pages/agent-detail";
 import { Sales } from "@/pages/sales";
 import { GrossEntries } from "@/pages/gross-entries";
 import { WinsEntries } from "@/pages/wins-entries";
+import { GrossWins } from "@/pages/gross-wins";
 import { Payments } from "@/pages/payments";
 import { Calculations } from "@/pages/calculations";
 import { Reports } from "@/pages/reports";
@@ -87,12 +88,16 @@ function Router() {
         {() => <ProtectedRoute component={Sales} roles={['agent', 'administrator']} />}
       </Route>
 
+      <Route path="/gross-wins">
+        {() => <ProtectedRoute component={GrossWins} roles={['director', 'administrator']} />}
+      </Route>
+
       <Route path="/entries/gross">
-        {() => <ProtectedRoute component={GrossEntries} roles={['gross_entry', 'administrator', 'director', 'agent']} />}
+        {() => <ProtectedRoute component={GrossEntries} roles={['gross_entry', 'agent']} />}
       </Route>
 
       <Route path="/entries/wins">
-        {() => <ProtectedRoute component={WinsEntries} roles={['wins_entry', 'administrator', 'director', 'agent']} />}
+        {() => <ProtectedRoute component={WinsEntries} roles={['wins_entry', 'agent']} />}
       </Route>
 
       <Route path="/payments">
