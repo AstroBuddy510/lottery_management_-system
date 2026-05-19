@@ -108,10 +108,10 @@ paths:
         "204":
           description: Logged out
 
-  /users/me:
+  /auth/me:
     get:
       operationId: getMe
-      tags: [users]
+      tags: [auth]
       summary: Get current authenticated user
       security:
         - bearerAuth: []

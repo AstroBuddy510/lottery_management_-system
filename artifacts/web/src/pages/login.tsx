@@ -49,8 +49,8 @@ export function Login() {
       className="min-h-screen flex items-center justify-center px-4"
       style={{
         backgroundImage: "url(/login-bg.png)",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
+        backgroundSize: "150%",
+        backgroundPosition: "center center",
         backgroundRepeat: "no-repeat",
       }}
     >

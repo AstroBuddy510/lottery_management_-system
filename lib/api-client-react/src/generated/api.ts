@@ -384,7 +384,7 @@ export const getGetMeUrl = () => {
 
 
 
-  return `/api/users/me`
+  return `/api/auth/me`
 }
 
 /**
@@ -407,7 +407,7 @@ export const getMe = async ( options?: RequestInit): Promise<User> => {
 
 export const getGetMeQueryKey = () => {
     return [
-    `/api/users/me`
+    `/api/auth/me`
     ] as const;
     }
 
