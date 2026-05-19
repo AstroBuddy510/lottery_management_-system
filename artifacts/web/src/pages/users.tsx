@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   useListUsers, useCreateUser, useUpdateUser, useDeactivateUser, useRegeneratePin,
-  getListUsersQueryKey, User, UserInput, UserUpdate,
+  getListUsersQueryKey, getGetMeQueryKey, User, UserInput, UserUpdate,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,10 @@ export function Users() {
 
   const [newPin, setNewPin] = useState<{ pin: string; name: string } | null>(null);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListUsersQueryKey({}) });
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: getListUsersQueryKey({}) });
+    qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +55,7 @@ export function Users() {
       const result = await createMutation.mutateAsync({ data: createForm as UserInput });
       setCreateOpen(false);
       setCreateForm({ fullName: "", phone: "", role: "cashier" });
-      invalidate();
+      invalidateAll();
       setNewPin({ pin: result.pin, name: result.fullName });
     } catch {
       toast({ title: "Failed to create user", variant: "destructive" });
@@ -63,10 +66,14 @@ export function Users() {
     e.preventDefault();
     if (!editUser) return;
     try {
-      await updateMutation.mutateAsync({ id: editUser.id, data: editForm as UserUpdate });
-      toast({ title: "User updated" });
+      const patch: UserUpdate = {};
+      if (editForm.fullName.trim()) patch.fullName = editForm.fullName.trim();
+      if (editForm.phone.trim()) patch.phone = editForm.phone.trim();
+      if (editForm.role) patch.role = editForm.role as UserUpdate["role"];
+      await updateMutation.mutateAsync({ id: editUser.id, data: patch });
+      toast({ title: "User updated successfully" });
       setEditUser(null);
-      invalidate();
+      invalidateAll();
     } catch {
       toast({ title: "Failed to update user", variant: "destructive" });
     }
@@ -77,7 +84,7 @@ export function Users() {
     try {
       await deactivateMutation.mutateAsync({ id: u.id });
       toast({ title: "User deactivated" });
-      invalidate();
+      invalidateAll();
     } catch {
       toast({ title: "Failed to deactivate user", variant: "destructive" });
     }
