@@ -93,7 +93,7 @@ export function Calculations() {
               <SelectTrigger className="h-7 text-xs w-36"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="_all">All agents</SelectItem>
-                {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}
+                {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
               </SelectContent>
             </Select>
             <Label className="text-xs text-muted-foreground">From:</Label>

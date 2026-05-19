@@ -36,7 +36,7 @@ export function Payments() {
   const invalidate = () => qc.invalidateQueries({ queryKey: getListPaymentsQueryKey({}) });
 
   const agentList = Array.isArray(agents) ? agents : [];
-  const agentMap: Record<string, string> = Object.fromEntries(agentList.map(a => [a.id, a.fullCode]));
+  const agentMap: Record<string, string> = Object.fromEntries(agentList.map(a => [a.id, a.user?.fullName ?? a.fullCode]));
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,7 +115,7 @@ export function Payments() {
             <SelectTrigger className="h-8 text-sm w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="_all">All agents</SelectItem>
-              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}
+              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -165,7 +165,7 @@ export function Payments() {
               <Label className="text-xs">Agent</Label>
               <Select value={form.agentId} onValueChange={v => setForm(f => ({ ...f, agentId: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-                <SelectContent>{agentList.filter(a => a.isActive).map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}</SelectContent>
+                <SelectContent>{agentList.filter(a => a.isActive).map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5"><Label className="text-xs">Amount</Label><Input type="number" step="0.01" min="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} required className="h-9 text-sm" /></div>

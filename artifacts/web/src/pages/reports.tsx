@@ -60,7 +60,7 @@ function WriterReportView() {
           <Label className="text-xs">Agent</Label>
           <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setWriterId(""); setRun(false); }}>
             <SelectTrigger className="h-9 text-sm w-44"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-            <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}</SelectContent>
+            <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5">
@@ -135,7 +135,7 @@ function AgentReportView() {
           <Label className="text-xs">Agent</Label>
           <Select value={agentId} onValueChange={v => { setAgentId(v); setRun(false); }}>
             <SelectTrigger className="h-9 text-sm w-44"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-            <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}</SelectContent>
+            <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1.5"><Label className="text-xs">From</Label><Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setRun(false); }} className="h-9 text-sm w-36" /></div>

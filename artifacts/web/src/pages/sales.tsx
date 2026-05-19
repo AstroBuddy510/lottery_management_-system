@@ -73,7 +73,7 @@ export function Sales() {
             <SelectTrigger className="h-8 text-sm w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="_all">All agents</SelectItem>
-              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}
+              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -139,7 +139,7 @@ export function Sales() {
               <Label className="text-xs">Agent</Label>
               <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}</SelectContent>
+                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
