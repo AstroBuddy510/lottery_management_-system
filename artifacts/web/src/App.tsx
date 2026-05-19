@@ -88,11 +88,11 @@ function Router() {
       </Route>
 
       <Route path="/entries/gross">
-        {() => <ProtectedRoute component={GrossEntries} roles={['gross_entry', 'administrator']} />}
+        {() => <ProtectedRoute component={GrossEntries} roles={['gross_entry', 'administrator', 'director', 'agent']} />}
       </Route>
 
       <Route path="/entries/wins">
-        {() => <ProtectedRoute component={WinsEntries} roles={['wins_entry', 'administrator']} />}
+        {() => <ProtectedRoute component={WinsEntries} roles={['wins_entry', 'administrator', 'director', 'agent']} />}
       </Route>
 
       <Route path="/payments">

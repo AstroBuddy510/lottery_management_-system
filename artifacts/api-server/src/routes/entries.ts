@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, grossEntriesTable, winsEntriesTable } from "@workspace/db";
+import { db, grossEntriesTable, winsEntriesTable, writersTable, agentsTable } from "@workspace/db";
 import { eq, and, gte, lte } from "drizzle-orm";
 import {
   CreateGrossEntryBody,
@@ -13,10 +13,28 @@ import { requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
 
+async function getAgentIdForUser(userId: string): Promise<string | null> {
+  const [agent] = await db
+    .select({ id: agentsTable.id })
+    .from(agentsTable)
+    .where(eq(agentsTable.userId, userId))
+    .limit(1);
+  return agent?.id ?? null;
+}
+
+async function writerBelongsToAgent(writerId: string, agentId: string): Promise<boolean> {
+  const [writer] = await db
+    .select({ id: writersTable.id })
+    .from(writersTable)
+    .where(and(eq(writersTable.id, writerId), eq(writersTable.agentId, agentId)))
+    .limit(1);
+  return !!writer;
+}
+
 router.get(
   "/entries/gross",
   requireAuth,
-  requireRole("director", "administrator", "gross_entry"),
+  requireRole("director", "administrator", "gross_entry", "agent"),
   async (req, res) => {
     const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
     const conditions = [];
@@ -35,13 +53,28 @@ router.get(
 router.post(
   "/entries/gross",
   requireAuth,
-  requireRole("gross_entry", "administrator"),
+  requireRole("gross_entry", "administrator", "director", "agent"),
   async (req, res) => {
     const parse = CreateGrossEntryBody.safeParse(req.body);
     if (!parse.success) {
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
+
+    // Agents can only add entries for their own writers
+    if (req.user!.role === "agent") {
+      const agentId = await getAgentIdForUser(req.user!.userId);
+      if (!agentId) {
+        res.status(403).json({ error: "No agent profile found for this user" });
+        return;
+      }
+      const owns = await writerBelongsToAgent(parse.data.writerId, agentId);
+      if (!owns) {
+        res.status(403).json({ error: "Writer does not belong to your agent account" });
+        return;
+      }
+    }
+
     const [entry] = await db
       .insert(grossEntriesTable)
       .values({ ...parse.data, enteredBy: req.user!.userId })
@@ -53,7 +86,7 @@ router.post(
 router.patch(
   "/entries/gross/:id",
   requireAuth,
-  requireRole("gross_entry", "administrator"),
+  requireRole("gross_entry", "administrator", "director", "agent"),
   async (req, res) => {
     const paramsResult = UpdateGrossEntryParams.safeParse(req.params);
     if (!paramsResult.success) {
@@ -78,6 +111,16 @@ router.patch(
       res.status(409).json({ error: "Entry is locked and cannot be modified" });
       return;
     }
+
+    // Agents can only edit entries for their own writers
+    if (req.user!.role === "agent") {
+      const agentId = await getAgentIdForUser(req.user!.userId);
+      if (!agentId || !(await writerBelongsToAgent(existing.writerId, agentId))) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    }
+
     const [entry] = await db
       .update(grossEntriesTable)
       .set({ grossAmount: bodyResult.data.grossAmount })
@@ -90,7 +133,7 @@ router.patch(
 router.get(
   "/entries/wins",
   requireAuth,
-  requireRole("director", "administrator", "wins_entry"),
+  requireRole("director", "administrator", "wins_entry", "agent"),
   async (req, res) => {
     const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
     const conditions = [];
@@ -109,13 +152,28 @@ router.get(
 router.post(
   "/entries/wins",
   requireAuth,
-  requireRole("wins_entry", "administrator"),
+  requireRole("wins_entry", "administrator", "director", "agent"),
   async (req, res) => {
     const parse = CreateWinsEntryBody.safeParse(req.body);
     if (!parse.success) {
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
+
+    // Agents can only add entries for their own writers
+    if (req.user!.role === "agent") {
+      const agentId = await getAgentIdForUser(req.user!.userId);
+      if (!agentId) {
+        res.status(403).json({ error: "No agent profile found for this user" });
+        return;
+      }
+      const owns = await writerBelongsToAgent(parse.data.writerId, agentId);
+      if (!owns) {
+        res.status(403).json({ error: "Writer does not belong to your agent account" });
+        return;
+      }
+    }
+
     const [entry] = await db
       .insert(winsEntriesTable)
       .values({ ...parse.data, enteredBy: req.user!.userId })
@@ -127,7 +185,7 @@ router.post(
 router.patch(
   "/entries/wins/:id",
   requireAuth,
-  requireRole("wins_entry", "administrator"),
+  requireRole("wins_entry", "administrator", "director", "agent"),
   async (req, res) => {
     const paramsResult = UpdateWinsEntryParams.safeParse(req.params);
     if (!paramsResult.success) {
@@ -152,6 +210,16 @@ router.patch(
       res.status(409).json({ error: "Entry is locked and cannot be modified" });
       return;
     }
+
+    // Agents can only edit entries for their own writers
+    if (req.user!.role === "agent") {
+      const agentId = await getAgentIdForUser(req.user!.userId);
+      if (!agentId || !(await writerBelongsToAgent(existing.writerId, agentId))) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    }
+
     const [entry] = await db
       .update(winsEntriesTable)
       .set({ winsAmount: bodyResult.data.winsAmount })

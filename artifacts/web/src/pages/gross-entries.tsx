@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useListGrossEntries, useCreateGrossEntry, useUpdateGrossEntry,
-  useListAgents, useListWriters, getListGrossEntriesQueryKey, getListWritersQueryKey, GrossEntry,
+  useListWriters, getListGrossEntriesQueryKey, getListWritersQueryKey,
+  useGetMyAgent, getGetMyAgentQueryKey, GrossEntry,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
+import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,12 +19,25 @@ import { useToast } from "@/hooks/use-toast";
 export function GrossEntries() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isAgent = user?.role === "agent";
+
   const { writerMap, agentList } = useWriterLookup();
+
+  // For agent role: load their own agent record to pre-select
+  const { data: myAgent } = useGetMyAgent({
+    query: { queryKey: getGetMyAgentQueryKey(), enabled: isAgent }
+  });
 
   const [filterAgentId, setFilterAgentId] = useState("");
   const [filterWriterId, setFilterWriterId] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+
+  // Auto-set filter agent for agent role
+  useEffect(() => {
+    if (isAgent && myAgent?.id) setFilterAgentId(myAgent.id);
+  }, [isAgent, myAgent?.id]);
 
   const { data: filterWriters } = useListWriters(filterAgentId, {}, {
     query: { queryKey: getListWritersQueryKey(filterAgentId, {}), enabled: !!filterAgentId }
@@ -35,10 +50,16 @@ export function GrossEntries() {
     dateTo: filterTo || undefined,
   });
 
+  // For create dialog: agent is pre-selected for agent role
   const [selectedAgent, setSelectedAgent] = useState("");
+  useEffect(() => {
+    if (isAgent && myAgent?.id) setSelectedAgent(myAgent.id);
+  }, [isAgent, myAgent?.id]);
+
   const { data: writers } = useListWriters(selectedAgent, {}, {
     query: { queryKey: getListWritersQueryKey(selectedAgent, {}), enabled: !!selectedAgent }
   });
+  const writerList = Array.isArray(writers) ? writers : [];
 
   const createMutation = useCreateGrossEntry();
   const updateMutation = useUpdateGrossEntry();
@@ -56,9 +77,11 @@ export function GrossEntries() {
       toast({ title: "Entry created" });
       setCreateOpen(false);
       setForm({ writerId: "", entryDate: new Date().toISOString().split("T")[0], grossAmount: "" });
+      if (!isAgent) setSelectedAgent("");
       invalidate();
-    } catch {
-      toast({ title: "Failed to create entry", variant: "destructive" });
+    } catch (err: any) {
+      const msg = err?.data?.error ?? "Failed to create entry";
+      toast({ title: msg, variant: "destructive" });
     }
   };
 
@@ -70,14 +93,18 @@ export function GrossEntries() {
       toast({ title: "Entry updated" });
       setEditEntry(null);
       invalidate();
-    } catch {
-      toast({ title: "Failed to update entry", variant: "destructive" });
+    } catch (err: any) {
+      const msg = err?.data?.error ?? "Failed to update entry";
+      toast({ title: msg, variant: "destructive" });
     }
   };
 
-  const writerList = Array.isArray(writers) ? writers : [];
-
-  const clearFilter = () => { setFilterAgentId(""); setFilterWriterId(""); setFilterFrom(""); setFilterTo(""); };
+  const clearFilter = () => {
+    if (!isAgent) setFilterAgentId("");
+    setFilterWriterId("");
+    setFilterFrom("");
+    setFilterTo("");
+  };
 
   return (
     <div className="p-6">
@@ -87,16 +114,18 @@ export function GrossEntries() {
       </div>
 
       <div className="flex gap-3 mb-4 flex-wrap items-end">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Agent</Label>
-          <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
-            <SelectTrigger className="h-8 text-sm w-40"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">All agents</SelectItem>
-              {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
+        {!isAgent && (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Agent</Label>
+            <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
+              <SelectTrigger className="h-8 text-sm w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">All agents</SelectItem>
+                {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Writer</Label>
           <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)} disabled={!filterAgentId}>
@@ -157,17 +186,32 @@ export function GrossEntries() {
         </Table>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={open => { if (!open) { setSelectedAgent(""); setForm(f => ({ ...f, writerId: "" })); } setCreateOpen(open); }}>
+      {/* Create dialog */}
+      <Dialog open={createOpen} onOpenChange={open => {
+        if (!open) {
+          if (!isAgent) setSelectedAgent("");
+          setForm(f => ({ ...f, writerId: "" }));
+        }
+        setCreateOpen(open);
+      }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Gross Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Agent</Label>
-              <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
+            {!isAgent && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Agent</Label>
+                <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
+                  <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.fullCode} — {a.user?.fullName}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
+            {isAgent && myAgent && (
+              <div className="flex items-center gap-2 py-1 px-3 bg-muted/40 rounded-md border">
+                <span className="text-xs text-muted-foreground">Agent:</span>
+                <span className="text-sm font-mono font-semibold">{myAgent.fullCode}</span>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Writer</Label>
               <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={!selectedAgent}>
@@ -175,8 +219,14 @@ export function GrossEntries() {
                 <SelectContent>{writerList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5"><Label className="text-xs">Date</Label><Input type="date" value={form.entryDate} onChange={e => setForm(f => ({ ...f, entryDate: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Gross Amount</Label><Input type="number" step="0.01" min="0" value={form.grossAmount} onChange={e => setForm(f => ({ ...f, grossAmount: e.target.value }))} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Date</Label>
+              <Input type="date" value={form.entryDate} onChange={e => setForm(f => ({ ...f, entryDate: e.target.value }))} required className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Gross Amount (GH₵)</Label>
+              <Input type="number" step="0.01" min="0" value={form.grossAmount} onChange={e => setForm(f => ({ ...f, grossAmount: e.target.value }))} required className="h-9 text-sm" placeholder="0.00" />
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createMutation.isPending || !form.writerId}>Create</Button>
@@ -185,6 +235,7 @@ export function GrossEntries() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit dialog */}
       <Dialog open={!!editEntry} onOpenChange={open => !open && setEditEntry(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Entry</DialogTitle></DialogHeader>
@@ -195,7 +246,10 @@ export function GrossEntries() {
                 {" · "}Date: <span className="text-foreground">{editEntry.entryDate?.split("T")[0]}</span>
               </div>
             )}
-            <div className="space-y-1.5"><Label className="text-xs">Gross Amount</Label><Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={e => setEditForm({ grossAmount: e.target.value })} required className="h-9 text-sm" /></div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Gross Amount (GH₵)</Label>
+              <Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={e => setEditForm({ grossAmount: e.target.value })} required className="h-9 text-sm" />
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditEntry(null)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save</Button>

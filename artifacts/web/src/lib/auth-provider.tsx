@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useLocation } from "wouter";
-import { setAuthTokenGetter, useGetMe, useLogin, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setUnauthorizedHandler, useGetMe, useLogin, useLogout, getGetMeQueryKey } from "@workspace/api-client-react";
 import { AuthContext } from "./auth-context";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -20,8 +20,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const setLocationRef = useRef(setLocation);
+  setLocationRef.current = setLocation;
+
   useEffect(() => {
     setAuthTokenGetter(() => localStorage.getItem("accessToken"));
+    setUnauthorizedHandler(() => {
+      // Only act if we had a token — prevents redirect loop on login page
+      if (!localStorage.getItem("accessToken")) return;
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      setLocationRef.current("/login");
+    });
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   useEffect(() => {

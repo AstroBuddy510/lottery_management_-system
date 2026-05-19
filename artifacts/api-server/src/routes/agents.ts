@@ -128,7 +128,7 @@ router.get(
   requireAuth,
   requireRole("agent"),
   async (req, res) => {
-    const userId = (req as any).user?.id as string;
+    const userId = req.user!.userId;
     const agent = await getAgentForUser(userId);
     if (!agent) {
       res.status(404).json({ error: "Agent record not found for this user" });
@@ -222,10 +222,9 @@ router.get(
       res.status(400).json({ error: "Invalid params" });
       return;
     }
-    const user = (req as any).user as { id: string; role: string };
     // Agents can only see their own writers
-    if (user.role === "agent") {
-      const myAgent = await getAgentForUser(user.id);
+    if (req.user!.role === "agent") {
+      const myAgent = await getAgentForUser(req.user!.userId);
       if (!myAgent || myAgent.id !== parse.data.agentId) {
         res.status(403).json({ error: "Access denied" });
         return;
@@ -255,12 +254,11 @@ router.post(
       return;
     }
 
-    const user = (req as any).user as { id: string; role: string };
     const agentId = paramsResult.data.agentId;
 
     // Agents can only add writers to their own list
-    if (user.role === "agent") {
-      const myAgent = await getAgentForUser(user.id);
+    if (req.user!.role === "agent") {
+      const myAgent = await getAgentForUser(req.user!.userId);
       if (!myAgent || myAgent.id !== agentId) {
         res.status(403).json({ error: "Access denied" });
         return;
@@ -315,12 +313,11 @@ router.patch(
       return;
     }
 
-    const user = (req as any).user as { id: string; role: string };
     const agentId = req.params["agentId"] as string;
 
     // Agents can only edit their own writers
-    if (user.role === "agent") {
-      const myAgent = await getAgentForUser(user.id);
+    if (req.user!.role === "agent") {
+      const myAgent = await getAgentForUser(req.user!.userId);
       if (!myAgent || myAgent.id !== agentId) {
         res.status(403).json({ error: "Access denied" });
         return;
