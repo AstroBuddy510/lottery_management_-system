@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef } from "react";
 import { useListAgents, useUpdateUser, AgentWithUser, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Map as PigeonMapBase, Marker, type MapProps } from "pigeon-maps";
+import { Map as PigeonMapBase, Overlay, type MapProps } from "pigeon-maps";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -112,25 +112,49 @@ function AgencyIcon({ status, size = "md" }: { status: AgencyStatus; size?: "sm"
 
 /* ─── custom map pin ──────────────────────────────────────────────────────── */
 
-function PinMarker({ color, label, onClick }: { color: string; label: string; onClick: () => void }) {
+function PinMarker({
+  color, label, code, photo, name, onClick,
+}: {
+  color: string; label: string; code: string;
+  photo?: string | null; name: string; onClick: () => void;
+}) {
+  const initials = name.split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase();
   return (
     <div
       onClick={onClick}
-      className="cursor-pointer flex flex-col items-center -translate-x-1/2 -translate-y-full group"
-      title={label}
+      className="cursor-pointer group"
+      style={{ transform: "translate(-50%, -100%)", display: "inline-flex", flexDirection: "column", alignItems: "center" }}
     >
-      <div
-        className="w-8 h-8 rounded-full border-2 border-white shadow-lg flex items-center justify-center transition-transform group-hover:scale-125"
-        style={{ background: color }}
-      >
-        <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-          <polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
+      {/* Bubble card */}
+      <div className="flex items-center gap-2 bg-white rounded-2xl shadow-xl border border-slate-200 px-2.5 py-1.5 group-hover:shadow-2xl group-hover:-translate-y-0.5 transition-all duration-150 whitespace-nowrap">
+        {/* Avatar — photo or coloured initials */}
+        <div
+          className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-white font-bold text-xs"
+          style={{ boxShadow: `0 0 0 2px ${color}` }}
+        >
+          {photo ? (
+            <img src={photo} alt={name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center" style={{ background: color }}>
+              {initials || "?"}
+            </div>
+          )}
+        </div>
+        {/* Text */}
+        <div style={{ maxWidth: 120 }}>
+          <div className="text-[11px] font-bold text-slate-800 leading-tight truncate">{label}</div>
+          <div className="text-[9px] font-mono text-slate-400 leading-tight">{code}</div>
+        </div>
       </div>
-      <div className="mt-1 bg-white text-slate-800 text-[10px] font-bold px-1.5 py-0.5 rounded shadow whitespace-nowrap border">
-        {label}
-      </div>
+      {/* Arrow tip pointing down to the exact location */}
+      <div style={{
+        width: 0, height: 0,
+        borderLeft: "7px solid transparent",
+        borderRight: "7px solid transparent",
+        borderTop: "8px solid white",
+        filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.15))",
+        marginTop: -1,
+      }} />
     </div>
   );
 }
@@ -368,14 +392,22 @@ function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: 
           {mapped.map(a => {
             const status = getStatus(a);
             const color = STATUS_CFG[status].pin;
+            const photo = (a.user as { profilePicture?: string | null }).profilePicture;
+            const label = a.agencyName ?? a.user.fullName;
             return (
-              <Marker
+              <Overlay
                 key={a.id}
-                anchor={[parseFloat(a.lat!), parseFloat(a.lng!)]}
-                width={40}
-                color={color}
-                onClick={() => onSelect(a)}
-              />
+                anchor={[parseFloat(a.lat!), parseFloat(a.lng!)] as [number, number]}
+              >
+                <PinMarker
+                  color={color}
+                  label={label}
+                  code={a.fullCode}
+                  photo={photo}
+                  name={a.user.fullName}
+                  onClick={() => onSelect(a)}
+                />
+              </Overlay>
             );
           })}
         </PigeonMap>
@@ -397,13 +429,26 @@ function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: 
           {mapped.map(a => {
             const status = getStatus(a);
             const cfg = STATUS_CFG[status];
+            const photo = (a.user as { profilePicture?: string | null }).profilePicture;
+            const initials = a.user.fullName.split(" ").filter(Boolean).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
             return (
               <button
                 key={a.id}
                 onClick={() => onSelect(a)}
-                className={`flex items-center gap-2 p-2.5 bg-white border border-l-4 ${cfg.border} rounded-xl text-left hover:shadow-md transition-all`}
+                className={`flex items-center gap-2.5 p-2.5 bg-white border border-l-4 ${cfg.border} rounded-xl text-left hover:shadow-md transition-all`}
               >
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                <div
+                  className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-white font-bold text-[10px]"
+                  style={{ boxShadow: `0 0 0 1.5px ${cfg.pin}` }}
+                >
+                  {photo ? (
+                    <img src={photo} alt={a.user.fullName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center" style={{ background: cfg.pin }}>
+                      {initials}
+                    </div>
+                  )}
+                </div>
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-slate-800 truncate">{a.agencyName ?? a.user.fullName}</p>
                   <p className="text-[10px] text-slate-400 font-mono">{a.fullCode}</p>
