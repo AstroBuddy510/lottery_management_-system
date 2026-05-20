@@ -468,7 +468,13 @@ function AgentsTab() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) });
 
-  const agentRoleUsers = Array.isArray(users) ? users.filter(u => u.role === "agent" && u.isActive) : [];
+  const assignedUserIds = new Set(Array.isArray(agents) ? agents.map(a => a.userId) : []);
+  const agentRoleUsers = Array.isArray(users)
+    ? users.filter(u => u.role === "agent" && u.isActive && !assignedUserIds.has(u.id))
+    : [];
+
+  const apiErrMsg = (err: unknown, fallback: string) =>
+    (err as { data?: { error?: string } })?.data?.error ?? fallback;
 
   const applyCity = (cityName: CityName | "", setter: (fn: (f: any) => any) => void) => {
     const city = GHANA_CITIES.find(c => c.name === cityName);
@@ -503,18 +509,21 @@ function AgentsTab() {
       setCreateOpen(false);
       setCreateForm(CREATE_DEFAULTS);
       invalidate();
-    } catch {
-      toast({ title: "Failed to create agent", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: apiErrMsg(err, "Failed to create agent"), variant: "destructive" });
     }
   };
 
   const openEdit = (a: AgentWithUser) => {
-    const cityMatch = GHANA_CITIES.find(c => c.lat != null && Math.abs(c.lat - parseFloat(a.lat ?? "0")) < 0.001);
+    // Only match city if agent has real coordinates
+    const cityMatch = a.lat && a.lng
+      ? GHANA_CITIES.find(c => c.lat != null && Math.abs(c.lat - parseFloat(a.lat!)) < 0.001)
+      : undefined;
     setEditAgent(a);
     setEditForm({
       isActive: a.isActive,
       agencyName: a.agencyName ?? "",
-      city: cityMatch?.name ?? "Other / Custom",
+      city: cityMatch?.name ?? "",
       location: a.location ?? "",
       lat: a.lat ?? "",
       lng: a.lng ?? "",
@@ -543,8 +552,8 @@ function AgentsTab() {
       toast({ title: "Agent updated" });
       setEditAgent(null);
       invalidate();
-    } catch {
-      toast({ title: "Failed to update agent", variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: apiErrMsg(err, "Failed to update agent"), variant: "destructive" });
     }
   };
 
