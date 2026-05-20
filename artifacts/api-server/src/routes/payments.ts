@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, paymentsTable, cashierTimeWindowsTable, agentsTable } from "@workspace/db";
+import { db, paymentsTable, agentsTable } from "@workspace/db";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import {
   CreatePaymentBody,
@@ -11,31 +11,6 @@ import { dispatchSystemNotification } from "../lib/notify";
 
 const router = Router();
 
-function isWithinTimeWindow(
-  windows: Array<{
-    dayOfWeek: number | null;
-    windowOpen: string;
-    windowClose: string;
-    isActive: boolean;
-  }>,
-): boolean {
-  const now = new Date();
-  const day = now.getDay();
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
-  const timeStr = `${hh}:${mm}`;
-
-  const applicable = windows.filter(
-    (w) => w.isActive && (w.dayOfWeek === null || w.dayOfWeek === day),
-  );
-  if (applicable.length === 0) return false;
-
-  return applicable.some(
-    (w) =>
-      timeStr >= w.windowOpen.slice(0, 5) &&
-      timeStr <= w.windowClose.slice(0, 5),
-  );
-}
 
 async function generateReceiptNumber(): Promise<string> {
   const [{ count }] = await db
@@ -70,16 +45,6 @@ router.post(
   requireAuth,
   requireRole("cashier", "administrator"),
   async (req, res) => {
-    if (req.user!.role === "cashier") {
-      const windows = await db.select().from(cashierTimeWindowsTable);
-      if (!isWithinTimeWindow(windows)) {
-        res.status(403).json({
-          error: "Payment collection is outside the allowed time window",
-        });
-        return;
-      }
-    }
-
     const parse = CreatePaymentBody.safeParse(req.body);
     if (!parse.success) {
       res.status(400).json({ error: "Invalid request body" });
