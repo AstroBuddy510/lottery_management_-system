@@ -63,7 +63,7 @@ export function Login() {
         {/* Logo */}
         <div className="text-center mb-7">
           <div className="flex justify-center mb-3">
-            <div className="w-20 h-20 rounded-full shadow-xl overflow-hidden flex items-center justify-center">
+            <div className="w-28 h-28 rounded-full shadow-xl overflow-hidden flex items-center justify-center">
               <img
                 src="/company-logo.png"
                 alt="VS2000 Logo"
