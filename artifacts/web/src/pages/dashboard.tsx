@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGHS } from "@/lib/utils";
 
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -257,6 +258,7 @@ function DirectorDashboard() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [page, setPage] = useState(1);
   const [selectedDate, setSelectedDate] = useState("");
+  const [selectedGameId, setSelectedGameId] = useState("");
 
   const { data: allCalcs, isLoading: loadingCalcs } = useListCalculations(
     {},
@@ -294,6 +296,22 @@ function DirectorDashboard() {
   const currentGame = useMemo(() => {
     return gameList.find(g => g.status === "live") ?? null;
   }, [gameList]);
+
+  const handleGameSelect = (id: string) => {
+    setSelectedGameId(id);
+    setPage(1);
+    if (id === "_live" || id === "_none") {
+      setSelectedDate("");
+    } else {
+      const g = gameList.find(g => g.id === id);
+      if (g) setSelectedDate(new Date(g.closeAt).toISOString().split("T")[0]);
+    }
+  };
+
+  const displayGame = useMemo(() => {
+    if (!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") return currentGame;
+    return gameList.find(g => g.id === selectedGameId) ?? currentGame;
+  }, [selectedGameId, gameList, currentGame]);
 
   const dateCalcs = useMemo(() =>
     calcList.filter(c => c.calcDate?.startsWith(viewDate)),
@@ -402,20 +420,59 @@ function DirectorDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Game banner */}
-      <div className={`rounded-xl px-5 py-3 flex items-center gap-3 ${currentGame ? "bg-primary/10 border border-primary/25" : "bg-muted/60 border border-border"}`}>
-        <span className="text-lg">🎮</span>
-        <div>
-          {currentGame ? (
+      {/* Game banner — interactive game selector */}
+      <div className={`rounded-xl px-5 py-3 flex items-center gap-3 flex-wrap ${displayGame ? "bg-primary/10 border border-primary/25" : "bg-muted/60 border border-border"}`}>
+        <span className="text-lg shrink-0">🎮</span>
+        <div className="flex-1 min-w-0">
+          {displayGame ? (
             <>
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Today's Game</div>
-              <div className="text-base font-bold text-primary leading-tight">{currentGame.name}</div>
+              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                {(!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") ? "Current Game" : "Viewing Game"}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-mono font-bold text-primary/70">{displayGame.eventNumber}</span>
+                <span className="text-base font-bold text-primary leading-tight">{displayGame.name}</span>
+                {displayGame.status === "live" && (
+                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] px-1.5 py-0">LIVE</Badge>
+                )}
+                {displayGame.status === "closed" && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Closed</Badge>
+                )}
+              </div>
             </>
           ) : (
-            <span className="text-sm text-muted-foreground">No active game assigned for {DAY_NAMES[todayDow]}</span>
+            <span className="text-sm text-muted-foreground">No active game for {DAY_NAMES[todayDow]}</span>
           )}
         </div>
-        <div className="ml-auto text-xs text-muted-foreground font-medium">{DAY_NAMES[todayDow]}</div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Select
+            value={selectedGameId || "_live"}
+            onValueChange={handleGameSelect}
+          >
+            <SelectTrigger className="h-8 text-xs w-52 bg-background/80">
+              <SelectValue placeholder="Select game…" />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="_live">
+                {currentGame ? `Current: ${currentGame.eventNumber}` : "Current game (live)"}
+              </SelectItem>
+              {gameList
+                .filter(g => g.status !== "live")
+                .sort((a, b) => b.eventNumber.localeCompare(a.eventNumber))
+                .map(g => (
+                  <SelectItem key={g.id} value={g.id}>
+                    <span className="font-mono text-xs text-muted-foreground mr-1.5">{g.eventNumber}</span>
+                    {g.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          {selectedGameId && selectedGameId !== "_live" && selectedGameId !== "_none" && (
+            <Button size="sm" variant="ghost" className="h-8 text-xs px-2" onClick={() => handleGameSelect("_live")}>
+              Back to live
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Live Entry Status — real-time, polled every 30s */}
