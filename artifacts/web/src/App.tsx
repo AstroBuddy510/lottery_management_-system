@@ -10,7 +10,6 @@ import NotFound from "@/pages/not-found";
 import { Login } from "@/pages/login";
 import { Dashboard } from "@/pages/dashboard";
 import { Users } from "@/pages/users";
-import { Agents } from "@/pages/agents";
 import { Settings } from "@/pages/settings";
 import { Games } from "@/pages/games";
 import { AgentDetail } from "@/pages/agent-detail";
@@ -76,10 +75,6 @@ function Router() {
       
       <Route path="/users">
         {() => <ProtectedRoute component={Users} roles={['director', 'administrator']} />}
-      </Route>
-
-      <Route path="/agents">
-        {() => <ProtectedRoute component={Agents} roles={['director', 'administrator']} />}
       </Route>
 
       <Route path="/agents/:agentId/detail">
