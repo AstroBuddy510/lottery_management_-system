@@ -5,12 +5,14 @@ import { AgentDashboard } from "@/pages/agent-dashboard";
 import {
   useListAgents, useGetReserveBalance, useGetUnreadCount,
   useListCalculations, useListPayments, useListGrossEntries,
-  useListWinsEntries, useListSales, useListGames,
+  useListWinsEntries, useListSales, useListGames, useListTimeWindows,
   getGetUnreadCountQueryKey, getListCalculationsQueryKey,
   getListGrossEntriesQueryKey, getListWinsEntriesQueryKey,
   getListPaymentsQueryKey, getGetReserveBalanceQueryKey,
+  getListTimeWindowsQueryKey,
   useGetSettings, getGetSettingsQueryKey,
 } from "@workspace/api-client-react";
+import type { TimeWindow } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -590,18 +592,226 @@ function DirectorDashboard() {
   );
 }
 
+/* ── Cashier window helpers ──────────────────────────────────────────────── */
+function cashierWindowStatus(windows: TimeWindow[]) {
+  const now   = new Date();
+  const dow   = now.getDay();
+  const hhmm  = now.toTimeString().slice(0, 5);
+  const active = windows.filter(w => w.isActive && w.dayOfWeek === dow);
+  const current = active.find(w => w.windowOpen <= hhmm && hhmm <= w.windowClose);
+  if (current) return { open: true, window: current, nextTime: null as string | null };
+  const upcoming = active
+    .filter(w => w.windowOpen > hhmm)
+    .sort((a, b) => a.windowOpen.localeCompare(b.windowOpen));
+  return { open: false, window: null, nextTime: upcoming[0]?.windowOpen ?? null };
+}
+function fmtHHMM12(t?: string | null) {
+  if (!t) return "—";
+  const [h, m] = t.split(":");
+  const hr = Number(h);
+  return `${hr % 12 || 12}:${m} ${hr < 12 ? "AM" : "PM"}`;
+}
+
 function CashierDashboard() {
-  const { data: payments } = useListPayments({});
-  const { data: unread } = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
-  const today = new Date().toISOString().split("T")[0];
-  const todayPayments = Array.isArray(payments) ? payments.filter(p => p.paymentDate?.startsWith(today) && !p.isVoided) : [];
-  const total = todayPayments.reduce((s, p) => s + Number(p.amount), 0);
+  const [, navigate] = useLocation();
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+
+  const { data: allPaymentsRaw } = useListPayments({}, { query: { queryKey: getListPaymentsQueryKey({}) } });
+  const { data: unread }         = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
+  const { data: allCalcsRaw }    = useListCalculations({}, { query: { queryKey: getListCalculationsQueryKey({}) } });
+  const { data: timeWindowsRaw } = useListTimeWindows({ query: { queryKey: getListTimeWindowsQueryKey() } });
+  const { allWriters, agentList } = useWriterLookup();
+
+  const allPayments = useMemo(() => Array.isArray(allPaymentsRaw) ? allPaymentsRaw : [], [allPaymentsRaw]);
+  const allCalcs    = useMemo(() => Array.isArray(allCalcsRaw) ? allCalcsRaw : [], [allCalcsRaw]);
+  const windows     = useMemo(() => Array.isArray(timeWindowsRaw) ? timeWindowsRaw : [], [timeWindowsRaw]);
+
+  /* ── window status ── */
+  const ws = useMemo(() => cashierWindowStatus(windows), [windows]);
+
+  /* ── today's cash position ── */
+  const todayValid = useMemo(
+    () => allPayments.filter(p => p.paymentDate?.startsWith(todayStr) && !p.isVoided),
+    [allPayments, todayStr]
+  );
+  const todayPayIn  = useMemo(() => todayValid.filter(p => p.transactionType === "pay_in").reduce((s, p) => s + Number(p.amount), 0), [todayValid]);
+  const todayPayOut = useMemo(() => todayValid.filter(p => p.transactionType === "pay_out").reduce((s, p) => s + Number(p.amount), 0), [todayValid]);
+  const netPos      = todayPayIn - todayPayOut;
+
+  /* ── settlement snapshot ── */
+  const todayCalcs    = useMemo(() => allCalcs.filter(c => c.calcDate === todayStr), [allCalcs, todayStr]);
+  const todayPayments = useMemo(() => allPayments.filter(p => p.paymentDate?.startsWith(todayStr) && !p.isVoided), [allPayments, todayStr]);
+
+  const settlements = useMemo(() => agentList.filter(a => a.isActive).map(a => {
+    const ids       = new Set(allWriters.filter(w => w.agentId === a.id).map(w => w.id));
+    const calcs     = todayCalcs.filter(c => ids.has(c.writerId));
+    const pmts      = todayPayments.filter(p => p.agentId === a.id);
+    const balDue    = calcs.reduce((s, c) => s + Number(c.writerBalance), 0);
+    const collected = pmts.filter(p => p.transactionType === "pay_in").reduce((s, p) => s + Number(p.amount), 0);
+    const paidOut   = pmts.filter(p => p.transactionType === "pay_out").reduce((s, p) => s + Number(p.amount), 0);
+    const hasCalc   = calcs.length > 0;
+    const shortfall = balDue - (collected - paidOut);
+    return { agent: a, balDue, collected, paidOut, hasCalc, shortfall };
+  }), [agentList, allWriters, todayCalcs, todayPayments]);
+
+  const settledCount     = settlements.filter(r => r.hasCalc && Math.abs(r.shortfall) < 0.005).length;
+  const outstandingCount = settlements.filter(r => r.hasCalc && r.shortfall > 0.005).length;
+  const activeWithCalc   = settlements.filter(r => r.hasCalc || r.collected > 0);
+
+  /* ── recent transactions ── */
+  const recentTxns = useMemo(
+    () => [...todayValid].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()).slice(0, 5),
+    [todayValid]
+  );
+
+  const agentNameMap = useMemo(
+    () => Object.fromEntries(agentList.map(a => [a.id, a.user?.fullName ?? a.fullCode])),
+    [agentList]
+  );
+
+  const dateStr = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-      <StatCard label="Payments Today" value={todayPayments.length} />
-      <StatCard label="Total Collected Today" value={fmtGHS(total)} accent />
-      <StatCard label="Unread Notifications" value={unread?.count ?? 0} />
+    <div className="space-y-5">
+
+      {/* ── Time window banner ── */}
+      <div className={`rounded-xl border px-5 py-3 flex items-center gap-4 flex-wrap ${ws.open ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+        <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${ws.open ? "bg-emerald-100" : "bg-red-100"}`}>
+          <svg className={`w-4.5 h-4.5 ${ws.open ? "text-emerald-700" : "text-red-600"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className={`text-sm font-bold ${ws.open ? "text-emerald-800" : "text-red-700"}`}>
+            Payment Window: {ws.open ? "OPEN" : "CLOSED"}
+            {ws.open && ws.window && <span className="font-normal ml-1 text-xs">· closes {fmtHHMM12(ws.window.windowClose)}</span>}
+            {!ws.open && ws.nextTime && <span className="font-normal ml-1 text-xs">· opens at {fmtHHMM12(ws.nextTime)}</span>}
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">{dateStr}</div>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => navigate("/payments")}
+          className={ws.open ? "bg-emerald-700 hover:bg-emerald-800" : ""}
+        >
+          Go to Cashier Station →
+        </Button>
+      </div>
+
+      {/* ── Cash position stat cards ── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border bg-card p-4 space-y-1.5">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pay-In Today</div>
+          <div className="text-2xl font-bold text-emerald-700">{fmtGHS(todayPayIn)}</div>
+          <div className="text-[11px] text-muted-foreground">{todayValid.filter(p => p.transactionType === "pay_in").length} transaction(s)</div>
+        </div>
+        <div className="rounded-xl border bg-card p-4 space-y-1.5">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pay-Out Today</div>
+          <div className="text-2xl font-bold text-orange-600">{fmtGHS(todayPayOut)}</div>
+          <div className="text-[11px] text-muted-foreground">{todayValid.filter(p => p.transactionType === "pay_out").length} transaction(s)</div>
+        </div>
+        <div className={`rounded-xl border p-4 space-y-1.5 ${netPos >= 0 ? "bg-primary/5 border-primary/20" : "bg-red-50 border-red-200"}`}>
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Net Cash Position</div>
+          <div className={`text-2xl font-bold ${netPos >= 0 ? "text-primary" : "text-destructive"}`}>{fmtGHS(netPos)}</div>
+          <div className="text-[11px] text-muted-foreground">pay-in minus pay-out</div>
+        </div>
+        <div className="rounded-xl border bg-card p-4 space-y-1.5">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Settlement Today</div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-emerald-700">{settledCount}</span>
+            <span className="text-xs text-muted-foreground">settled</span>
+            {outstandingCount > 0 && <><span className="text-lg font-bold text-destructive">{outstandingCount}</span><span className="text-xs text-destructive">outstanding</span></>}
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            {(unread?.count ?? 0) > 0 && <span className="text-destructive font-medium">{unread!.count} unread notif.</span>}
+            {!(unread?.count) && "of agents with calcs"}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Agent settlement snapshot ── */}
+      {activeWithCalc.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold">Agent Settlement — Today</h2>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => navigate("/payments")}>
+              Full board →
+            </Button>
+          </div>
+          <div className="border rounded-lg divide-y overflow-hidden">
+            {activeWithCalc.map(row => {
+              const { agent, balDue, collected, shortfall, hasCalc } = row;
+              const isSettled   = hasCalc && Math.abs(shortfall) < 0.005;
+              const isOutstand  = hasCalc && shortfall > 0.005;
+              const isOverpaid  = hasCalc && shortfall < -0.005;
+              return (
+                <div key={agent.id} className={`flex items-center gap-3 px-4 py-3 ${isOutstand ? "bg-red-50/40" : isSettled ? "bg-emerald-50/30" : ""}`}>
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isSettled ? "bg-emerald-500" : isOutstand ? "bg-red-500 animate-pulse" : isOverpaid ? "bg-amber-500" : "bg-muted-foreground/30"}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{agent.user?.fullName ?? agent.fullCode}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{agent.fullCode}</div>
+                  </div>
+                  {hasCalc && (
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground">Due</div>
+                      <div className="text-sm font-mono font-semibold">{fmtGHS(balDue)}</div>
+                    </div>
+                  )}
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Collected</div>
+                    <div className={`text-sm font-mono font-semibold ${collected > 0 ? "text-emerald-700" : "text-muted-foreground"}`}>{fmtGHS(collected)}</div>
+                  </div>
+                  <div className="w-24 text-right">
+                    {isSettled && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Settled ✓</span>}
+                    {isOutstand && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-800">Due {fmtGHS(shortfall)}</span>}
+                    {isOverpaid && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Overpaid</span>}
+                    {!hasCalc && collected > 0 && <span className="text-xs text-muted-foreground">Has txns</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Recent transactions ── */}
+      {recentTxns.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold">Recent Transactions — Today</h2>
+          </div>
+          <div className="border rounded-lg divide-y overflow-hidden">
+            {recentTxns.map(p => {
+              const isIn = p.transactionType === "pay_in";
+              return (
+                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold ${isIn ? "bg-emerald-600" : "bg-orange-500"}`}>
+                    {isIn ? "↓" : "↑"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{agentNameMap[p.agentId] ?? "—"}</div>
+                    <div className="text-xs text-muted-foreground font-mono">{p.receiptNumber ?? "—"}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-sm font-mono font-semibold ${isIn ? "text-emerald-700" : "text-orange-600"}`}>{fmtGHS(Number(p.amount))}</div>
+                    <div className="text-xs text-muted-foreground">{isIn ? "Pay-In" : "Pay-Out"}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state when no activity */}
+      {todayValid.length === 0 && activeWithCalc.length === 0 && (
+        <div className="text-center py-12 border rounded-xl border-dashed text-muted-foreground text-sm space-y-2">
+          <div className="text-2xl">💼</div>
+          <div className="font-medium">No transactions yet today</div>
+          <div className="text-xs">Head to the Cashier Station to record payments</div>
+          <Button size="sm" className="mt-2" onClick={() => navigate("/payments")}>Open Cashier Station</Button>
+        </div>
+      )}
     </div>
   );
 }
