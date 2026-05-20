@@ -62,6 +62,14 @@ export function Login() {
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-7">
+          <div className="flex justify-center mb-3">
+            <img
+              src="/company-logo.png"
+              alt="VS2000 Logo"
+              className="w-20 h-20 rounded-full object-cover shadow-xl ring-4 ring-white/30"
+              style={{ objectPosition: "center" }}
+            />
+          </div>
           <div className="text-4xl font-extrabold text-white tracking-tight drop-shadow-lg">
             VS2000
           </div>

@@ -100,6 +100,10 @@ function WriterReportView() {
 
       {report && (
         <div className="space-y-4">
+          <ReportLetterhead
+            title="Writer Performance Report"
+            subtitle={`${(report as WriterReport).writer.fullCode} — ${(report as WriterReport).writer.fullName}${dateFrom || dateTo ? `  ·  ${dateFrom || "…"} to ${dateTo || "…"}` : ""}`}
+          />
           <TotalsCard title={`${(report as WriterReport).writer.fullCode} — ${(report as WriterReport).writer.fullName}`} t={(report as WriterReport).totals} />
           <div className="border rounded-lg overflow-hidden">
             <Table>
@@ -186,6 +190,10 @@ function AgentReportView() {
 
       {report && (
         <div className="space-y-4">
+          <ReportLetterhead
+            title="Agent Performance Report"
+            subtitle={`Agent ${(report as AgentReport).agent.fullCode}${dateFrom || dateTo ? `  ·  ${dateFrom || "…"} to ${dateTo || "…"}` : ""}`}
+          />
           <TotalsCard title={`Agent ${(report as AgentReport).agent.fullCode}`} t={(report as AgentReport).totals} />
           {(report as AgentReport).writers.map(ws => (
             <Card key={ws.writer.id}>
@@ -243,6 +251,10 @@ function OrgReportView() {
 
       {report && (
         <div className="space-y-4">
+          <ReportLetterhead
+            title="Organisation Report"
+            subtitle={dateFrom || dateTo ? `${dateFrom || "…"} to ${dateTo || "…"}` : "All periods"}
+          />
           <TotalsCard title="Organization Totals" t={(report as OrgReport).totals} />
           <div className="border rounded-lg overflow-hidden">
             <Table>
@@ -278,12 +290,42 @@ function OrgReportView() {
   );
 }
 
+function ReportLetterhead({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="flex items-center gap-4 border-b border-border pb-4 mb-4">
+      <img
+        src="/company-logo.png"
+        alt="VS2000 Logo"
+        className="w-14 h-14 rounded-full object-cover flex-shrink-0 shadow-sm ring-2 ring-border"
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-base font-bold text-foreground leading-tight">VS2000 Smart Office</div>
+        <div className="text-sm font-semibold text-primary mt-0.5">{title}</div>
+        {subtitle && <div className="text-xs text-muted-foreground mt-0.5">{subtitle}</div>}
+      </div>
+      <div className="text-right flex-shrink-0">
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Generated</div>
+        <div className="text-xs font-medium text-foreground">
+          {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Reports() {
   return (
     <div className="p-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold">Reports</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Generate writer, agent, and organisation performance reports</p>
+      <div className="mb-5 flex items-center gap-4">
+        <img
+          src="/company-logo.png"
+          alt="VS2000 Logo"
+          className="w-12 h-12 rounded-full object-cover flex-shrink-0 shadow ring-2 ring-border"
+        />
+        <div>
+          <h1 className="text-xl font-semibold">Reports</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Generate writer, agent, and organisation performance reports</p>
+        </div>
       </div>
       <Tabs defaultValue="writer">
         <TabsList>
