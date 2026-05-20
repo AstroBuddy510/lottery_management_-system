@@ -195,7 +195,7 @@ function AgentReportView() {
             subtitle={`Agent ${(report as AgentReport).agent.fullCode}${dateFrom || dateTo ? `  ·  ${dateFrom || "…"} to ${dateTo || "…"}` : ""}`}
           />
           <TotalsCard title={`Agent ${(report as AgentReport).agent.fullCode}`} t={(report as AgentReport).totals} />
-          {(report as AgentReport).writers.map(ws => (
+          {((report as AgentReport).writers ?? []).filter(ws => ws.writer).map(ws => (
             <Card key={ws.writer.id}>
               <CardHeader className="pb-1 pt-3 px-4">
                 <CardTitle className="text-xs text-muted-foreground">{ws.writer.fullCode} — {ws.writer.fullName}</CardTitle>
