@@ -76,7 +76,7 @@ export function MyWriters() {
       setCreateForm({ writerCode: "", fullName: "" });
       invalidate();
     } catch (err: any) {
-      toast.error(err?.response?.data?.error ?? "Failed to add writer");
+      toast.error(err?.data?.error ?? err?.response?.data?.error ?? "Failed to add writer");
     }
   };
 

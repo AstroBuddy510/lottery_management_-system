@@ -54,11 +54,12 @@ function relDate(s: string) {
 
 function AgentGrossView() {
   const qc = useQueryClient();
+  const today = new Date().toISOString().split("T")[0];
   const { data: myAgent } = useGetMyAgent({ query: { queryKey: getGetMyAgentQueryKey() } });
 
   const [filterWriterId, setFilterWriterId] = useState("");
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const [filterFrom, setFilterFrom] = useState(today);
+  const [filterTo, setFilterTo] = useState(today);
   const [showFilter, setShowFilter] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<GrossEntry | null>(null);
@@ -75,7 +76,6 @@ function AgentGrossView() {
   });
   const entryList = Array.isArray(entries) ? entries : [];
 
-  const today = new Date().toISOString().split("T")[0];
   const todayTotal = entryList.filter(e => e.entryDate?.startsWith(today)).reduce((s, e) => s + Number(e.grossAmount ?? 0), 0);
 
   const createMutation = useCreateGrossEntry();
@@ -118,8 +118,9 @@ function AgentGrossView() {
     }
   };
 
-  const hasFilter = !!(filterWriterId || filterFrom || filterTo);
-  const clearFilter = () => { setFilterWriterId(""); setFilterFrom(""); setFilterTo(""); };
+  const isDefaultFilter = !filterWriterId && filterFrom === today && filterTo === today;
+  const hasFilter = !isDefaultFilter;
+  const clearFilter = () => { setFilterWriterId(""); setFilterFrom(today); setFilterTo(today); };
 
   return (
     <div className="pb-4">
@@ -174,7 +175,7 @@ function AgentGrossView() {
         )}
 
         {/* Today summary */}
-        {!hasFilter && (
+        {isDefaultFilter && (
           <div className="mt-4 flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl px-4 py-3">
             <div className="flex-1">
               <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Today's Gross</div>
@@ -196,8 +197,8 @@ function AgentGrossView() {
           ) : entryList.length === 0 ? (
             <div className="text-center py-16 text-muted-foreground">
               <div className="text-4xl mb-3">📈</div>
-              <div className="font-medium text-sm">No entries yet</div>
-              <div className="text-xs mt-1">Tap Add to record your first gross entry</div>
+              <div className="font-medium text-sm">{isDefaultFilter ? "No entries today" : "No entries found"}</div>
+              <div className="text-xs mt-1">{isDefaultFilter ? "Tap Add to record today's first gross entry" : "Try adjusting your filters"}</div>
             </div>
           ) : entryList.map(entry => {
             const writer = writerList.find(w => w.id === entry.writerId);

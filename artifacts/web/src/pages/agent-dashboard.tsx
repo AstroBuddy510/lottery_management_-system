@@ -293,7 +293,7 @@ export function AgentDashboard() {
         </div>
       </div>
 
-      <div className="px-4 space-y-6 mt-5">
+      <div className="px-3 space-y-5 mt-5">
 
         {/* ── Stat cards 2×2 ── */}
         <div className="grid grid-cols-2 gap-3">

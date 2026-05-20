@@ -441,8 +441,8 @@ export const CreateWriterParams = zod.object({
   "agentId": zod.coerce.string()
 })
 
-export const createWriterBodyWriterCodeMin = 4;
-export const createWriterBodyWriterCodeMax = 4;
+export const createWriterBodyWriterCodeMin = 2;
+export const createWriterBodyWriterCodeMax = 6;
 
 
 

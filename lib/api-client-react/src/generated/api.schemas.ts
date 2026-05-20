@@ -237,8 +237,8 @@ export interface Writer {
 
 export interface WriterInput {
   /**
-     * @minLength 4
-     * @maxLength 4
+     * @minLength 2
+     * @maxLength 6
      */
   writerCode: string;
   fullName: string;
