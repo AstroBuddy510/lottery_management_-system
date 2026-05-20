@@ -46,12 +46,14 @@ export function Login() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4"
+      className="flex items-center justify-center px-4"
       style={{
+        minHeight: "100dvh",
         backgroundImage: "url(/login-bg.png)",
-        backgroundSize: "150%",
+        backgroundSize: "cover",
         backgroundPosition: "center center",
         backgroundRepeat: "no-repeat",
+        backgroundColor: "#0b1120",
       }}
     >
       {/* dark overlay for readability */}
