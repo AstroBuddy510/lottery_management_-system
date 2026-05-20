@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AgentDailyTotal,
   AgentInput,
   AgentReport,
   AgentUpdate,
@@ -43,6 +44,7 @@ import type {
   GrossEntryInput,
   GrossEntryUpdate,
   HealthStatus,
+  ListAgentDailyTotalsParams,
   ListAgentsParams,
   ListCalculationsParams,
   ListGrossEntriesParams,
@@ -4178,6 +4180,90 @@ export const useApplyReserveAllocation = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getApplyReserveAllocationMutationOptions(options));
     }
+
+export const getListAgentDailyTotalsUrl = (params: ListAgentDailyTotalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reserve/agent-daily-totals?${stringifiedParams}` : `/api/reserve/agent-daily-totals`
+}
+
+/**
+ * @summary Get per-agent reserve totals for a given calculation date
+ */
+export const listAgentDailyTotals = async (params: ListAgentDailyTotalsParams, options?: RequestInit): Promise<AgentDailyTotal[]> => {
+
+  return customFetch<AgentDailyTotal[]>(getListAgentDailyTotalsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentDailyTotalsQueryKey = (params?: ListAgentDailyTotalsParams,) => {
+    return [
+    `/api/reserve/agent-daily-totals`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAgentDailyTotalsQueryOptions = <TData = Awaited<ReturnType<typeof listAgentDailyTotals>>, TError = ErrorType<unknown>>(params: ListAgentDailyTotalsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentDailyTotals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentDailyTotalsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentDailyTotals>>> = ({ signal }) => listAgentDailyTotals(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentDailyTotals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentDailyTotalsQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentDailyTotals>>>
+export type ListAgentDailyTotalsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get per-agent reserve totals for a given calculation date
+ */
+
+export function useListAgentDailyTotals<TData = Awaited<ReturnType<typeof listAgentDailyTotals>>, TError = ErrorType<unknown>>(
+ params: ListAgentDailyTotalsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentDailyTotals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentDailyTotalsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListReserveReceiptsUrl = (params?: ListReserveReceiptsParams,) => {
   const normalizedParams = new URLSearchParams();

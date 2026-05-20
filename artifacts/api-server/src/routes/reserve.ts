@@ -132,6 +132,38 @@ router.get(
   },
 );
 
+// ── Agent Daily Reserve Totals ────────────────────────────────────────────────
+
+router.get(
+  "/reserve/agent-daily-totals",
+  requireAuth,
+  requireRole("cashier", "administrator", "director"),
+  async (req, res) => {
+    const { calcDate } = req.query as Record<string, string>;
+    if (!calcDate) {
+      res.status(400).json({ error: "calcDate is required" });
+      return;
+    }
+
+    const rows = await db
+      .select({
+        agentId: agentsTable.id,
+        agentFullCode: agentsTable.fullCode,
+        agentName: usersTable.fullName,
+        totalReserve: sql<string>`SUM(${dailyCalculationsTable.reserveAmount})::text`,
+      })
+      .from(dailyCalculationsTable)
+      .innerJoin(writersTable, eq(dailyCalculationsTable.writerId, writersTable.id))
+      .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+      .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+      .where(eq(dailyCalculationsTable.calcDate, calcDate))
+      .groupBy(agentsTable.id, agentsTable.fullCode, usersTable.fullName)
+      .orderBy(agentsTable.fullCode);
+
+    res.json(rows);
+  },
+);
+
 // ── Reserve Receipts ─────────────────────────────────────────────────────────
 
 router.get(

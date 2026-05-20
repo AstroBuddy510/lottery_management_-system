@@ -1247,6 +1247,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/AllocateReserveResult"
 
+  /reserve/agent-daily-totals:
+    get:
+      operationId: listAgentDailyTotals
+      tags: [reserve]
+      summary: Get per-agent reserve totals for a given calculation date
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: calcDate
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentDailyTotal"
+
   /reserve/receipts:
     get:
       operationId: listReserveReceipts
@@ -2222,6 +2245,19 @@ components:
                 type: string
               outstanding:
                 type: string
+
+    AgentDailyTotal:
+      type: object
+      required: [agentId, agentFullCode, totalReserve]
+      properties:
+        agentId:
+          type: string
+        agentFullCode:
+          type: string
+        agentName:
+          type: ["string", "null"]
+        totalReserve:
+          type: string
 
     ReserveReceipt:
       type: object

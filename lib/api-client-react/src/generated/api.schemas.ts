@@ -584,6 +584,14 @@ export interface AllocateReserveResult {
   items: AllocateReserveResultItemsItem[];
 }
 
+export interface AgentDailyTotal {
+  agentId: string;
+  agentFullCode: string;
+  /** @nullable */
+  agentName?: string | null;
+  totalReserve: string;
+}
+
 export interface ReserveReceipt {
   id: string;
   agentId: string;
@@ -908,6 +916,10 @@ dateTo?: string;
 export type ListReserveAllocationsParams = {
 dateFrom?: string;
 dateTo?: string;
+};
+
+export type ListAgentDailyTotalsParams = {
+calcDate: string;
 };
 
 export type ListReserveReceiptsParams = {

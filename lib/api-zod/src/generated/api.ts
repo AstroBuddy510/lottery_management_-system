@@ -1216,6 +1216,22 @@ export const ApplyReserveAllocationResponse = zod.object({
 
 
 /**
+ * @summary Get per-agent reserve totals for a given calculation date
+ */
+export const ListAgentDailyTotalsQueryParams = zod.object({
+  "calcDate": zod.coerce.string()
+})
+
+export const ListAgentDailyTotalsResponseItem = zod.object({
+  "agentId": zod.string(),
+  "agentFullCode": zod.string(),
+  "agentName": zod.string().nullish(),
+  "totalReserve": zod.string()
+})
+export const ListAgentDailyTotalsResponse = zod.array(ListAgentDailyTotalsResponseItem)
+
+
+/**
  * @summary List agent reserve payment receipts
  */
 export const ListReserveReceiptsQueryParams = zod.object({
