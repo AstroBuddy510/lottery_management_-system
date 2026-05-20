@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, useMemo } from "react";
 import {
   useListUsers, useCreateUser, useUpdateUser, useDeactivateUser, useRegeneratePin,
   useListAgents, useCreateAgent, useUpdateAgent, useUpdateMyPhoto,
@@ -197,6 +197,25 @@ function UsersTab() {
   const [editForm, setEditForm] = useState<EditForm>({ fullName: "", phone: "", role: "", profilePicture: null });
   const [newPin, setNewPin] = useState<{ pin: string; name: string } | null>(null);
 
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const filtered = useMemo(() => {
+    let list = Array.isArray(users) ? users : [];
+    if (roleFilter !== "all") list = list.filter(u => u.role === roleFilter);
+    if (statusFilter === "active") list = list.filter(u => u.isActive);
+    if (statusFilter === "inactive") list = list.filter(u => !u.isActive);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(u =>
+        u.fullName.toLowerCase().includes(q) ||
+        (u.phone ?? "").toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [users, roleFilter, statusFilter, search]);
+
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: getListUsersQueryKey({}) });
     qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
@@ -261,10 +280,56 @@ function UsersTab() {
 
   return (
     <>
-      <div className="flex justify-end mb-4">
-        <Button size="sm" className="bg-accent hover:bg-accent/90 text-white font-semibold" onClick={() => setCreateOpen(true)}>
-          + Add User
-        </Button>
+      {/* ── Filter toolbar ── */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Search */}
+        <div className="relative flex-1 min-w-48 max-w-xs">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search name or phone…"
+            className="pl-8 h-9 text-sm bg-slate-50"
+          />
+        </div>
+
+        {/* Role filter */}
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="h-9 w-40 text-sm bg-slate-50">
+            <SelectValue placeholder="All roles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All roles</SelectItem>
+            {ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        {/* Status pills */}
+        <div className="flex items-center gap-1.5">
+          {([
+            ["all",      "All",      "bg-slate-800 text-white",    "bg-white text-slate-500 border hover:bg-slate-50"],
+            ["active",   "Active",   "bg-emerald-500 text-white",  "bg-white text-slate-500 border hover:bg-emerald-50"],
+            ["inactive", "Inactive", "bg-slate-400 text-white",    "bg-white text-slate-400 border hover:bg-slate-50"],
+          ] as [typeof statusFilter, string, string, string][]).map(([f, label, active, inactive]) => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${statusFilter === f ? active : inactive}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Result count + Add button */}
+        <div className="ml-auto flex items-center gap-3">
+          {(search || roleFilter !== "all" || statusFilter !== "all") && (
+            <span className="text-xs text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+          )}
+          <Button size="sm" className="bg-accent hover:bg-accent/90 text-white font-semibold" onClick={() => setCreateOpen(true)}>
+            + Add User
+          </Button>
+        </div>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
@@ -282,9 +347,9 @@ function UsersTab() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
-            ) : !Array.isArray(users) || users.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No users found.</TableCell></TableRow>
-            ) : users.map(u => (
+            ) : filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">{search || roleFilter !== "all" || statusFilter !== "all" ? "No users match your filters." : "No users found."}</TableCell></TableRow>
+            ) : filtered.map(u => (
               <TableRow key={u.id} className={!u.isActive ? "opacity-50" : ""}>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
@@ -478,6 +543,24 @@ function AgentsTab() {
     isActive: true, agencyName: "", city: "", location: "", lat: "", lng: "", status: "active", outstandingDebt: "",
   });
 
+  const [agentSearch, setAgentSearch] = useState("");
+  const [agentStatusFilter, setAgentStatusFilter] = useState<"all" | "active-clear" | "active-debt" | "closed">("all");
+
+  const filteredAgents = useMemo(() => {
+    let list = Array.isArray(agents) ? agents : [];
+    if (agentStatusFilter !== "all") list = list.filter(a => agencyStatusOf(a) === agentStatusFilter);
+    if (agentSearch.trim()) {
+      const q = agentSearch.toLowerCase();
+      list = list.filter(a =>
+        (a.agencyName ?? "").toLowerCase().includes(q) ||
+        a.fullCode.toLowerCase().includes(q) ||
+        a.user.fullName.toLowerCase().includes(q) ||
+        (a.location ?? "").toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [agents, agentStatusFilter, agentSearch]);
+
   const invalidate = () => qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) });
 
 
@@ -578,8 +661,44 @@ function AgentsTab() {
 
   return (
     <>
-      <div className="flex justify-end mb-4">
-        <Button size="sm" onClick={() => setCreateOpen(true)}>Add Agent</Button>
+      {/* ── Filter toolbar ── */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Search */}
+        <div className="relative flex-1 min-w-48 max-w-xs">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <Input
+            value={agentSearch}
+            onChange={e => setAgentSearch(e.target.value)}
+            placeholder="Search agency, code, agent or location…"
+            className="pl-8 h-9 text-sm bg-slate-50"
+          />
+        </div>
+
+        {/* Status pills */}
+        <div className="flex items-center gap-1.5">
+          {([
+            ["all",          "All",       "bg-slate-800 text-white",   "bg-white text-slate-500 border hover:bg-slate-50"],
+            ["active-clear", "Clear",     "bg-emerald-500 text-white", "bg-white text-slate-500 border hover:bg-emerald-50"],
+            ["active-debt",  "Has Debt",  "bg-amber-500 text-white",   "bg-white text-slate-500 border hover:bg-amber-50"],
+            ["closed",       "Closed",    "bg-slate-400 text-white",   "bg-white text-slate-400 border hover:bg-slate-50"],
+          ] as [typeof agentStatusFilter, string, string, string][]).map(([f, label, active, inactive]) => (
+            <button
+              key={f}
+              onClick={() => setAgentStatusFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${agentStatusFilter === f ? active : inactive}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Result count + Add button */}
+        <div className="ml-auto flex items-center gap-3">
+          {(agentSearch || agentStatusFilter !== "all") && (
+            <span className="text-xs text-muted-foreground">{filteredAgents.length} result{filteredAgents.length !== 1 ? "s" : ""}</span>
+          )}
+          <Button size="sm" onClick={() => setCreateOpen(true)}>Add Agent</Button>
+        </div>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
@@ -599,9 +718,9 @@ function AgentsTab() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
-            ) : !Array.isArray(agents) || agents.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">No agents found.</TableCell></TableRow>
-            ) : agents.map(a => {
+            ) : filteredAgents.length === 0 ? (
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">{agentSearch || agentStatusFilter !== "all" ? "No agents match your filters." : "No agents found."}</TableCell></TableRow>
+            ) : filteredAgents.map(a => {
               const st = agencyStatusOf(a);
               const cfg = DEBT_STATUS_CFG[st];
               const debt = parseFloat(a.outstandingDebt ?? "0");
