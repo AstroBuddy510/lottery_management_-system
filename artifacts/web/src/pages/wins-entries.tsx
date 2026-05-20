@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   useListWinsEntries, useCreateWinsEntry, useUpdateWinsEntry,
   useListWriters, getListWinsEntriesQueryKey, getListWritersQueryKey,
@@ -82,6 +82,13 @@ function AgentWinsView() {
   const updateMutation = useUpdateWinsEntry();
   const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
   const [editForm, setEditForm] = useState({ winsAmount: "" });
+
+  // Exclude writers who already have a wins entry on the selected date
+  const usedWriterIds = useMemo(
+    () => new Set(entryList.filter(e => e.entryDate?.startsWith(form.entryDate)).map(e => e.writerId)),
+    [entryList, form.entryDate],
+  );
+  const availableWriters = writerList.filter(w => !usedWriterIds.has(w.id));
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWinsEntriesQueryKey({}) });
 
@@ -251,11 +258,20 @@ function AgentWinsView() {
           )}
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Writer</Label>
-              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))}>
-                <SelectTrigger className="h-11 text-sm rounded-xl"><SelectValue placeholder="Select writer…" /></SelectTrigger>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Writer</Label>
+                {usedWriterIds.size > 0 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {usedWriterIds.size}/{writerList.length} entered
+                  </span>
+                )}
+              </div>
+              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={availableWriters.length === 0}>
+                <SelectTrigger className="h-11 text-sm rounded-xl">
+                  <SelectValue placeholder={availableWriters.length === 0 ? "All writers entered for this date" : "Select writer…"} />
+                </SelectTrigger>
                 <SelectContent>
-                  {writerList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+                  {availableWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
