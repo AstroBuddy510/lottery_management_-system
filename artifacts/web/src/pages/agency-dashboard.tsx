@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useListAgents, useUpdateUser, AgentWithUser, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -108,6 +108,25 @@ function AgencyIcon({ status, size = "md" }: { status: AgencyStatus; size?: "sm"
       </svg>
     </div>
   );
+}
+
+/* ─── map helpers ─────────────────────────────────────────────────────────── */
+
+function fitBounds(lats: number[], lngs: number[]): { center: [number, number]; zoom: number } {
+  if (lats.length === 0) return { center: [7.9465, -1.0232], zoom: 7 };
+  if (lats.length === 1) return { center: [lats[0], lngs[0]], zoom: 13 };
+
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const center: [number, number] = [(minLat + maxLat) / 2, (minLng + maxLng) / 2];
+
+  const latSpan = maxLat - minLat;
+  const lngSpan = maxLng - minLng;
+  // Add 40% padding so pins aren't right at the edge
+  const padded = Math.max(latSpan, lngSpan) * 1.4;
+  // Formula: at zoom z, ~720° of lon-equivalent fits in the viewport
+  const zoom = Math.max(5, Math.min(14, Math.floor(Math.log2(720 / Math.max(padded, 0.005)))));
+  return { center, zoom };
 }
 
 /* ─── custom map pin ──────────────────────────────────────────────────────── */
@@ -371,8 +390,33 @@ function GridView({
 /* ─── map view ────────────────────────────────────────────────────────────── */
 
 function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: AgentWithUser) => void }) {
-  const mapped = agents.filter(a => a.lat && a.lng);
+  const mapped   = agents.filter(a => a.lat && a.lng);
   const unmapped = agents.filter(a => !a.lat || !a.lng);
+
+  // Derive the bounding box key so we can re-fit when agencies change
+  const boundsKey = mapped.map(a => `${a.id}:${a.lat},${a.lng}`).join("|");
+
+  const computeFit = useCallback(() => {
+    const lats = mapped.map(a => parseFloat(a.lat!));
+    const lngs = mapped.map(a => parseFloat(a.lng!));
+    return fitBounds(lats, lngs);
+  }, [boundsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [center, setCenter] = useState<[number, number]>(() => computeFit().center);
+  const [zoom,   setZoom]   = useState<number>(() => computeFit().zoom);
+
+  // Re-fit whenever the set of mapped agencies (or their coords) changes
+  useEffect(() => {
+    const fit = computeFit();
+    setCenter(fit.center);
+    setZoom(fit.zoom);
+  }, [boundsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleFitAll = () => {
+    const fit = computeFit();
+    setCenter(fit.center);
+    setZoom(fit.zoom);
+  };
 
   return (
     <div className="space-y-4">
@@ -383,11 +427,12 @@ function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: 
         </div>
       )}
 
-      <div className="rounded-2xl overflow-hidden border shadow-sm" style={{ height: 520 }}>
+      <div className="relative rounded-2xl overflow-hidden border shadow-sm" style={{ height: 520 }}>
         <PigeonMap
-          defaultCenter={[7.9465, -1.0232]}
-          defaultZoom={7}
+          center={center}
+          zoom={zoom}
           attribution={false}
+          onBoundsChanged={({ center: c, zoom: z }) => { setCenter(c as [number, number]); setZoom(z); }}
         >
           {mapped.map(a => {
             const status = getStatus(a);
@@ -411,6 +456,20 @@ function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: 
             );
           })}
         </PigeonMap>
+
+        {/* Fit-all button — top-right corner of the map */}
+        {mapped.length > 0 && (
+          <button
+            onClick={handleFitAll}
+            title="Fit all agencies"
+            className="absolute top-3 right-3 z-10 bg-white border border-slate-200 shadow-md rounded-xl px-3 py-2 flex items-center gap-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+            </svg>
+            Fit all
+          </button>
+        )}
       </div>
 
       {/* Legend */}
