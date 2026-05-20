@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
-import { useListAgents, AgentWithUser, getListAgentsQueryKey } from "@workspace/api-client-react";
+import React, { useState, useMemo, useRef } from "react";
+import { useListAgents, useUpdateUser, AgentWithUser, getListAgentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { Map as PigeonMapBase, Marker, type MapProps } from "pigeon-maps";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,27 @@ function AgingBadge({ debtSince, debt }: { debtSince: string | null | undefined;
       {days === 0 ? "Today" : `${days}d pending`}
     </span>
   );
+}
+
+/* ─── helpers ─────────────────────────────────────────────────────────────── */
+
+function resizeImageToDataUrl(file: File, maxPx: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
 }
 
 /* ─── agency icon ─────────────────────────────────────────────────────────── */
@@ -210,7 +232,15 @@ function StatCard({ label, count, color, icon }: { label: string; count: number;
 
 /* ─── grid view ───────────────────────────────────────────────────────────── */
 
-function GridView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: AgentWithUser) => void }) {
+function GridView({
+  agents,
+  onSelect,
+  onPhotoClick,
+}: {
+  agents: AgentWithUser[];
+  onSelect: (a: AgentWithUser) => void;
+  onPhotoClick: (a: AgentWithUser) => void;
+}) {
   if (agents.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
@@ -227,15 +257,38 @@ function GridView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a:
         const status = getStatus(a);
         const cfg = STATUS_CFG[status];
         const debt = parseFloat(a.outstandingDebt);
+        const photo = (a.user as { profilePicture?: string | null }).profilePicture;
         return (
           <div
             key={a.id}
             onClick={() => onSelect(a)}
             className={`group bg-white border border-l-4 ${cfg.border} rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:-translate-y-0.5`}
           >
-            {/* Header row */}
+            {/* Header row — icon is a separate upload target, rest of card opens detail */}
             <div className="flex items-start justify-between mb-4">
-              <AgencyIcon status={status} size="md" />
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onPhotoClick(a); }}
+                className="relative group/icon flex-shrink-0 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                aria-label="Change agency profile photo"
+                title="Click to change photo"
+              >
+                {photo ? (
+                  <img
+                    src={photo}
+                    alt={a.agencyName ?? a.user.fullName}
+                    className="w-12 h-12 rounded-2xl object-cover shadow-md"
+                  />
+                ) : (
+                  <AgencyIcon status={status} size="md" />
+                )}
+                <span className="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/40 opacity-0 group-hover/icon:opacity-100 transition-opacity">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                </span>
+              </button>
               <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${cfg.badge}`}>
                 {status === "active-clear" ? "Clear" : status === "active-debt" ? "Has Debt" : "Closed"}
               </span>
@@ -371,15 +424,44 @@ type FilterMode = "all" | "active-clear" | "active-debt" | "closed";
 
 export function AgencyDashboard() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents(
     {},
     { query: { queryKey: getListAgentsQueryKey({}), refetchInterval: 60_000 } },
   );
+  const updateUserMutation = useUpdateUser();
+
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoAgent, setPhotoAgent] = useState<AgentWithUser | null>(null);
 
   const [view, setView] = useState<ViewMode>("grid");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AgentWithUser | null>(null);
+
+  const handlePhotoClick = (a: AgentWithUser) => {
+    setPhotoAgent(a);
+    photoInputRef.current?.click();
+  };
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !photoAgent) return;
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 320);
+      await updateUserMutation.mutateAsync({
+        id: (photoAgent.user as { id: string }).id,
+        data: { profilePicture: dataUrl },
+      });
+      qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) });
+      toast({ title: "Agency photo updated" });
+    } catch {
+      toast({ title: "Failed to upload photo", variant: "destructive" });
+    } finally {
+      setPhotoAgent(null);
+    }
+  };
 
   const agentList = Array.isArray(agents) ? agents : [];
 
@@ -531,11 +613,20 @@ export function AgencyDashboard() {
             ))}
           </div>
         ) : view === "grid" ? (
-          <GridView agents={filtered} onSelect={setSelected} />
+          <GridView agents={filtered} onSelect={setSelected} onPhotoClick={handlePhotoClick} />
         ) : (
           <MapView agents={filtered} onSelect={setSelected} />
         )}
       </div>
+
+      {/* Hidden file input for photo upload */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handlePhotoFileChange}
+      />
 
       {/* Detail modal */}
       <AgencyDetailModal agent={selected} onClose={() => setSelected(null)} />
