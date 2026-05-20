@@ -10,3 +10,4 @@ export * from "./reserve-receipts";
 export * from "./notifications";
 export * from "./games";
 export * from "./expenses";
+export * from "./debt-reductions";

@@ -541,6 +541,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/Writer"
 
+  /agents/{agentId}/debt-reductions:
+    get:
+      operationId: listAgentDebtReductions
+      tags: [agents]
+      summary: List automated debt reductions for an agent
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentDebtReduction"
+
   /settings:
     get:
       operationId: getSettings
@@ -1550,6 +1573,29 @@ components:
           type: boolean
         profilePicture:
           type: ["string", "null"]
+
+    AgentDebtReduction:
+      type: object
+      required: [id, agentId, calcDate, netGrossAmount, reductionAmount, debtBefore, debtAfter, createdAt]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        calcDate:
+          type: string
+        netGrossAmount:
+          type: string
+        reductionAmount:
+          type: string
+        debtBefore:
+          type: string
+        debtAfter:
+          type: string
+        surplus:
+          type: ["string", "null"]
+        createdAt:
+          type: string
 
     AgentWithUser:
       type: object

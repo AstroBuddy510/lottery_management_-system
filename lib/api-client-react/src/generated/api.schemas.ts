@@ -144,6 +144,19 @@ export interface UserUpdate {
   profilePicture?: string | null;
 }
 
+export interface AgentDebtReduction {
+  id: string;
+  agentId: string;
+  calcDate: string;
+  netGrossAmount: string;
+  reductionAmount: string;
+  debtBefore: string;
+  debtAfter: string;
+  /** @nullable */
+  surplus?: string | null;
+  createdAt: string;
+}
+
 export type AgentWithUserStatus = typeof AgentWithUserStatus[keyof typeof AgentWithUserStatus];
 
 

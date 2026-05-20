@@ -9,6 +9,7 @@ import {
   reserveAllocationsTable,
   writersTable,
   agentsTable,
+  agentDebtReductionsTable,
 } from "@workspace/db";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { RunCalculationsBody } from "@workspace/api-zod";
@@ -191,6 +192,74 @@ router.post(
       });
     }
 
+    // ── Automated debt reduction from daily net gross ─────────────────────────
+    // Group results by agent, sum netGross per agent, then reduce outstandingDebt
+    const writerAgentRows = await db
+      .select({ writerId: writersTable.id, agentId: writersTable.agentId })
+      .from(writersTable)
+      .where(inArray(writersTable.id, allWriterIds));
+
+    const writerToAgent = new Map(writerAgentRows.map((r) => [r.writerId, r.agentId]));
+
+    // Sum netGross per agent across all their writers
+    const agentNetGross = new Map<string, number>();
+    for (const r of results) {
+      if (!r) continue;
+      const agentId = writerToAgent.get(r.writerId);
+      if (!agentId) continue;
+      agentNetGross.set(agentId, (agentNetGross.get(agentId) ?? 0) + parseFloat(r.netGross));
+    }
+
+    const debtReductionSummary: Array<{
+      agentId: string; netGross: string; reduction: string; debtBefore: string; debtAfter: string; surplus: string | null;
+    }> = [];
+
+    for (const [agentId, netGross] of agentNetGross) {
+      if (netGross <= 0) continue;
+
+      const [agentRow] = await db
+        .select({ id: agentsTable.id, outstandingDebt: agentsTable.outstandingDebt })
+        .from(agentsTable)
+        .where(eq(agentsTable.id, agentId))
+        .limit(1);
+
+      if (!agentRow) continue;
+      const currentDebt = parseFloat(agentRow.outstandingDebt);
+      if (currentDebt <= 0) continue;
+
+      const reduction = Math.min(netGross, currentDebt);
+      const newDebt = Math.max(0, currentDebt - reduction);
+      const surplus = netGross > currentDebt ? netGross - currentDebt : null;
+
+      await db
+        .update(agentsTable)
+        .set({
+          outstandingDebt: newDebt.toFixed(2),
+          debtSince: newDebt === 0 ? null : undefined,
+        })
+        .where(eq(agentsTable.id, agentId));
+
+      await db.insert(agentDebtReductionsTable).values({
+        agentId,
+        calcDate,
+        netGrossAmount: netGross.toFixed(2),
+        reductionAmount: reduction.toFixed(2),
+        debtBefore: currentDebt.toFixed(2),
+        debtAfter: newDebt.toFixed(2),
+        surplus: surplus !== null ? surplus.toFixed(2) : null,
+      });
+
+      debtReductionSummary.push({
+        agentId,
+        netGross: netGross.toFixed(2),
+        reduction: reduction.toFixed(2),
+        debtBefore: currentDebt.toFixed(2),
+        debtAfter: newDebt.toFixed(2),
+        surplus: surplus !== null ? surplus.toFixed(2) : null,
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Dispatch deficit alerts to affected agents
     const deficitWriterIds = results
       .filter((r) => r && parseFloat(r.writerBalance) < 0)
@@ -240,6 +309,7 @@ router.post(
       calcDate,
       results,
       reserveAllocations: allocations.length,
+      debtReductions: debtReductionSummary,
     });
   },
 );

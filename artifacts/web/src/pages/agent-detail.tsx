@@ -3,9 +3,10 @@ import { useLocation, useParams } from "wouter";
 import {
   useListCalculations, useListPayments, useListAgents, useListWriters,
   useListGrossEntries, useListWinsEntries, useGetSettings,
+  useListAgentDebtReductions,
   getListCalculationsQueryKey, getListWritersQueryKey,
   getListGrossEntriesQueryKey, getListWinsEntriesQueryKey,
-  getGetSettingsQueryKey,
+  getGetSettingsQueryKey, getListAgentDebtReductionsQueryKey,
 } from "@workspace/api-client-react";
 import { WriterManager } from "@/components/writer-manager";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtGHS } from "@/lib/utils";
 
-type TabId = "overview" | "writers" | "entries";
+type TabId = "overview" | "writers" | "entries" | "debt";
 
 function LiveDot() {
   return (
@@ -38,6 +39,9 @@ export function AgentDetail() {
   const { data: agents } = useListAgents({});
   const { data: writers } = useListWriters(agentId, {}, {
     query: { queryKey: getListWritersQueryKey(agentId, {}), enabled: !!agentId }
+  });
+  const { data: debtReductions } = useListAgentDebtReductions(agentId ?? "", {
+    query: { queryKey: getListAgentDebtReductionsQueryKey(agentId ?? ""), enabled: !!agentId, refetchInterval: 30_000 }
   });
   const { data: allCalcs } = useListCalculations(
     {},
@@ -137,10 +141,14 @@ export function AgentDetail() {
 
   const hasCalcForDate = dateCalcs.length > 0;
 
+  const debtReductionList = Array.isArray(debtReductions) ? debtReductions : [];
+  const currentDebt = parseFloat(agent?.outstandingDebt ?? "0");
+
   const TABS: { id: TabId; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "writers",  label: `Writers (${writerList.length})` },
     { id: "entries",  label: `Live Entries${entryRows.length > 0 ? ` (${entryRows.length})` : ""}` },
+    { id: "debt",     label: `Debt${currentDebt > 0 ? ` — GH₵ ${currentDebt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}` : ""}` },
   ];
 
   const fmtTime = (ts: string) =>
@@ -308,6 +316,121 @@ export function AgentDetail() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Debt tab ── */}
+      {activeTab === "debt" && (
+        <div className="space-y-6">
+          {/* Balance summary cards */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Card className={currentDebt > 0 ? "border-amber-300 bg-amber-50/40" : "border-emerald-300 bg-emerald-50/30"}>
+              <CardHeader className="pb-1 pt-4 px-4">
+                <CardTitle className="text-xs text-muted-foreground">Outstanding Debt</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className={`text-2xl font-bold font-mono ${currentDebt > 0 ? "text-amber-700" : "text-emerald-600"}`}>
+                  {fmtGHS(currentDebt)}
+                </div>
+                {agent?.debtSince && currentDebt > 0 && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    Since {new Date(agent.debtSince).toLocaleDateString("en-GH", { day: "numeric", month: "long", year: "numeric" })}
+                  </p>
+                )}
+                {currentDebt === 0 && (
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">Debt-free</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-1 pt-4 px-4">
+                <CardTitle className="text-xs text-muted-foreground">Total Reduced (All Time)</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="text-2xl font-bold font-mono text-primary">
+                  {fmtGHS(debtReductionList.reduce((s, r) => s + parseFloat(r.reductionAmount), 0))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Across {debtReductionList.length} calculation{debtReductionList.length !== 1 ? "s" : ""}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-1 pt-4 px-4">
+                <CardTitle className="text-xs text-muted-foreground">Latest Reduction</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {debtReductionList.length > 0 ? (
+                  <>
+                    <div className="text-2xl font-bold font-mono text-primary">
+                      {fmtGHS(debtReductionList[0].reductionAmount)}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{debtReductionList[0].calcDate}</p>
+                  </>
+                ) : (
+                  <div className="text-sm text-muted-foreground pt-1">No reductions yet</div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* How it works notice */}
+          <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3">
+            <svg className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p className="text-xs text-blue-700">
+              <strong>Automated reduction</strong> — each time daily calculations are run, the agent's positive net gross is automatically applied against their outstanding debt. If net gross exceeds the debt, the balance is cleared to zero and any surplus is recorded.
+            </p>
+          </div>
+
+          {/* Reduction history table */}
+          <div>
+            <h2 className="text-base font-semibold mb-3">Reduction History</h2>
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Calc Date</TableHead>
+                    <TableHead className="text-right">Agent Net Gross</TableHead>
+                    <TableHead className="text-right">Reduction Applied</TableHead>
+                    <TableHead className="text-right">Debt Before</TableHead>
+                    <TableHead className="text-right">Debt After</TableHead>
+                    <TableHead className="text-right">Surplus</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {debtReductionList.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
+                        No automated debt reductions have been recorded yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : debtReductionList.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-mono text-sm font-medium">{r.calcDate}</TableCell>
+                      <TableCell className="text-right font-mono text-sm">{fmtGHS(r.netGrossAmount)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm font-semibold text-emerald-700">
+                        − {fmtGHS(r.reductionAmount)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm text-amber-700">{fmtGHS(r.debtBefore)}</TableCell>
+                      <TableCell className={`text-right font-mono text-sm font-semibold ${parseFloat(r.debtAfter) === 0 ? "text-emerald-600" : "text-amber-700"}`}>
+                        {fmtGHS(r.debtAfter)}
+                        {parseFloat(r.debtAfter) === 0 && (
+                          <span className="ml-1.5 text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full font-semibold">Cleared</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                        {r.surplus && parseFloat(r.surplus) > 0 ? fmtGHS(r.surplus) : <span className="text-slate-300">—</span>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </div>
       )}
 

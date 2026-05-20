@@ -476,6 +476,27 @@ export const UpdateWriterResponse = zod.object({
 
 
 /**
+ * @summary List automated debt reductions for an agent
+ */
+export const ListAgentDebtReductionsParams = zod.object({
+  "agentId": zod.coerce.string()
+})
+
+export const ListAgentDebtReductionsResponseItem = zod.object({
+  "id": zod.string(),
+  "agentId": zod.string(),
+  "calcDate": zod.string(),
+  "netGrossAmount": zod.string(),
+  "reductionAmount": zod.string(),
+  "debtBefore": zod.string(),
+  "debtAfter": zod.string(),
+  "surplus": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListAgentDebtReductionsResponse = zod.array(ListAgentDebtReductionsResponseItem)
+
+
+/**
  * @summary Get current system settings
  */
 export const GetSettingsResponse = zod.object({

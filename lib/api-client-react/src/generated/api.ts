@@ -21,6 +21,7 @@ import type {
 
 import type {
   AgentDailyTotal,
+  AgentDebtReduction,
   AgentInput,
   AgentReport,
   AgentUpdate,
@@ -1813,6 +1814,83 @@ export const useUpdateWriter = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateWriterMutationOptions(options));
     }
+
+export const getListAgentDebtReductionsUrl = (agentId: string,) => {
+
+
+
+
+  return `/api/agents/${agentId}/debt-reductions`
+}
+
+/**
+ * @summary List automated debt reductions for an agent
+ */
+export const listAgentDebtReductions = async (agentId: string, options?: RequestInit): Promise<AgentDebtReduction[]> => {
+
+  return customFetch<AgentDebtReduction[]>(getListAgentDebtReductionsUrl(agentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentDebtReductionsQueryKey = (agentId: string,) => {
+    return [
+    `/api/agents/${agentId}/debt-reductions`
+    ] as const;
+    }
+
+
+export const getListAgentDebtReductionsQueryOptions = <TData = Awaited<ReturnType<typeof listAgentDebtReductions>>, TError = ErrorType<unknown>>(agentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentDebtReductions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentDebtReductionsQueryKey(agentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentDebtReductions>>> = ({ signal }) => listAgentDebtReductions(agentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(agentId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentDebtReductions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAgentDebtReductionsQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentDebtReductions>>>
+export type ListAgentDebtReductionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List automated debt reductions for an agent
+ */
+
+export function useListAgentDebtReductions<TData = Awaited<ReturnType<typeof listAgentDebtReductions>>, TError = ErrorType<unknown>>(
+ agentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAgentDebtReductions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAgentDebtReductionsQueryOptions(agentId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getGetSettingsUrl = () => {
 

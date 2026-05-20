@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, agentsTable, writersTable, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, agentsTable, writersTable, usersTable, agentDebtReductionsTable } from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
 import {
   CreateAgentBody,
   GetAgentParams,
@@ -333,6 +333,31 @@ router.patch(
       return;
     }
     res.json(writer);
+  },
+);
+
+router.get(
+  "/agents/:agentId/debt-reductions",
+  requireAuth,
+  requireRole("director", "administrator", "agent"),
+  async (req, res) => {
+    const agentId = String(req.params["agentId"]);
+
+    if (req.user!.role === "agent") {
+      const myAgent = await getAgentForUser(req.user!.userId);
+      if (!myAgent || myAgent.id !== agentId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    }
+
+    const rows = await db
+      .select()
+      .from(agentDebtReductionsTable)
+      .where(eq(agentDebtReductionsTable.agentId, agentId))
+      .orderBy(desc(agentDebtReductionsTable.calcDate), desc(agentDebtReductionsTable.createdAt));
+
+    res.json(rows);
   },
 );
 
