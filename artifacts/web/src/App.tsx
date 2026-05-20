@@ -24,6 +24,7 @@ import { Reserve } from "@/pages/reserve";
 import { Notifications } from "@/pages/notifications";
 import { MyWriters } from "@/pages/my-writers";
 import { WinsDebt } from "@/pages/wins-debt";
+import { AgencyDashboard } from "@/pages/agency-dashboard";
 
 import { Layout } from "@/components/layout";
 
@@ -127,6 +128,10 @@ function Router() {
 
       <Route path="/wins-debt">
         {() => <ProtectedRoute component={WinsDebt} roles={["director", "administrator"]} />}
+      </Route>
+
+      <Route path="/agencies">
+        {() => <ProtectedRoute component={AgencyDashboard} roles={["director", "administrator"]} />}
       </Route>
 
       <Route path="/notifications">

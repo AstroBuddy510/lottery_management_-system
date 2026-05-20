@@ -17,32 +17,55 @@ import { requireAuth, requireRole } from "../middleware/auth";
 const ORG_PREFIX = "VS";
 const router = Router();
 
+function formatAgent(r: {
+  id: string; userId: string; agentCode: string; fullCode: string;
+  isActive: boolean; agencyName: string | null; location: string | null;
+  lat: string | null; lng: string | null; status: string; outstandingDebt: string;
+  debtSince: Date | null; createdAt: Date;
+  userId_: string; fullName: string; phone: string | null; role: string;
+  userIsActive: boolean; profilePicture: string | null;
+}) {
+  return {
+    id: r.id, userId: r.userId, agentCode: r.agentCode, fullCode: r.fullCode,
+    isActive: r.isActive, agencyName: r.agencyName, location: r.location,
+    lat: r.lat, lng: r.lng, status: r.status, outstandingDebt: r.outstandingDebt,
+    debtSince: r.debtSince ? r.debtSince.toISOString() : null,
+    createdAt: r.createdAt,
+    user: { id: r.userId_, fullName: r.fullName, phone: r.phone, role: r.role, isActive: r.userIsActive, profilePicture: r.profilePicture },
+  };
+}
+
+const AGENT_SELECT = {
+  id: agentsTable.id,
+  userId: agentsTable.userId,
+  agentCode: agentsTable.agentCode,
+  fullCode: agentsTable.fullCode,
+  isActive: agentsTable.isActive,
+  agencyName: agentsTable.agencyName,
+  location: agentsTable.location,
+  lat: agentsTable.lat,
+  lng: agentsTable.lng,
+  status: agentsTable.status,
+  outstandingDebt: agentsTable.outstandingDebt,
+  debtSince: agentsTable.debtSince,
+  createdAt: agentsTable.createdAt,
+  userId_: usersTable.id,
+  fullName: usersTable.fullName,
+  phone: usersTable.phone,
+  role: usersTable.role,
+  userIsActive: usersTable.isActive,
+  profilePicture: usersTable.profilePicture,
+} as const;
+
 async function getAgentForUser(userId: string) {
   const [row] = await db
-    .select({
-      id: agentsTable.id,
-      userId: agentsTable.userId,
-      agentCode: agentsTable.agentCode,
-      fullCode: agentsTable.fullCode,
-      isActive: agentsTable.isActive,
-      createdAt: agentsTable.createdAt,
-      userId_: usersTable.id,
-      fullName: usersTable.fullName,
-      phone: usersTable.phone,
-      role: usersTable.role,
-      userIsActive: usersTable.isActive,
-      profilePicture: usersTable.profilePicture,
-    })
+    .select(AGENT_SELECT)
     .from(agentsTable)
     .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
     .where(eq(agentsTable.userId, userId))
     .limit(1);
   if (!row) return null;
-  return {
-    id: row.id, userId: row.userId, agentCode: row.agentCode, fullCode: row.fullCode,
-    isActive: row.isActive, createdAt: row.createdAt,
-    user: { id: row.userId_, fullName: row.fullName, phone: row.phone, role: row.role, isActive: row.userIsActive, profilePicture: row.profilePicture },
-  };
+  return formatAgent(row);
 }
 
 router.get(
@@ -51,32 +74,10 @@ router.get(
   requireRole("director", "administrator", "cashier", "gross_entry", "wins_entry"),
   async (req, res) => {
     const rows = await db
-      .select({
-        id: agentsTable.id,
-        userId: agentsTable.userId,
-        agentCode: agentsTable.agentCode,
-        fullCode: agentsTable.fullCode,
-        isActive: agentsTable.isActive,
-        createdAt: agentsTable.createdAt,
-        userId_: usersTable.id,
-        fullName: usersTable.fullName,
-        phone: usersTable.phone,
-        role: usersTable.role,
-        userIsActive: usersTable.isActive,
-        profilePicture: usersTable.profilePicture,
-      })
+      .select(AGENT_SELECT)
       .from(agentsTable)
       .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id));
-    const agents = rows.map(r => ({
-      id: r.id,
-      userId: r.userId,
-      agentCode: r.agentCode,
-      fullCode: r.fullCode,
-      isActive: r.isActive,
-      createdAt: r.createdAt,
-      user: { id: r.userId_, fullName: r.fullName, phone: r.phone, role: r.role, isActive: r.userIsActive, profilePicture: r.profilePicture },
-    }));
-    res.json(agents);
+    res.json(rows.map(formatAgent));
   },
 );
 
@@ -90,12 +91,12 @@ router.post(
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
-    const { userId, agentCode } = parse.data;
+    const { userId, agentCode, agencyName, location, lat, lng, status, outstandingDebt } = parse.data;
     const upperCode = agentCode.toUpperCase();
     const fullCode = `${ORG_PREFIX}-${upperCode}`;
 
     const [user] = await db
-      .select({ id: usersTable.id, fullName: usersTable.fullName, email: usersTable.email })
+      .select({ id: usersTable.id, fullName: usersTable.fullName })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
       .limit(1);
@@ -114,15 +115,33 @@ router.post(
       return;
     }
 
+    const debtAmount = outstandingDebt ? parseFloat(outstandingDebt) : 0;
+    const debtSince = debtAmount > 0 ? new Date() : null;
+
     const [agent] = await db
       .insert(agentsTable)
-      .values({ userId, agentCode: upperCode, fullCode })
+      .values({
+        userId, agentCode: upperCode, fullCode,
+        agencyName: agencyName ?? null,
+        location: location ?? null,
+        lat: lat != null ? String(lat) : null,
+        lng: lng != null ? String(lng) : null,
+        status: (status as "active" | "closed") ?? "active",
+        outstandingDebt: outstandingDebt ?? "0",
+        debtSince,
+      })
       .returning();
-    res.status(201).json({ ...agent, fullName: user.fullName, email: user.email });
+
+    const [row] = await db
+      .select(AGENT_SELECT)
+      .from(agentsTable)
+      .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+      .where(eq(agentsTable.id, agent.id))
+      .limit(1);
+    res.status(201).json(formatAgent(row!));
   },
 );
 
-// GET /agents/me — must be BEFORE /:id so it doesn't get caught by that route
 router.get(
   "/agents/me",
   requireAuth,
@@ -149,20 +168,7 @@ router.get(
       return;
     }
     const [row] = await db
-      .select({
-        id: agentsTable.id,
-        userId: agentsTable.userId,
-        agentCode: agentsTable.agentCode,
-        fullCode: agentsTable.fullCode,
-        isActive: agentsTable.isActive,
-        createdAt: agentsTable.createdAt,
-        userId_: usersTable.id,
-        fullName: usersTable.fullName,
-        phone: usersTable.phone,
-        role: usersTable.role,
-        userIsActive: usersTable.isActive,
-        profilePicture: usersTable.profilePicture,
-      })
+      .select(AGENT_SELECT)
       .from(agentsTable)
       .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
       .where(eq(agentsTable.id, parse.data.id))
@@ -171,12 +177,7 @@ router.get(
       res.status(404).json({ error: "Agent not found" });
       return;
     }
-    const agent = {
-      id: row.id, userId: row.userId, agentCode: row.agentCode, fullCode: row.fullCode,
-      isActive: row.isActive, createdAt: row.createdAt,
-      user: { id: row.userId_, fullName: row.fullName, phone: row.phone, role: row.role, isActive: row.userIsActive, profilePicture: row.profilePicture },
-    };
-    res.json(agent);
+    res.json(formatAgent(row));
   },
 );
 
@@ -195,20 +196,38 @@ router.patch(
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
+    const data = bodyResult.data;
     const updates: Record<string, unknown> = {};
-    if (bodyResult.data.isActive !== undefined)
-      updates.isActive = bodyResult.data.isActive;
+    if (data.isActive !== undefined) updates.isActive = data.isActive;
+    if (data.agencyName !== undefined) updates.agencyName = data.agencyName;
+    if (data.location !== undefined) updates.location = data.location;
+    if (data.lat !== undefined) updates.lat = data.lat != null ? String(data.lat) : null;
+    if (data.lng !== undefined) updates.lng = data.lng != null ? String(data.lng) : null;
+    if (data.status !== undefined) updates.status = data.status;
+    if (data.outstandingDebt !== undefined) {
+      updates.outstandingDebt = data.outstandingDebt;
+      const debtAmount = parseFloat(data.outstandingDebt);
+      if (debtAmount > 0) {
+        const [existing] = await db.select({ debtSince: agentsTable.debtSince }).from(agentsTable).where(eq(agentsTable.id, paramsResult.data.id)).limit(1);
+        if (!existing?.debtSince) updates.debtSince = new Date();
+      } else {
+        updates.debtSince = null;
+      }
+    }
 
-    const [agent] = await db
-      .update(agentsTable)
-      .set(updates)
+    await db.update(agentsTable).set(updates).where(eq(agentsTable.id, paramsResult.data.id));
+
+    const [row] = await db
+      .select(AGENT_SELECT)
+      .from(agentsTable)
+      .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
       .where(eq(agentsTable.id, paramsResult.data.id))
-      .returning();
-    if (!agent) {
+      .limit(1);
+    if (!row) {
       res.status(404).json({ error: "Agent not found" });
       return;
     }
-    res.json(agent);
+    res.json(formatAgent(row));
   },
 );
 
@@ -222,7 +241,6 @@ router.get(
       res.status(400).json({ error: "Invalid params" });
       return;
     }
-    // Agents can only see their own writers
     if (req.user!.role === "agent") {
       const myAgent = await getAgentForUser(req.user!.userId);
       if (!myAgent || myAgent.id !== parse.data.agentId) {
@@ -253,10 +271,7 @@ router.post(
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
-
     const agentId = paramsResult.data.agentId;
-
-    // Agents can only add writers to their own list
     if (req.user!.role === "agent") {
       const myAgent = await getAgentForUser(req.user!.userId);
       if (!myAgent || myAgent.id !== agentId) {
@@ -264,35 +279,20 @@ router.post(
         return;
       }
     }
-
     const { writerCode, fullName } = bodyResult.data;
     const upperWriterCode = writerCode.toUpperCase();
-
-    const [agent] = await db
-      .select()
-      .from(agentsTable)
-      .where(eq(agentsTable.id, agentId))
-      .limit(1);
+    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId)).limit(1);
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
       return;
     }
-
     const fullCode = `${agent.fullCode}-${upperWriterCode}`;
-    const [existing] = await db
-      .select({ id: writersTable.id })
-      .from(writersTable)
-      .where(eq(writersTable.fullCode, fullCode))
-      .limit(1);
+    const [existing] = await db.select({ id: writersTable.id }).from(writersTable).where(eq(writersTable.fullCode, fullCode)).limit(1);
     if (existing) {
       res.status(409).json({ error: "Writer code already in use for this agent" });
       return;
     }
-
-    const [writer] = await db
-      .insert(writersTable)
-      .values({ agentId, writerCode: upperWriterCode, fullCode, fullName })
-      .returning();
+    const [writer] = await db.insert(writersTable).values({ agentId, writerCode: upperWriterCode, fullCode, fullName }).returning();
     res.status(201).json(writer);
   },
 );
@@ -312,10 +312,7 @@ router.patch(
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
-
     const agentId = req.params["agentId"] as string;
-
-    // Agents can only edit their own writers
     if (req.user!.role === "agent") {
       const myAgent = await getAgentForUser(req.user!.userId);
       if (!myAgent || myAgent.id !== agentId) {
@@ -323,21 +320,13 @@ router.patch(
         return;
       }
     }
-
     const updates: Record<string, unknown> = {};
     if (bodyResult.data.fullName) updates.fullName = bodyResult.data.fullName;
-    if (bodyResult.data.isActive !== undefined)
-      updates.isActive = bodyResult.data.isActive;
-
+    if (bodyResult.data.isActive !== undefined) updates.isActive = bodyResult.data.isActive;
     const [writer] = await db
       .update(writersTable)
       .set(updates)
-      .where(
-        and(
-          eq(writersTable.id, paramsResult.data.id),
-          eq(writersTable.agentId, agentId),
-        ),
-      )
+      .where(and(eq(writersTable.id, paramsResult.data.id), eq(writersTable.agentId, agentId)))
       .returning();
     if (!writer) {
       res.status(404).json({ error: "Writer not found" });

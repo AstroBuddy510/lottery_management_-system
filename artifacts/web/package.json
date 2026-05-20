@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "pigeon-maps": "^0.22.1",
     "qrcode.react": "^4.2.0"
   }
 }

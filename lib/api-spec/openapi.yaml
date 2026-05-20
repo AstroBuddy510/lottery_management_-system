@@ -1431,7 +1431,7 @@ components:
 
     AgentWithUser:
       type: object
-      required: [id, userId, agentCode, fullCode, isActive, createdAt, user]
+      required: [id, userId, agentCode, fullCode, isActive, status, outstandingDebt, createdAt, user]
       properties:
         id:
           type: string
@@ -1443,6 +1443,21 @@ components:
           type: string
         isActive:
           type: boolean
+        agencyName:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+        lat:
+          type: ["string", "null"]
+        lng:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, closed]
+        outstandingDebt:
+          type: string
+        debtSince:
+          type: ["string", "null"]
         createdAt:
           type: string
         user:
@@ -1472,12 +1487,38 @@ components:
           type: string
           minLength: 2
           maxLength: 2
+        agencyName:
+          type: string
+        location:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        status:
+          type: string
+          enum: [active, closed]
+        outstandingDebt:
+          type: string
 
     AgentUpdate:
       type: object
       properties:
         isActive:
           type: boolean
+        agencyName:
+          type: string
+        location:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        status:
+          type: string
+          enum: [active, closed]
+        outstandingDebt:
+          type: string
 
     Writer:
       type: object

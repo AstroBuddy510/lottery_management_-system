@@ -136,6 +136,14 @@ export interface UserUpdate {
   profilePicture?: string | null;
 }
 
+export type AgentWithUserStatus = typeof AgentWithUserStatus[keyof typeof AgentWithUserStatus];
+
+
+export const AgentWithUserStatus = {
+  active: 'active',
+  closed: 'closed',
+} as const;
+
 export type AgentWithUserUser = {
   id: string;
   fullName: string;
@@ -152,9 +160,29 @@ export interface AgentWithUser {
   agentCode: string;
   fullCode: string;
   isActive: boolean;
+  /** @nullable */
+  agencyName?: string | null;
+  /** @nullable */
+  location?: string | null;
+  /** @nullable */
+  lat?: string | null;
+  /** @nullable */
+  lng?: string | null;
+  status: AgentWithUserStatus;
+  outstandingDebt: string;
+  /** @nullable */
+  debtSince?: string | null;
   createdAt: string;
   user: AgentWithUserUser;
 }
+
+export type AgentInputStatus = typeof AgentInputStatus[keyof typeof AgentInputStatus];
+
+
+export const AgentInputStatus = {
+  active: 'active',
+  closed: 'closed',
+} as const;
 
 export interface AgentInput {
   userId: string;
@@ -163,10 +191,30 @@ export interface AgentInput {
      * @maxLength 2
      */
   agentCode: string;
+  agencyName?: string;
+  location?: string;
+  lat?: number;
+  lng?: number;
+  status?: AgentInputStatus;
+  outstandingDebt?: string;
 }
+
+export type AgentUpdateStatus = typeof AgentUpdateStatus[keyof typeof AgentUpdateStatus];
+
+
+export const AgentUpdateStatus = {
+  active: 'active',
+  closed: 'closed',
+} as const;
 
 export interface AgentUpdate {
   isActive?: boolean;
+  agencyName?: string;
+  location?: string;
+  lat?: number;
+  lng?: number;
+  status?: AgentUpdateStatus;
+  outstandingDebt?: string;
 }
 
 export interface Writer {

@@ -14,6 +14,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
+  { label: "Agency Dashboard", path: "/agencies", roles: ["director", "administrator"] },
   { label: "Users & Agents", path: "/users", roles: ["administrator"] },
   { label: "Games", path: "/games", roles: ["administrator"] },
   { label: "Settings", path: "/settings", roles: ["administrator"] },

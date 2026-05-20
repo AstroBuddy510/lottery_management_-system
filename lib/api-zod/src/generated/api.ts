@@ -250,6 +250,13 @@ export const ListAgentsResponseItem = zod.object({
   "agentCode": zod.string(),
   "fullCode": zod.string(),
   "isActive": zod.boolean(),
+  "agencyName": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
+  "status": zod.enum(['active', 'closed']),
+  "outstandingDebt": zod.string(),
+  "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
   "user": zod.object({
   "id": zod.string(),
@@ -273,7 +280,13 @@ export const createAgentBodyAgentCodeMax = 2;
 
 export const CreateAgentBody = zod.object({
   "userId": zod.string(),
-  "agentCode": zod.string().min(createAgentBodyAgentCodeMin).max(createAgentBodyAgentCodeMax)
+  "agentCode": zod.string().min(createAgentBodyAgentCodeMin).max(createAgentBodyAgentCodeMax),
+  "agencyName": zod.string().optional(),
+  "location": zod.string().optional(),
+  "lat": zod.number().optional(),
+  "lng": zod.number().optional(),
+  "status": zod.enum(['active', 'closed']).optional(),
+  "outstandingDebt": zod.string().optional()
 })
 
 
@@ -286,6 +299,13 @@ export const GetMyAgentResponse = zod.object({
   "agentCode": zod.string(),
   "fullCode": zod.string(),
   "isActive": zod.boolean(),
+  "agencyName": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
+  "status": zod.enum(['active', 'closed']),
+  "outstandingDebt": zod.string(),
+  "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
   "user": zod.object({
   "id": zod.string(),
@@ -311,6 +331,13 @@ export const GetAgentResponse = zod.object({
   "agentCode": zod.string(),
   "fullCode": zod.string(),
   "isActive": zod.boolean(),
+  "agencyName": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
+  "status": zod.enum(['active', 'closed']),
+  "outstandingDebt": zod.string(),
+  "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
   "user": zod.object({
   "id": zod.string(),
@@ -331,7 +358,13 @@ export const UpdateAgentParams = zod.object({
 })
 
 export const UpdateAgentBody = zod.object({
-  "isActive": zod.boolean().optional()
+  "isActive": zod.boolean().optional(),
+  "agencyName": zod.string().optional(),
+  "location": zod.string().optional(),
+  "lat": zod.number().optional(),
+  "lng": zod.number().optional(),
+  "status": zod.enum(['active', 'closed']).optional(),
+  "outstandingDebt": zod.string().optional()
 })
 
 export const UpdateAgentResponse = zod.object({
@@ -340,6 +373,13 @@ export const UpdateAgentResponse = zod.object({
   "agentCode": zod.string(),
   "fullCode": zod.string(),
   "isActive": zod.boolean(),
+  "agencyName": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
+  "status": zod.enum(['active', 'closed']),
+  "outstandingDebt": zod.string(),
+  "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
   "user": zod.object({
   "id": zod.string(),
@@ -900,6 +940,13 @@ export const GetAgentReportResponse = zod.object({
   "agentCode": zod.string(),
   "fullCode": zod.string(),
   "isActive": zod.boolean(),
+  "agencyName": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
+  "status": zod.enum(['active', 'closed']),
+  "outstandingDebt": zod.string(),
+  "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
   "user": zod.object({
   "id": zod.string(),
@@ -967,6 +1014,13 @@ export const GetOrgReportResponse = zod.object({
   "agentCode": zod.string(),
   "fullCode": zod.string(),
   "isActive": zod.boolean(),
+  "agencyName": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
+  "status": zod.enum(['active', 'closed']),
+  "outstandingDebt": zod.string(),
+  "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
   "user": zod.object({
   "id": zod.string(),

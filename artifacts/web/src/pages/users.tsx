@@ -397,7 +397,58 @@ function UsersTab() {
   );
 }
 
+// ─── Ghana city presets ───────────────────────────────────────────────────────
+
+const GHANA_CITIES = [
+  { name: "Accra",              lat: 5.6037,  lng: -0.1870 },
+  { name: "Kumasi",             lat: 6.6885,  lng: -1.6244 },
+  { name: "Tamale",             lat: 9.4008,  lng: -0.8393 },
+  { name: "Sekondi-Takoradi",   lat: 4.9016,  lng: -1.7558 },
+  { name: "Cape Coast",         lat: 5.1315,  lng: -1.2795 },
+  { name: "Koforidua",          lat: 6.0940,  lng: -0.2601 },
+  { name: "Sunyani",            lat: 7.3349,  lng: -2.3269 },
+  { name: "Techiman",           lat: 7.5896,  lng: -1.9385 },
+  { name: "Ho",                 lat: 6.6011,  lng:  0.4703 },
+  { name: "Bolgatanga",         lat: 10.7856, lng: -0.8514 },
+  { name: "Wa",                 lat: 10.0601, lng: -2.5099 },
+  { name: "Tema",               lat: 5.6698,  lng: -0.0166 },
+  { name: "Other / Custom",     lat: null,    lng: null    },
+] as const;
+
+type CityName = typeof GHANA_CITIES[number]["name"];
+
+const DEBT_STATUS_CFG = {
+  "active-clear": { label: "Active — Clear",    cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+  "active-debt":  { label: "Active — Has Debt", cls: "bg-amber-100 text-amber-700 border-amber-200"     },
+  "closed":       { label: "Closed",            cls: "bg-slate-100 text-slate-500 border-slate-200"      },
+} as const;
+
+function agencyStatusOf(a: AgentWithUser): keyof typeof DEBT_STATUS_CFG {
+  if (a.status === "closed") return "closed";
+  if (parseFloat(a.outstandingDebt ?? "0") > 0) return "active-debt";
+  return "active-clear";
+}
+
 // ─── Agents tab ──────────────────────────────────────────────────────────────
+
+type CreateAgentForm = {
+  userId: string; agentCode: string; agencyName: string;
+  city: CityName | ""; location: string;
+  lat: string; lng: string;
+  status: "active" | "closed"; outstandingDebt: string;
+};
+type EditAgentForm = {
+  isActive: boolean; agencyName: string;
+  city: CityName | ""; location: string;
+  lat: string; lng: string;
+  status: "active" | "closed"; outstandingDebt: string;
+};
+
+const CREATE_DEFAULTS: CreateAgentForm = {
+  userId: "", agentCode: "", agencyName: "",
+  city: "", location: "", lat: "", lng: "",
+  status: "active", outstandingDebt: "",
+};
 
 function AgentsTab() {
   const qc = useQueryClient();
@@ -410,31 +461,85 @@ function AgentsTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editAgent, setEditAgent] = useState<AgentWithUser | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [createForm, setCreateForm] = useState({ userId: "", agentCode: "" });
-  const [editIsActive, setEditIsActive] = useState(true);
+  const [createForm, setCreateForm] = useState<CreateAgentForm>(CREATE_DEFAULTS);
+  const [editForm, setEditForm] = useState<EditAgentForm>({
+    isActive: true, agencyName: "", city: "", location: "", lat: "", lng: "", status: "active", outstandingDebt: "",
+  });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) });
 
   const agentRoleUsers = Array.isArray(users) ? users.filter(u => u.role === "agent" && u.isActive) : [];
 
+  const applyCity = (cityName: CityName | "", setter: (fn: (f: any) => any) => void) => {
+    const city = GHANA_CITIES.find(c => c.name === cityName);
+    setter(f => ({
+      ...f,
+      city: cityName,
+      location: cityName && cityName !== "Other / Custom" ? cityName : f.location,
+      lat: city?.lat != null ? String(city.lat) : "",
+      lng: city?.lng != null ? String(city.lng) : "",
+    }));
+  };
+
+  const isCustomCity = (city: string) => !city || city === "Other / Custom";
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await createMutation.mutateAsync({ data: { userId: createForm.userId, agentCode: createForm.agentCode.toUpperCase() } });
+      const debt = parseFloat(createForm.outstandingDebt || "0");
+      await createMutation.mutateAsync({
+        data: {
+          userId: createForm.userId,
+          agentCode: createForm.agentCode.toUpperCase(),
+          agencyName: createForm.agencyName || undefined,
+          location: createForm.location || undefined,
+          lat: createForm.lat ? parseFloat(createForm.lat) : undefined,
+          lng: createForm.lng ? parseFloat(createForm.lng) : undefined,
+          status: createForm.status,
+          outstandingDebt: debt > 0 ? String(debt) : "0",
+        },
+      });
       toast({ title: "Agent created" });
       setCreateOpen(false);
-      setCreateForm({ userId: "", agentCode: "" });
+      setCreateForm(CREATE_DEFAULTS);
       invalidate();
     } catch {
       toast({ title: "Failed to create agent", variant: "destructive" });
     }
   };
 
+  const openEdit = (a: AgentWithUser) => {
+    const cityMatch = GHANA_CITIES.find(c => c.lat != null && Math.abs(c.lat - parseFloat(a.lat ?? "0")) < 0.001);
+    setEditAgent(a);
+    setEditForm({
+      isActive: a.isActive,
+      agencyName: a.agencyName ?? "",
+      city: cityMatch?.name ?? "Other / Custom",
+      location: a.location ?? "",
+      lat: a.lat ?? "",
+      lng: a.lng ?? "",
+      status: (a.status as "active" | "closed") ?? "active",
+      outstandingDebt: parseFloat(a.outstandingDebt ?? "0") > 0 ? a.outstandingDebt : "",
+    });
+  };
+
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editAgent) return;
     try {
-      await updateMutation.mutateAsync({ id: editAgent.id, data: { isActive: editIsActive } });
+      const debt = parseFloat(editForm.outstandingDebt || "0");
+      await updateMutation.mutateAsync({
+        id: editAgent.id,
+        data: {
+          isActive: editForm.isActive,
+          agencyName: editForm.agencyName || undefined,
+          location: editForm.location || undefined,
+          lat: editForm.lat ? parseFloat(editForm.lat) : undefined,
+          lng: editForm.lng ? parseFloat(editForm.lng) : undefined,
+          status: editForm.status,
+          outstandingDebt: String(debt > 0 ? debt : 0),
+        },
+      });
       toast({ title: "Agent updated" });
       setEditAgent(null);
       invalidate();
@@ -455,94 +560,205 @@ function AgentsTab() {
             <TableRow>
               <TableHead className="w-8"></TableHead>
               <TableHead>Code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Phone</TableHead>
+              <TableHead>Agency</TableHead>
+              <TableHead>Agent</TableHead>
+              <TableHead>Location</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Debt</TableHead>
               <TableHead className="w-20">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
             ) : !Array.isArray(agents) || agents.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No agents found.</TableCell></TableRow>
-            ) : agents.map(a => (
-              <Fragment key={a.id}>
-                <TableRow className={!a.isActive ? "opacity-50" : ""}>
-                  <TableCell>
-                    <button
-                      className="text-muted-foreground hover:text-foreground text-xs w-5 h-5 flex items-center justify-center"
-                      onClick={() => setExpanded(expanded === a.id ? null : a.id)}
-                      aria-label={expanded === a.id ? "Collapse writers" : "Expand writers"}
-                    >
-                      {expanded === a.id ? "▼" : "▶"}
-                    </button>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm font-medium">{a.fullCode}</TableCell>
-                  <TableCell className="text-sm">{a.user?.fullName ?? "—"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground font-mono">{a.user?.phone ?? "—"}</TableCell>
-                  <TableCell><Badge variant={a.isActive ? "default" : "secondary"} className="text-xs">{a.isActive ? "Active" : "Inactive"}</Badge></TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditAgent(a); setEditIsActive(a.isActive); }}>Edit</Button>
-                  </TableCell>
-                </TableRow>
-                {expanded === a.id && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="bg-muted/30 px-8 py-2">
-                      <WritersSection agentId={a.id} />
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">No agents found.</TableCell></TableRow>
+            ) : agents.map(a => {
+              const st = agencyStatusOf(a);
+              const cfg = DEBT_STATUS_CFG[st];
+              const debt = parseFloat(a.outstandingDebt ?? "0");
+              return (
+                <Fragment key={a.id}>
+                  <TableRow className={!a.isActive ? "opacity-50" : ""}>
+                    <TableCell>
+                      <button
+                        className="text-muted-foreground hover:text-foreground text-xs w-5 h-5 flex items-center justify-center"
+                        onClick={() => setExpanded(expanded === a.id ? null : a.id)}
+                        aria-label={expanded === a.id ? "Collapse writers" : "Expand writers"}
+                      >
+                        {expanded === a.id ? "▼" : "▶"}
+                      </button>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm font-medium">{a.fullCode}</TableCell>
+                    <TableCell className="text-sm font-medium">{a.agencyName ?? "—"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{a.user?.fullName ?? "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{a.location ?? "—"}</TableCell>
+                    <TableCell>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+                        {cfg.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className={`text-sm font-mono ${debt > 0 ? "text-amber-600 font-semibold" : "text-muted-foreground"}`}>
+                      {debt > 0 ? `GHS ${debt.toFixed(2)}` : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(a)}>Edit</Button>
                     </TableCell>
                   </TableRow>
-                )}
-              </Fragment>
-            ))}
+                  {expanded === a.id && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="bg-muted/30 px-8 py-2">
+                        <WritersSection agentId={a.id} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
 
-      {/* Create Agent Dialog */}
+      {/* ── Create Agent Dialog ── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Agent</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">Register an agency with full details. The user account must already exist with role = Agent.</p>
           <form onSubmit={handleCreate} className="space-y-4">
+            {/* Agent user + code */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs">Agent User <span className="text-muted-foreground">(role = Agent)</span></Label>
+                <Select value={createForm.userId} onValueChange={v => setCreateForm(f => ({ ...f, userId: v }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select user…" /></SelectTrigger>
+                  <SelectContent>{agentRoleUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.fullName} — {u.phone ?? ""}</SelectItem>)}</SelectContent>
+                </Select>
+                {agentRoleUsers.length === 0 && <p className="text-xs text-muted-foreground">No agent-role users available. Create one first.</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Agent Code <span className="text-muted-foreground">(2 chars)</span></Label>
+                <Input value={createForm.agentCode} onChange={e => setCreateForm(f => ({ ...f, agentCode: e.target.value.toUpperCase() }))} required maxLength={2} className="h-9 text-sm font-mono" placeholder="PA" />
+                <p className="text-[11px] text-muted-foreground">Full code: VS-{createForm.agentCode || "XX"}</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Agency Name</Label>
+                <Input value={createForm.agencyName} onChange={e => setCreateForm(f => ({ ...f, agencyName: e.target.value }))} className="h-9 text-sm" placeholder="e.g. Pedro Agency" />
+              </div>
+            </div>
+
+            {/* Location */}
             <div className="space-y-1.5">
-              <Label className="text-xs">Agent User (must have role = Agent)</Label>
-              <Select value={createForm.userId} onValueChange={v => setCreateForm(f => ({ ...f, userId: v }))}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select user..." /></SelectTrigger>
-                <SelectContent>{agentRoleUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.fullName} — {u.phone ?? ""}</SelectItem>)}</SelectContent>
+              <Label className="text-xs">City / Area</Label>
+              <Select value={createForm.city} onValueChange={v => applyCity(v as CityName, setCreateForm)}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select city…" /></SelectTrigger>
+                <SelectContent>{GHANA_CITIES.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
-              {agentRoleUsers.length === 0 && (
-                <p className="text-xs text-muted-foreground">No available agent-role users. Create a user with role "Agent" first.</p>
-              )}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Agent Code (2 chars)</Label>
-              <Input value={createForm.agentCode} onChange={e => setCreateForm(f => ({ ...f, agentCode: e.target.value.toUpperCase() }))} required maxLength={2} className="h-9 text-sm font-mono" placeholder="PA" />
-              <p className="text-xs text-muted-foreground">Full code will be VS-{createForm.agentCode || "XX"}</p>
+              <Label className="text-xs">Physical Location <span className="text-muted-foreground">(street / landmark)</span></Label>
+              <Input value={createForm.location} onChange={e => setCreateForm(f => ({ ...f, location: e.target.value }))} className="h-9 text-sm" placeholder="e.g. Near Central Market, Accra" />
             </div>
+            {isCustomCity(createForm.city) && createForm.city !== "" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Latitude</Label>
+                  <Input type="number" step="any" value={createForm.lat} onChange={e => setCreateForm(f => ({ ...f, lat: e.target.value }))} className="h-9 text-sm font-mono" placeholder="5.6037" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Longitude</Label>
+                  <Input type="number" step="any" value={createForm.lng} onChange={e => setCreateForm(f => ({ ...f, lng: e.target.value }))} className="h-9 text-sm font-mono" placeholder="-0.1870" />
+                </div>
+              </div>
+            )}
+
+            {/* Status + Debt */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Initial Status</Label>
+                <Select value={createForm.status} onValueChange={v => setCreateForm(f => ({ ...f, status: v as "active" | "closed" }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Initial Outstanding Debt <span className="text-muted-foreground">(GHS)</span></Label>
+                <Input type="number" min="0" step="0.01" value={createForm.outstandingDebt} onChange={e => setCreateForm(f => ({ ...f, outstandingDebt: e.target.value }))} className="h-9 text-sm" placeholder="0.00" />
+              </div>
+            </div>
+
             <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending || !createForm.userId || createForm.agentCode.length !== 2}>Create</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => { setCreateOpen(false); setCreateForm(CREATE_DEFAULTS); }}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={createMutation.isPending || !createForm.userId || createForm.agentCode.length !== 2}>Register Agency</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Agent Dialog */}
+      {/* ── Edit Agent Dialog ── */}
       <Dialog open={!!editAgent} onOpenChange={open => !open && setEditAgent(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Edit Agent — {editAgent?.fullCode}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Agency — {editAgent?.fullCode}</DialogTitle></DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4">
-            <div className="text-sm text-muted-foreground">
-              <div>Name: <span className="text-foreground font-medium">{editAgent?.user?.fullName}</span></div>
-              <div>Phone: <span className="text-foreground font-mono">{editAgent?.user?.phone}</span></div>
+            <div className="text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 space-y-0.5">
+              <div>Agent: <span className="text-foreground font-medium">{editAgent?.user?.fullName}</span></div>
+              <div className="font-mono text-xs">{editAgent?.user?.phone}</div>
             </div>
-            <div className="flex items-center gap-3">
-              <Switch checked={editIsActive} onCheckedChange={setEditIsActive} />
-              <Label className="text-sm">{editIsActive ? "Active" : "Inactive"}</Label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs">Agency Name</Label>
+                <Input value={editForm.agencyName} onChange={e => setEditForm(f => ({ ...f, agencyName: e.target.value }))} className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs">City / Area</Label>
+                <Select value={editForm.city} onValueChange={v => applyCity(v as CityName, setEditForm)}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select city…" /></SelectTrigger>
+                  <SelectContent>{GHANA_CITIES.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5 col-span-2">
+                <Label className="text-xs">Physical Location</Label>
+                <Input value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} className="h-9 text-sm" />
+              </div>
+              {isCustomCity(editForm.city) && editForm.city !== "" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Latitude</Label>
+                    <Input type="number" step="any" value={editForm.lat} onChange={e => setEditForm(f => ({ ...f, lat: e.target.value }))} className="h-9 text-sm font-mono" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Longitude</Label>
+                    <Input type="number" step="any" value={editForm.lng} onChange={e => setEditForm(f => ({ ...f, lng: e.target.value }))} className="h-9 text-sm font-mono" />
+                  </div>
+                </>
+              )}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Operational Status</Label>
+                <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v as "active" | "closed" }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Outstanding Debt (GHS)</Label>
+                <Input type="number" min="0" step="0.01" value={editForm.outstandingDebt} onChange={e => setEditForm(f => ({ ...f, outstandingDebt: e.target.value }))} className="h-9 text-sm" placeholder="0.00" />
+              </div>
             </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <Switch checked={editForm.isActive} onCheckedChange={v => setEditForm(f => ({ ...f, isActive: v }))} />
+              <Label className="text-sm">System account {editForm.isActive ? "active" : "inactive"}</Label>
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditAgent(null)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save</Button>
+              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save Changes</Button>
             </DialogFooter>
           </form>
         </DialogContent>
