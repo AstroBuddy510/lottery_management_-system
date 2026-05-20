@@ -119,7 +119,7 @@ function WriterReportView() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(report as WriterReport).rows.map((row, i) => (
+                {((report as WriterReport).rows ?? []).map((row, i) => (
                   <TableRow key={i}>
                     <TableCell className="text-sm">{row.calcDate?.split("T")[0]}</TableCell>
                     <TableCell className="text-right"><Fmt v={row.grossSales} /></TableCell>
