@@ -469,9 +469,11 @@ function AgentsTab() {
   const invalidate = () => qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) });
 
   const assignedUserIds = new Set(Array.isArray(agents) ? agents.map(a => a.userId) : []);
-  const agentRoleUsers = Array.isArray(users)
-    ? users.filter(u => u.role === "agent" && u.isActive && !assignedUserIds.has(u.id))
+  // All active agent-role users — shown in dropdown (assigned ones disabled)
+  const allAgentRoleUsers = Array.isArray(users)
+    ? users.filter(u => u.role === "agent" && u.isActive)
     : [];
+  const unassignedAgentUsers = allAgentRoleUsers.filter(u => !assignedUserIds.has(u.id));
 
   const apiErrMsg = (err: unknown, fallback: string) =>
     (err as { data?: { error?: string } })?.data?.error ?? fallback;
@@ -638,11 +640,42 @@ function AgentsTab() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5 col-span-2">
                 <Label className="text-xs">Agent User <span className="text-muted-foreground">(role = Agent)</span></Label>
-                <Select value={createForm.userId} onValueChange={v => setCreateForm(f => ({ ...f, userId: v }))}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select user…" /></SelectTrigger>
-                  <SelectContent>{agentRoleUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.fullName} — {u.phone ?? ""}</SelectItem>)}</SelectContent>
+                <Select
+                  value={createForm.userId}
+                  onValueChange={v => setCreateForm(f => ({ ...f, userId: v }))}
+                  disabled={allAgentRoleUsers.length === 0}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder={allAgentRoleUsers.length === 0 ? "No agent-role users exist" : "Select user…"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allAgentRoleUsers.length === 0 ? (
+                      <div className="px-2 py-3 text-xs text-muted-foreground text-center">No agent-role users found</div>
+                    ) : (
+                      allAgentRoleUsers.map(u => {
+                        const alreadyAssigned = assignedUserIds.has(u.id);
+                        const agentCode = alreadyAssigned
+                          ? Array.isArray(agents) ? agents.find(a => a.userId === u.id)?.fullCode : ""
+                          : null;
+                        return (
+                          <SelectItem key={u.id} value={u.id} disabled={alreadyAssigned}>
+                            <span className={alreadyAssigned ? "text-muted-foreground" : ""}>
+                              {u.fullName}
+                              {u.phone ? <span className="font-mono text-xs ml-1">· {u.phone}</span> : null}
+                              {alreadyAssigned && <span className="ml-2 text-xs text-amber-600 font-medium">assigned {agentCode}</span>}
+                            </span>
+                          </SelectItem>
+                        );
+                      })
+                    )}
+                  </SelectContent>
                 </Select>
-                {agentRoleUsers.length === 0 && <p className="text-xs text-muted-foreground">No agent-role users available. Create one first.</p>}
+                {allAgentRoleUsers.length > 0 && unassignedAgentUsers.length === 0 && (
+                  <p className="text-xs text-amber-600 font-medium">All agent-role users are already assigned to an agent. Create a new user with role "Agent" first.</p>
+                )}
+                {allAgentRoleUsers.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No users with role "Agent" found. Go to the Users tab and create one first.</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Agent Code <span className="text-muted-foreground">(2 chars)</span></Label>
@@ -700,7 +733,7 @@ function AgentsTab() {
 
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => { setCreateOpen(false); setCreateForm(CREATE_DEFAULTS); }}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending || !createForm.userId || createForm.agentCode.length !== 2}>Register Agency</Button>
+              <Button type="submit" size="sm" disabled={createMutation.isPending || !createForm.userId || assignedUserIds.has(createForm.userId) || createForm.agentCode.length !== 2}>Register Agency</Button>
             </DialogFooter>
           </form>
         </DialogContent>
