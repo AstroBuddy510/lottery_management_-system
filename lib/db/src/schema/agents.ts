@@ -22,8 +22,8 @@ export const agentsTable = pgTable("agents", {
 export const writersTable = pgTable("writers", {
   id: uuid("id").primaryKey().defaultRandom(),
   agentId: uuid("agent_id").notNull().references(() => agentsTable.id),
-  writerCode: varchar("writer_code", { length: 4 }).notNull(),
-  fullCode: varchar("full_code", { length: 12 }).notNull().unique(),
+  writerCode: varchar("writer_code", { length: 6 }).notNull(),
+  fullCode: varchar("full_code", { length: 16 }).notNull().unique(),
   fullName: varchar("full_name", { length: 100 }).notNull(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
