@@ -590,12 +590,15 @@ function AgentsTab() {
               const debt = parseFloat(a.outstandingDebt ?? "0");
               return (
                 <Fragment key={a.id}>
-                  <TableRow className={!a.isActive ? "opacity-50" : ""}>
-                    <TableCell>
+                  <TableRow
+                    className={`cursor-pointer hover:bg-muted/50 transition-colors${!a.isActive ? " opacity-50" : ""}`}
+                    onClick={() => openEdit(a)}
+                  >
+                    <TableCell onClick={e => { e.stopPropagation(); setExpanded(expanded === a.id ? null : a.id); }} className="cursor-default">
                       <button
                         className="text-muted-foreground hover:text-foreground text-xs w-5 h-5 flex items-center justify-center"
-                        onClick={() => setExpanded(expanded === a.id ? null : a.id)}
                         aria-label={expanded === a.id ? "Collapse writers" : "Expand writers"}
+                        tabIndex={-1}
                       >
                         {expanded === a.id ? "▼" : "▶"}
                       </button>
@@ -612,7 +615,7 @@ function AgentsTab() {
                     <TableCell className={`text-sm font-mono ${debt > 0 ? "text-amber-600 font-semibold" : "text-muted-foreground"}`}>
                       {debt > 0 ? `GHS ${debt.toFixed(2)}` : "—"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={e => e.stopPropagation()}>
                       <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(a)}>Edit</Button>
                     </TableCell>
                   </TableRow>
