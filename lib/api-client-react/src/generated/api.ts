@@ -73,6 +73,7 @@ import type {
   UnreadCount,
   UpdateExpenseCategoryBody,
   UpdateGameBody,
+  UpdateMyPhotoBody,
   User,
   UserCreated,
   UserInput,
@@ -1121,6 +1122,77 @@ export const useDeactivateUser = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeactivateUserMutationOptions(options));
+    }
+
+export const getUpdateMyPhotoUrl = () => {
+
+
+
+
+  return `/api/users/me/photo`
+}
+
+/**
+ * @summary Upload or update the authenticated user's own profile photo
+ */
+export const updateMyPhoto = async (updateMyPhotoBody: UpdateMyPhotoBody, options?: RequestInit): Promise<User> => {
+
+  return customFetch<User>(getUpdateMyPhotoUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateMyPhotoBody,)
+  }
+);}
+
+
+
+
+export const getUpdateMyPhotoMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMyPhoto>>, TError,{data: BodyType<UpdateMyPhotoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMyPhoto>>, TError,{data: BodyType<UpdateMyPhotoBody>}, TContext> => {
+
+const mutationKey = ['updateMyPhoto'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMyPhoto>>, {data: BodyType<UpdateMyPhotoBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateMyPhoto(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMyPhotoMutationResult = NonNullable<Awaited<ReturnType<typeof updateMyPhoto>>>
+    export type UpdateMyPhotoMutationBody = BodyType<UpdateMyPhotoBody>
+    export type UpdateMyPhotoMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Upload or update the authenticated user's own profile photo
+ */
+export const useUpdateMyPhoto = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMyPhoto>>, TError,{data: BodyType<UpdateMyPhotoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMyPhoto>>,
+        TError,
+        {data: BodyType<UpdateMyPhotoBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateMyPhotoMutationOptions(options));
     }
 
 export const getListAgentsUrl = (params?: ListAgentsParams,) => {

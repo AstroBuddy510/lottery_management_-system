@@ -1,25 +1,31 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import {
   useGetMyAgent, getGetMyAgentQueryKey,
   useListWriters, getListWritersQueryKey,
   useListSales, useGetUnreadCount,
   useListGrossEntries, useListWinsEntries,
-  getGetUnreadCountQueryKey,
+  getGetUnreadCountQueryKey, getGetMeQueryKey,
+  useUpdateMyPhoto,
 } from "@workspace/api-client-react";
 import { fmtGHS } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 const AVATAR_COLORS = [
   "bg-blue-600","bg-emerald-600","bg-violet-600","bg-orange-500",
   "bg-pink-600","bg-teal-600","bg-cyan-600","bg-rose-600",
 ];
 
-function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
+function Avatar({ name, src, size = "md" }: { name: string; src?: string | null; size?: "sm" | "md" | "lg" }) {
   const initials = name.split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase();
   const color = AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
   const sz = size === "lg" ? "w-14 h-14 text-xl" : size === "sm" ? "w-8 h-8 text-xs" : "w-10 h-10 text-sm";
+  if (src) {
+    return <img src={src} alt={name} className={`${sz} rounded-full object-cover flex-shrink-0`} />;
+  }
   return (
     <div className={`${sz} rounded-full ${color} flex items-center justify-center text-white font-bold flex-shrink-0`}>
       {initials || "?"}
@@ -50,6 +56,25 @@ function getGreeting() {
   return "Good evening";
 }
 
+function resizeImageToDataUrl(file: File, maxPx: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 function relTime(dateStr: string): string {
   const now = new Date();
   const d = new Date(dateStr);
@@ -65,8 +90,27 @@ function relTime(dateStr: string): string {
 
 export function AgentDashboard() {
   const { user } = useAuth();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const updatePhotoMutation = useUpdateMyPhoto();
   const today = new Date().toISOString().split("T")[0];
   const firstName = user?.fullName?.split(" ")[0] ?? "Agent";
+
+  const handlePhotoChange = async (file: File) => {
+    setPhotoUploading(true);
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 320);
+      await updatePhotoMutation.mutateAsync({ data: { profilePicture: dataUrl } });
+      qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+      toast({ title: "Profile photo updated" });
+    } catch {
+      toast({ title: "Failed to upload photo", variant: "destructive" });
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const { data: agent, isLoading: agentLoading } = useGetMyAgent({
     query: { queryKey: getGetMyAgentQueryKey() }
@@ -125,7 +169,33 @@ export function AgentDashboard() {
 
       {/* Greeting */}
       <div className="flex items-center gap-3">
-        <Avatar name={user?.fullName ?? "Agent"} size="lg" />
+        {/* Tappable avatar — opens file picker */}
+        <button
+          type="button"
+          className="relative flex-shrink-0 group"
+          onClick={() => photoInputRef.current?.click()}
+          disabled={photoUploading}
+          aria-label="Change profile photo"
+        >
+          <Avatar name={user?.fullName ?? "Agent"} src={user?.profilePicture} size="lg" />
+          <span className="absolute inset-0 rounded-full flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+            {photoUploading ? (
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            )}
+          </span>
+        </button>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoChange(f); e.target.value = ""; }}
+        />
         <div className="flex-1 min-w-0">
           <div className="text-base font-semibold text-foreground leading-tight">
             {getGreeting()}, {firstName}

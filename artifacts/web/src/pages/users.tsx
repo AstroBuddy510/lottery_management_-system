@@ -1,11 +1,12 @@
 import { Fragment, useState } from "react";
 import {
   useListUsers, useCreateUser, useUpdateUser, useDeactivateUser, useRegeneratePin,
-  useListAgents, useCreateAgent, useUpdateAgent,
+  useListAgents, useCreateAgent, useUpdateAgent, useUpdateMyPhoto,
   useListWriters, useCreateWriter, useUpdateWriter,
   getListUsersQueryKey, getGetMeQueryKey, getListAgentsQueryKey, getListWritersQueryKey,
   User, UserInput, UserUpdate, AgentWithUser, Writer,
 } from "@workspace/api-client-react";
+import { ProfilePhotoInput } from "@/components/profile-photo-input";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -178,7 +179,7 @@ function WritersSection({ agentId }: { agentId: string }) {
 // ─── Users tab ───────────────────────────────────────────────────────────────
 
 type CreateForm = { fullName: string; phone: string; role: string };
-type EditForm = { fullName: string; phone: string; role: string; profilePicture: string };
+type EditForm = { fullName: string; phone: string; role: string; profilePicture: string | null };
 
 function UsersTab() {
   const qc = useQueryClient();
@@ -193,7 +194,7 @@ function UsersTab() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [createForm, setCreateForm] = useState<CreateForm>({ fullName: "", phone: "", role: "cashier" });
-  const [editForm, setEditForm] = useState<EditForm>({ fullName: "", phone: "", role: "", profilePicture: "" });
+  const [editForm, setEditForm] = useState<EditForm>({ fullName: "", phone: "", role: "", profilePicture: null });
   const [newPin, setNewPin] = useState<{ pin: string; name: string } | null>(null);
 
   const invalidateAll = () => {
@@ -222,7 +223,7 @@ function UsersTab() {
       if (editForm.fullName.trim()) patch.fullName = editForm.fullName.trim();
       if (editForm.phone.trim()) patch.phone = editForm.phone.trim();
       if (editForm.role) patch.role = editForm.role as UserUpdate["role"];
-      patch.profilePicture = editForm.profilePicture.trim() || null;
+      patch.profilePicture = editForm.profilePicture || null;
       await updateMutation.mutateAsync({ id: editUser.id, data: patch });
       toast({ title: "User updated successfully" });
       setEditUser(null);
@@ -255,7 +256,7 @@ function UsersTab() {
 
   const openEdit = (u: User) => {
     setEditUser(u);
-    setEditForm({ fullName: u.fullName, phone: u.phone ?? "", role: u.role, profilePicture: u.profilePicture ?? "" });
+    setEditForm({ fullName: u.fullName, phone: u.phone ?? "", role: u.role, profilePicture: u.profilePicture ?? null });
   };
 
   return (
@@ -365,9 +366,15 @@ function UsersTab() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Profile Picture URL <span className="text-muted-foreground">(optional)</span></Label>
-              <Input value={editForm.profilePicture} onChange={e => setEditForm(f => ({ ...f, profilePicture: e.target.value }))} className="h-9 text-sm" placeholder="https://example.com/photo.jpg" />
-              <p className="text-xs text-muted-foreground">Paste a direct link to a profile photo. Leave blank to use initials avatar.</p>
+              <Label className="text-xs">Profile Photo <span className="text-muted-foreground">(optional)</span></Label>
+              <div className="flex justify-center py-1">
+                <ProfilePhotoInput
+                  value={editForm.profilePicture}
+                  onChange={v => setEditForm(f => ({ ...f, profilePicture: v }))}
+                  name={editForm.fullName}
+                  size={80}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditUser(null)}>Cancel</Button>
@@ -433,6 +440,7 @@ function agencyStatusOf(a: AgentWithUser): keyof typeof DEBT_STATUS_CFG {
 
 type CreateAgentForm = {
   fullName: string; phone: string;
+  profilePhoto: string | null;
   agentCode: string; agencyName: string;
   city: CityName | ""; location: string;
   lat: string; lng: string;
@@ -447,6 +455,7 @@ type EditAgentForm = {
 
 const CREATE_DEFAULTS: CreateAgentForm = {
   fullName: "", phone: "",
+  profilePhoto: null,
   agentCode: "", agencyName: "",
   city: "", location: "", lat: "", lng: "",
   status: "active", outstandingDebt: "",
@@ -457,6 +466,7 @@ function AgentsTab() {
   const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({});
   const createUserMutation = useCreateUser();
+  const updateUserMutation = useUpdateUser();
   const createMutation = useCreateAgent();
   const updateMutation = useUpdateAgent();
 
@@ -497,6 +507,9 @@ function AgentsTab() {
           role: "agent",
         },
       });
+      if (createForm.profilePhoto) {
+        await updateUserMutation.mutateAsync({ id: newUserId, data: { profilePicture: createForm.profilePhoto } });
+      }
       const debt = parseFloat(createForm.outstandingDebt || "0");
       await createMutation.mutateAsync({
         data: {
@@ -646,6 +659,14 @@ function AgentsTab() {
             {/* Agent user details */}
             <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Agent Login Details</p>
+              <div className="flex justify-center pb-1">
+                <ProfilePhotoInput
+                  value={createForm.profilePhoto}
+                  onChange={v => setCreateForm(f => ({ ...f, profilePhoto: v }))}
+                  name={createForm.fullName}
+                  size={72}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5 col-span-2">
                   <Label className="text-xs">Full Name</Label>

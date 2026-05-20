@@ -97,6 +97,14 @@ export interface PinRegenResponse {
   pin: string;
 }
 
+export interface UpdateMyPhotoBody {
+  /**
+     * Base64 data URL of the new profile photo, or null to remove
+     * @nullable
+     */
+  profilePicture: string | null;
+}
+
 export type UserInputRole = typeof UserInputRole[keyof typeof UserInputRole];
 
 

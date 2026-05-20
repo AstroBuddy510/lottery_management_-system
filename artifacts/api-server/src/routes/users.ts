@@ -157,6 +157,31 @@ router.patch(
   },
 );
 
+router.patch(
+  "/users/me/photo",
+  requireAuth,
+  async (req, res) => {
+    const { profilePicture } = (req.body ?? {}) as { profilePicture?: string | null };
+    const [user] = await db
+      .update(usersTable)
+      .set({ profilePicture: profilePicture ?? null })
+      .where(eq(usersTable.id, req.user!.userId))
+      .returning();
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    res.json({
+      id: user.id,
+      fullName: user.fullName,
+      phone: user.phone,
+      role: user.role,
+      isActive: user.isActive,
+      profilePicture: user.profilePicture ?? null,
+    });
+  },
+);
+
 router.delete(
   "/users/:id",
   requireAuth,

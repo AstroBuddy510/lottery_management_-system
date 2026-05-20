@@ -238,6 +238,25 @@ export const DeactivateUserResponse = zod.object({
 
 
 /**
+ * @summary Upload or update the authenticated user's own profile photo
+ */
+export const UpdateMyPhotoBody = zod.object({
+  "profilePicture": zod.string().nullable().describe('Base64 data URL of the new profile photo, or null to remove')
+})
+
+export const UpdateMyPhotoResponse = zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "phone": zod.string(),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "isActive": zod.boolean(),
+  "profilePicture": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "lastLogin": zod.string().nullish()
+})
+
+
+/**
  * @summary List all agents
  */
 export const ListAgentsQueryParams = zod.object({

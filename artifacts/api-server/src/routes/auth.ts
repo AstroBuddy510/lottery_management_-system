@@ -138,6 +138,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
     phone: user.phone,
     role: user.role,
     isActive: user.isActive,
+    profilePicture: user.profilePicture ?? null,
     lastLogin: user.lastLogin,
   });
 });

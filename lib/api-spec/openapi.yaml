@@ -327,6 +327,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/User"
 
+  /users/me/photo:
+    patch:
+      operationId: updateMyPhoto
+      tags: [users]
+      summary: Upload or update the authenticated user's own profile photo
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMyPhotoBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
   /agents:
     get:
       operationId: listAgents
@@ -1401,6 +1422,14 @@ components:
       properties:
         pin:
           type: string
+
+    UpdateMyPhotoBody:
+      type: object
+      required: [profilePicture]
+      properties:
+        profilePicture:
+          type: ["string", "null"]
+          description: Base64 data URL of the new profile photo, or null to remove
 
     UserInput:
       type: object
