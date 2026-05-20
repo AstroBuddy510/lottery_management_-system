@@ -5,8 +5,6 @@ import {
   useGetMe, useLogin, useLogout, getGetMeQueryKey,
 } from "@workspace/api-client-react";
 import { AuthContext } from "./auth-context";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 
 const INACTIVITY_MS   = 15 * 60 * 1000; // 15 minutes of no activity
 const WARN_SECONDS    = 59;              // countdown before auto-logout
@@ -80,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, delay);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── manual refresh (used by "Stay Logged In") ─────────────────────────── */
+  /* ── silent token refresh (used by the unauthorized handler) ───────────── */
 
   const doRefresh = useCallback(async (): Promise<boolean> => {
     const rt = localStorage.getItem("refreshToken");
@@ -142,13 +140,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     inactivityTimerRef.current = setTimeout(startCountdown, INACTIVITY_MS);
   }, [startCountdown]);
 
-  const handleStayLoggedIn = useCallback(async () => {
-    clearCountdownTimer();
-    warningActiveRef.current = false;
-    setShowWarning(false);
-    await doRefresh();
-    resetInactivityTimer();
-  }, [doRefresh, resetInactivityTimer]);
 
   /* ── global auth hooks ─────────────────────────────────────────────────── */
 
@@ -217,54 +208,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{ user, isLoading, login, logout }}>
       {children}
 
-      {/* ── Inactivity warning dialog ─────────────────────────────────────── */}
-      <Dialog open={showWarning} onOpenChange={() => { /* controlled — dismiss only via buttons */ }}>
-        <DialogContent
-          className="max-w-sm"
-          onPointerDownOutside={e => e.preventDefault()}
-          onInteractOutside={e => e.preventDefault()}
+      {/* ── Inactivity warning overlay — no dismiss, no override ─────────── */}
+      {showWarning && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+          onMouseDown={e => e.stopPropagation()}
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
         >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${countdown <= 10 ? "bg-red-100" : "bg-amber-100"}`}>
-                <svg
-                  className={`w-5 h-5 transition-colors ${countdown <= 10 ? "text-red-600" : "text-amber-600"}`}
-                  viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
-                >
-                  <circle cx="12" cy="12" r="10"/>
-                  <line x1="12" y1="8" x2="12" y2="12"/>
-                  <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-              </div>
-              <span className={countdown <= 10 ? "text-red-600" : "text-amber-600"}>
-                Session Expiring
-              </span>
-            </DialogTitle>
-            <DialogDescription className="sr-only">
-              Your session is about to expire due to inactivity. Click Stay Logged In to continue or wait for the countdown to end.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="text-center space-y-3 py-2">
-            <p className="text-sm text-muted-foreground">
-              You've been inactive. You will be automatically logged out in:
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-xs w-full mx-4 text-center select-none">
+            <div className={`mx-auto mb-4 w-12 h-12 rounded-full flex items-center justify-center ${countdown <= 10 ? "bg-red-100" : "bg-amber-100"}`}>
+              <svg
+                className={`w-6 h-6 ${countdown <= 10 ? "text-red-600" : "text-amber-600"}`}
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+              >
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <p className={`text-lg font-semibold mb-1 ${countdown <= 10 ? "text-red-600" : "text-amber-600"}`}>
+              Session Expiring
+            </p>
+            <p className="text-sm text-gray-500 mb-5">
+              Inactive session. Logging out in:
             </p>
             <div
-              className="text-7xl font-mono font-bold tabular-nums leading-none transition-colors"
-              style={{ color: countdown <= 10 ? "#dc2626" : "#1e293b" }}
+              className="text-8xl font-mono font-bold tabular-nums leading-none mb-2"
+              style={{ color: countdown <= 10 ? "#dc2626" : "#1e3a5f" }}
             >
               {String(countdown).padStart(2, "0")}
             </div>
-            <p className="text-xs text-muted-foreground">seconds</p>
+            <p className="text-xs text-gray-400">seconds</p>
           </div>
-
-          <DialogFooter>
-            <Button className="w-full" size="lg" onClick={handleStayLoggedIn}>
-              Stay Logged In
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }
