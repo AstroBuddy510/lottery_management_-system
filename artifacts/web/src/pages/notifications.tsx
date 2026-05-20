@@ -10,7 +10,6 @@ import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -202,27 +201,24 @@ function EmptyState({ filtered }: { filtered: boolean }) {
 
 function NotifCard({
   n,
+  isRead,
   onRead,
 }: {
   n: NotificationWithReceipt;
+  isRead: boolean;
   onRead: (n: NotificationWithReceipt) => void;
 }) {
-  const [justRead, setJustRead] = useState(false);
   const cfg = TYPE_CFG[n.messageType as keyof typeof TYPE_CFG] ?? TYPE_CFG.announcement;
-  const isUnread = !n.readAt && !justRead;
-
-  const handleClick = () => {
-    if (isUnread) { setJustRead(true); onRead(n); }
-  };
+  const isUnread = !isRead;
 
   return (
     <div
-      onClick={handleClick}
+      onClick={() => { if (isUnread) onRead(n); }}
       className={[
-        "group relative bg-white rounded-2xl border border-l-4 shadow-sm transition-all duration-300 overflow-hidden cursor-pointer",
+        "group relative bg-white rounded-2xl border border-l-4 shadow-sm transition-all duration-300 overflow-hidden",
         cfg.border,
         isUnread
-          ? "shadow-md hover:shadow-lg border-slate-100"
+          ? "shadow-md hover:shadow-lg border-slate-100 cursor-pointer"
           : "opacity-80 hover:opacity-100 border-slate-100",
       ].join(" ")}
     >
@@ -501,8 +497,30 @@ export function Notifications() {
   const [tab, setTab] = useState<FilterTab>("all");
   const [composeOpen, setComposeOpen] = useState(false);
 
+  // Optimistic set: IDs we've already sent mark-read for (before server re-fetch)
+  const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(new Set());
+
   const notifList = Array.isArray(notifications) ? notifications : [];
-  const unreadCount = unread?.count ?? 0;
+  const serverUnreadCount = unread?.count ?? 0;
+
+  // Optimistic unread count: subtract items we've already marked locally
+  const locallyReadUnreadCount = notifList.filter(n => !n.readAt && locallyReadIds.has(n.id)).length;
+  const unreadCount = Math.max(0, serverUnreadCount - locallyReadUnreadCount);
+
+  // Helper: is a specific notification considered read (server OR local)
+  const isRead = (n: NotificationWithReceipt) => !!n.readAt || locallyReadIds.has(n.id);
+
+  const unreadByType = useMemo(() => ({
+    all: notifList.filter(n => !isRead(n)).length,
+    announcement: notifList.filter(n => n.messageType === "announcement" && !isRead(n)).length,
+    alert: notifList.filter(n => n.messageType === "alert" && !isRead(n)).length,
+    reminder: notifList.filter(n => n.messageType === "reminder" && !isRead(n)).length,
+    payment_received: notifList.filter(n => n.messageType === "payment_received" && !isRead(n)).length,
+    wins_summary: notifList.filter(n => n.messageType === "wins_summary" && !isRead(n)).length,
+    deficit_alert: notifList.filter(n => n.messageType === "deficit_alert" && !isRead(n)).length,
+    debt_query: notifList.filter(n => n.messageType === "debt_query" && !isRead(n)).length,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [notifList, locallyReadIds]);
 
   const counts = useMemo(() => ({
     all: notifList.length,
@@ -515,17 +533,6 @@ export function Notifications() {
     debt_query: notifList.filter(n => n.messageType === "debt_query").length,
   }), [notifList]);
 
-  const unreadByType = useMemo(() => ({
-    all: notifList.filter(n => !n.readAt).length,
-    announcement: notifList.filter(n => n.messageType === "announcement" && !n.readAt).length,
-    alert: notifList.filter(n => n.messageType === "alert" && !n.readAt).length,
-    reminder: notifList.filter(n => n.messageType === "reminder" && !n.readAt).length,
-    payment_received: notifList.filter(n => n.messageType === "payment_received" && !n.readAt).length,
-    wins_summary: notifList.filter(n => n.messageType === "wins_summary" && !n.readAt).length,
-    deficit_alert: notifList.filter(n => n.messageType === "deficit_alert" && !n.readAt).length,
-    debt_query: notifList.filter(n => n.messageType === "debt_query" && !n.readAt).length,
-  }), [notifList]);
-
   const filtered = tab === "all" ? notifList : notifList.filter(n => n.messageType === tab);
 
   const invalidate = () => {
@@ -534,16 +541,29 @@ export function Notifications() {
   };
 
   const handleMarkRead = async (n: NotificationWithReceipt) => {
-    if (n.readAt) return;
+    if (isRead(n)) return;
+    // Optimistically mark as read immediately — updates tab badges + sidebar badge
+    setLocallyReadIds(prev => new Set(prev).add(n.id));
+    qc.setQueryData(getGetUnreadCountQueryKey(), (old: { count: number } | undefined) => ({
+      count: Math.max(0, (old?.count ?? 1) - 1),
+    }));
     try {
       await markReadMutation.mutateAsync({ id: n.id });
       invalidate();
-    } catch { /* silent */ }
+    } catch { /* silent — optimistic state stays, server will sync on next poll */ }
   };
 
   const markAllRead = async () => {
-    const items = notifList.filter(n => !n.readAt);
-    await Promise.all(items.map(n => markReadMutation.mutateAsync({ id: n.id }).catch(() => {})));
+    const unreadItems = notifList.filter(n => !isRead(n));
+    if (unreadItems.length === 0) return;
+    // Optimistically mark all as read
+    setLocallyReadIds(prev => {
+      const next = new Set(prev);
+      unreadItems.forEach(n => next.add(n.id));
+      return next;
+    });
+    qc.setQueryData(getGetUnreadCountQueryKey(), { count: 0 });
+    await Promise.all(unreadItems.map(n => markReadMutation.mutateAsync({ id: n.id }).catch(() => {})));
     invalidate();
   };
 
@@ -624,7 +644,7 @@ export function Notifications() {
                 {t.label}
                 {counts[t.id] > 0 && (
                   <span className={[
-                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center transition-colors duration-200",
                     unreadInTab > 0
                       ? "bg-red-100 text-red-600"
                       : "bg-slate-100 text-slate-500",
@@ -638,8 +658,8 @@ export function Notifications() {
         </div>
       </div>
 
-      {/* ── Content ── */}
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      {/* ── Content — full width, no max-w cap ── */}
+      <div className="px-6 py-6">
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
@@ -649,7 +669,7 @@ export function Notifications() {
         ) : (
           <div className="space-y-3">
             {/* Unread section header */}
-            {filtered.some(n => !n.readAt) && (
+            {filtered.some(n => !isRead(n)) && (
               <div className="flex items-center gap-3 py-1">
                 <div className="h-px flex-1 bg-slate-200" />
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Unread</span>
@@ -657,13 +677,13 @@ export function Notifications() {
               </div>
             )}
 
-            {/* Unread first */}
-            {filtered.filter(n => !n.readAt).map(n => (
-              <NotifCard key={n.id} n={n} onRead={handleMarkRead} />
+            {/* Unread items first */}
+            {filtered.filter(n => !isRead(n)).map(n => (
+              <NotifCard key={n.id} n={n} isRead={false} onRead={handleMarkRead} />
             ))}
 
             {/* Read section separator */}
-            {filtered.some(n => !n.readAt) && filtered.some(n => n.readAt) && (
+            {filtered.some(n => !isRead(n)) && filtered.some(n => isRead(n)) && (
               <div className="flex items-center gap-3 py-1 pt-3">
                 <div className="h-px flex-1 bg-slate-200" />
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Earlier</span>
@@ -672,8 +692,8 @@ export function Notifications() {
             )}
 
             {/* Read items */}
-            {filtered.filter(n => n.readAt).map(n => (
-              <NotifCard key={n.id} n={n} onRead={handleMarkRead} />
+            {filtered.filter(n => isRead(n)).map(n => (
+              <NotifCard key={n.id} n={n} isRead={true} onRead={handleMarkRead} />
             ))}
           </div>
         )}
