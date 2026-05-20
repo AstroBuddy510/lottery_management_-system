@@ -74,7 +74,7 @@ function Router() {
       </Route>
       
       <Route path="/users">
-        {() => <ProtectedRoute component={Users} roles={['director', 'administrator']} />}
+        {() => <ProtectedRoute component={Users} roles={['administrator']} />}
       </Route>
 
       <Route path="/agents/:agentId/detail">
@@ -82,11 +82,11 @@ function Router() {
       </Route>
 
       <Route path="/games">
-        {() => <ProtectedRoute component={Games} roles={['director', 'administrator']} />}
+        {() => <ProtectedRoute component={Games} roles={['administrator']} />}
       </Route>
 
       <Route path="/settings">
-        {() => <ProtectedRoute component={Settings} roles={['director', 'administrator']} />}
+        {() => <ProtectedRoute component={Settings} roles={['administrator']} />}
       </Route>
 
       <Route path="/sales">

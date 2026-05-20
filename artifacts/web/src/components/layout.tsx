@@ -14,9 +14,9 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
-  { label: "Users & Agents", path: "/users", roles: ["director", "administrator"] },
-  { label: "Games", path: "/games", roles: ["director", "administrator"] },
-  { label: "Settings", path: "/settings", roles: ["director", "administrator"] },
+  { label: "Users & Agents", path: "/users", roles: ["administrator"] },
+  { label: "Games", path: "/games", roles: ["administrator"] },
+  { label: "Settings", path: "/settings", roles: ["administrator"] },
   { label: "My Writers", path: "/my-writers", roles: ["agent"] },
   { label: "Gross & Wins", path: "/gross-wins", roles: ["director", "administrator"] },
   { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "agent"] },
