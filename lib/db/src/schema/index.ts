@@ -6,6 +6,7 @@ export * from "./entries";
 export * from "./payments";
 export * from "./calculations";
 export * from "./reserve";
+export * from "./reserve-receipts";
 export * from "./notifications";
 export * from "./games";
 export * from "./expenses";

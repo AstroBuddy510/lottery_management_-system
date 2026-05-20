@@ -1216,6 +1216,52 @@ export const ApplyReserveAllocationResponse = zod.object({
 
 
 /**
+ * @summary List agent reserve payment receipts
+ */
+export const ListReserveReceiptsQueryParams = zod.object({
+  "agentId": zod.coerce.string().optional(),
+  "calcDate": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional()
+})
+
+export const ListReserveReceiptsResponseItem = zod.object({
+  "id": zod.string(),
+  "agentId": zod.string(),
+  "agentFullCode": zod.string().optional(),
+  "agentName": zod.string().nullish(),
+  "calcDate": zod.string(),
+  "amountDue": zod.string(),
+  "amountPaid": zod.string(),
+  "markedBy": zod.string(),
+  "markedByName": zod.string().nullish(),
+  "markedAt": zod.string(),
+  "notes": zod.string().nullish()
+})
+export const ListReserveReceiptsResponse = zod.array(ListReserveReceiptsResponseItem)
+
+
+/**
+ * @summary Mark an agent as having paid their reserve
+ */
+export const CreateReserveReceiptBody = zod.object({
+  "agentId": zod.string(),
+  "calcDate": zod.string(),
+  "amountDue": zod.string(),
+  "amountPaid": zod.string(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Unmark a reserve payment receipt
+ */
+export const DeleteReserveReceiptParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+/**
  * @summary Get notification inbox for current user
  */
 export const ListNotificationsResponseItem = zod.object({

@@ -4,12 +4,13 @@ import {
   db,
   reserveFundTable,
   reserveAllocationsTable,
+  agentReserveReceiptsTable,
   writersTable,
   agentsTable,
   usersTable,
   dailyCalculationsTable,
 } from "@workspace/db";
-import { eq, and, gte, lte, desc, lt, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, lt, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
@@ -130,6 +131,129 @@ router.get(
     res.json(result);
   },
 );
+
+// ── Reserve Receipts ─────────────────────────────────────────────────────────
+
+router.get(
+  "/reserve/receipts",
+  requireAuth,
+  requireRole("cashier", "administrator", "director"),
+  async (req, res) => {
+    const { agentId, calcDate, dateFrom, dateTo } = req.query as Record<string, string>;
+    const conditions = [];
+    if (agentId) conditions.push(eq(agentReserveReceiptsTable.agentId, agentId));
+    if (calcDate) conditions.push(eq(agentReserveReceiptsTable.calcDate, calcDate));
+    if (dateFrom) conditions.push(gte(agentReserveReceiptsTable.calcDate, dateFrom));
+    if (dateTo) conditions.push(lte(agentReserveReceiptsTable.calcDate, dateTo));
+
+    const rows = await db
+      .select({
+        id: agentReserveReceiptsTable.id,
+        agentId: agentReserveReceiptsTable.agentId,
+        calcDate: agentReserveReceiptsTable.calcDate,
+        amountDue: agentReserveReceiptsTable.amountDue,
+        amountPaid: agentReserveReceiptsTable.amountPaid,
+        markedBy: agentReserveReceiptsTable.markedBy,
+        markedAt: agentReserveReceiptsTable.markedAt,
+        notes: agentReserveReceiptsTable.notes,
+        agentFullCode: agentsTable.fullCode,
+        agentName: usersTable.fullName,
+        markedByUserId: agentReserveReceiptsTable.markedBy,
+      })
+      .from(agentReserveReceiptsTable)
+      .innerJoin(agentsTable, eq(agentReserveReceiptsTable.agentId, agentsTable.id))
+      .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(agentReserveReceiptsTable.calcDate), agentsTable.fullCode);
+
+    // resolve markedBy names
+    const markedByIds = [...new Set(rows.map((r) => r.markedBy))];
+    const markerRows = markedByIds.length
+      ? await db.select({ id: usersTable.id, fullName: usersTable.fullName }).from(usersTable).where(
+          inArray(usersTable.id, markedByIds)
+        )
+      : [];
+    const markerMap = new Map(markerRows.map((u) => [u.id, u.fullName]));
+
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        agentId: r.agentId,
+        agentFullCode: r.agentFullCode,
+        agentName: r.agentName,
+        calcDate: r.calcDate,
+        amountDue: r.amountDue,
+        amountPaid: r.amountPaid,
+        markedBy: r.markedBy,
+        markedByName: markerMap.get(r.markedBy) ?? null,
+        markedAt: r.markedAt,
+        notes: r.notes,
+      })),
+    );
+  },
+);
+
+const CreateReceiptSchema = z.object({
+  agentId: z.string().uuid(),
+  calcDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  amountDue: z.string(),
+  amountPaid: z.string(),
+  notes: z.string().optional(),
+});
+
+router.post(
+  "/reserve/receipts",
+  requireAuth,
+  requireRole("cashier", "administrator"),
+  async (req, res) => {
+    const body = CreateReceiptSchema.parse(req.body);
+    const [row] = await db
+      .insert(agentReserveReceiptsTable)
+      .values({
+        agentId: body.agentId,
+        calcDate: body.calcDate,
+        amountDue: body.amountDue,
+        amountPaid: body.amountPaid,
+        markedBy: req.user!.userId,
+        notes: body.notes ?? null,
+      })
+      .returning();
+
+    const agentRow = await db
+      .select({ fullCode: agentsTable.fullCode, agentName: usersTable.fullName })
+      .from(agentsTable)
+      .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+      .where(eq(agentsTable.id, row.agentId))
+      .limit(1);
+
+    const markerRow = await db
+      .select({ fullName: usersTable.fullName })
+      .from(usersTable)
+      .where(eq(usersTable.id, row.markedBy))
+      .limit(1);
+
+    res.status(201).json({
+      ...row,
+      agentFullCode: agentRow[0]?.fullCode ?? null,
+      agentName: agentRow[0]?.agentName ?? null,
+      markedByName: markerRow[0]?.fullName ?? null,
+    });
+  },
+);
+
+router.delete(
+  "/reserve/receipts/:id",
+  requireAuth,
+  requireRole("cashier", "administrator"),
+  async (req, res) => {
+    await db
+      .delete(agentReserveReceiptsTable)
+      .where(eq(agentReserveReceiptsTable.id, String(req.params.id)));
+    res.status(204).send();
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const AllocateReserveBodySchema = z.object({
   strategy: z.enum(["fifo", "lifo", "best_performer"]),

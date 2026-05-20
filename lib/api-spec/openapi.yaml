@@ -1247,6 +1247,76 @@ paths:
               schema:
                 $ref: "#/components/schemas/AllocateReserveResult"
 
+  /reserve/receipts:
+    get:
+      operationId: listReserveReceipts
+      tags: [reserve]
+      summary: List agent reserve payment receipts
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: agentId
+          schema:
+            type: string
+        - in: query
+          name: calcDate
+          schema:
+            type: string
+        - in: query
+          name: dateFrom
+          schema:
+            type: string
+        - in: query
+          name: dateTo
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReserveReceipt"
+    post:
+      operationId: createReserveReceipt
+      tags: [reserve]
+      summary: Mark an agent as having paid their reserve
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReserveReceiptBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReserveReceipt"
+
+  /reserve/receipts/{id}:
+    delete:
+      operationId: deleteReserveReceipt
+      tags: [reserve]
+      summary: Unmark a reserve payment receipt
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+
   /notifications:
     get:
       operationId: listNotifications
@@ -2152,6 +2222,48 @@ components:
                 type: string
               outstanding:
                 type: string
+
+    ReserveReceipt:
+      type: object
+      required: [id, agentId, calcDate, amountDue, amountPaid, markedBy, markedAt]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        agentFullCode:
+          type: string
+        agentName:
+          type: ["string", "null"]
+        calcDate:
+          type: string
+        amountDue:
+          type: string
+        amountPaid:
+          type: string
+        markedBy:
+          type: string
+        markedByName:
+          type: ["string", "null"]
+        markedAt:
+          type: string
+        notes:
+          type: ["string", "null"]
+
+    CreateReserveReceiptBody:
+      type: object
+      required: [agentId, calcDate, amountDue, amountPaid]
+      properties:
+        agentId:
+          type: string
+        calcDate:
+          type: string
+        amountDue:
+          type: string
+        amountPaid:
+          type: string
+        notes:
+          type: string
 
     Notification:
       type: object

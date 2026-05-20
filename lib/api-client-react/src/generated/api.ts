@@ -31,6 +31,7 @@ import type {
   CalcRunResult,
   CreateExpenseCategoryBody,
   CreateGameBody,
+  CreateReserveReceiptBody,
   DailyCalculation,
   ErrorResponse,
   ExpenseCategory,
@@ -47,6 +48,7 @@ import type {
   ListGrossEntriesParams,
   ListPaymentsParams,
   ListReserveAllocationsParams,
+  ListReserveReceiptsParams,
   ListSalesParams,
   ListUsersParams,
   ListWinsEntriesParams,
@@ -62,6 +64,7 @@ import type {
   RefreshInput,
   ReserveAllocation,
   ReserveDebt,
+  ReserveReceipt,
   ReserveSummary,
   SalesLog,
   SalesLogInput,
@@ -4174,6 +4177,231 @@ export const useApplyReserveAllocation = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getApplyReserveAllocationMutationOptions(options));
+    }
+
+export const getListReserveReceiptsUrl = (params?: ListReserveReceiptsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reserve/receipts?${stringifiedParams}` : `/api/reserve/receipts`
+}
+
+/**
+ * @summary List agent reserve payment receipts
+ */
+export const listReserveReceipts = async (params?: ListReserveReceiptsParams, options?: RequestInit): Promise<ReserveReceipt[]> => {
+
+  return customFetch<ReserveReceipt[]>(getListReserveReceiptsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListReserveReceiptsQueryKey = (params?: ListReserveReceiptsParams,) => {
+    return [
+    `/api/reserve/receipts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListReserveReceiptsQueryOptions = <TData = Awaited<ReturnType<typeof listReserveReceipts>>, TError = ErrorType<unknown>>(params?: ListReserveReceiptsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReserveReceipts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListReserveReceiptsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listReserveReceipts>>> = ({ signal }) => listReserveReceipts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listReserveReceipts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListReserveReceiptsQueryResult = NonNullable<Awaited<ReturnType<typeof listReserveReceipts>>>
+export type ListReserveReceiptsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List agent reserve payment receipts
+ */
+
+export function useListReserveReceipts<TData = Awaited<ReturnType<typeof listReserveReceipts>>, TError = ErrorType<unknown>>(
+ params?: ListReserveReceiptsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReserveReceipts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListReserveReceiptsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateReserveReceiptUrl = () => {
+
+
+
+
+  return `/api/reserve/receipts`
+}
+
+/**
+ * @summary Mark an agent as having paid their reserve
+ */
+export const createReserveReceipt = async (createReserveReceiptBody: CreateReserveReceiptBody, options?: RequestInit): Promise<ReserveReceipt> => {
+
+  return customFetch<ReserveReceipt>(getCreateReserveReceiptUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createReserveReceiptBody,)
+  }
+);}
+
+
+
+
+export const getCreateReserveReceiptMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReserveReceipt>>, TError,{data: BodyType<CreateReserveReceiptBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createReserveReceipt>>, TError,{data: BodyType<CreateReserveReceiptBody>}, TContext> => {
+
+const mutationKey = ['createReserveReceipt'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createReserveReceipt>>, {data: BodyType<CreateReserveReceiptBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createReserveReceipt(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateReserveReceiptMutationResult = NonNullable<Awaited<ReturnType<typeof createReserveReceipt>>>
+    export type CreateReserveReceiptMutationBody = BodyType<CreateReserveReceiptBody>
+    export type CreateReserveReceiptMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark an agent as having paid their reserve
+ */
+export const useCreateReserveReceipt = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReserveReceipt>>, TError,{data: BodyType<CreateReserveReceiptBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createReserveReceipt>>,
+        TError,
+        {data: BodyType<CreateReserveReceiptBody>},
+        TContext
+      > => {
+      return useMutation(getCreateReserveReceiptMutationOptions(options));
+    }
+
+export const getDeleteReserveReceiptUrl = (id: string,) => {
+
+
+
+
+  return `/api/reserve/receipts/${id}`
+}
+
+/**
+ * @summary Unmark a reserve payment receipt
+ */
+export const deleteReserveReceipt = async (id: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteReserveReceiptUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteReserveReceiptMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReserveReceipt>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteReserveReceipt>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteReserveReceipt'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteReserveReceipt>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteReserveReceipt(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteReserveReceiptMutationResult = NonNullable<Awaited<ReturnType<typeof deleteReserveReceipt>>>
+
+    export type DeleteReserveReceiptMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Unmark a reserve payment receipt
+ */
+export const useDeleteReserveReceipt = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReserveReceipt>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteReserveReceipt>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteReserveReceiptMutationOptions(options));
     }
 
 export const getListNotificationsUrl = () => {

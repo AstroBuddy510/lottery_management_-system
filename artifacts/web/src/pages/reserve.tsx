@@ -5,13 +5,17 @@ import {
   useListReserveAllocations,
   useListReserveDebts,
   useApplyReserveAllocation,
+  useListReserveReceipts,
+  useDeleteReserveReceipt,
   getGetReserveBalanceQueryKey,
   getListReserveAllocationsQueryKey,
   getListReserveDebtsQueryKey,
+  getListReserveReceiptsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -118,11 +122,14 @@ function HealthGauge({ pctUsed }: { pctUsed: number }) {
 }
 
 export function Reserve() {
-  const [tab, setTab] = useState<"overview" | "debt">("overview");
+  const [tab, setTab] = useState<"overview" | "debt" | "ledger">("overview");
   const [strategy, setStrategy] = useState<Strategy>("fifo");
   const [maxAmount, setMaxAmount] = useState<string>("");
   const [simResult, setSimResult] = useState<null | { items: { agentId: string; amountApplied: string; outstanding: string }[]; totalAllocated: string; newBalance: string; allocatedCount: number }>(null);
   const [applying, setApplying] = useState(false);
+  const [ledgerDateFrom, setLedgerDateFrom] = useState<string>("");
+  const [ledgerDateTo, setLedgerDateTo] = useState<string>("");
+  const [ledgerDeleting, setLedgerDeleting] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -137,6 +144,16 @@ export function Reserve() {
   });
 
   const { mutateAsync: applyAllocation } = useApplyReserveAllocation();
+  const { mutateAsync: deleteReceiptMutation } = useDeleteReserveReceipt();
+
+  const ledgerParams = {
+    ...(ledgerDateFrom ? { dateFrom: ledgerDateFrom } : {}),
+    ...(ledgerDateTo ? { dateTo: ledgerDateTo } : {}),
+  };
+  const { data: receipts, isLoading: loadingReceipts } = useListReserveReceipts(
+    ledgerParams,
+    { query: { queryKey: getListReserveReceiptsQueryKey(ledgerParams), refetchInterval: 30_000 } },
+  );
 
   const allocationList = Array.isArray(allocations) ? allocations : [];
   const debtList = Array.isArray(debts) ? debts : [];
@@ -224,7 +241,8 @@ export function Reserve() {
           {([
             { id: "overview", label: "Overview" },
             { id: "debt", label: "Smart Debt Management" },
-          ] as const).map((t) => (
+            { id: "ledger", label: "Agent Ledger" },
+          ] as { id: "overview" | "debt" | "ledger"; label: string }[]).map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -641,13 +659,239 @@ export function Reserve() {
             </div>
           </>
         )}
+
+        {/* ── AGENT LEDGER TAB ─────────────────────────────────────── */}
+        {tab === "ledger" && (
+          <AgentLedgerTab
+            dateFrom={ledgerDateFrom}
+            dateTo={ledgerDateTo}
+            onDateFromChange={setLedgerDateFrom}
+            onDateToChange={setLedgerDateTo}
+            receipts={Array.isArray(receipts) ? receipts : []}
+            loading={loadingReceipts}
+            deleting={ledgerDeleting}
+            onDelete={async (id) => {
+              setLedgerDeleting(id);
+              try {
+                await deleteReceiptMutation({ id });
+                toast.success("Receipt removed.");
+                await queryClient.invalidateQueries({ queryKey: getListReserveReceiptsQueryKey(ledgerParams) });
+              } catch {
+                toast.error("Failed to remove receipt.");
+              } finally {
+                setLedgerDeleting(null);
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-const strategyColors: Record<Strategy, string> = {
-  fifo: "border-blue-500 bg-blue-50 ring-blue-200",
-  lifo: "border-purple-500 bg-purple-50 ring-purple-200",
-  best_performer: "border-emerald-500 bg-emerald-50 ring-emerald-200",
+type ReceiptRow = {
+  id: string;
+  agentId: string;
+  agentFullCode?: string | null;
+  agentName?: string | null;
+  calcDate: string;
+  amountDue: string;
+  amountPaid: string;
+  markedBy: string;
+  markedByName?: string | null;
+  markedAt: string;
+  notes?: string | null;
 };
+
+function AgentLedgerTab({
+  dateFrom, dateTo, onDateFromChange, onDateToChange,
+  receipts, loading, deleting, onDelete,
+}: {
+  dateFrom: string;
+  dateTo: string;
+  onDateFromChange: (v: string) => void;
+  onDateToChange: (v: string) => void;
+  receipts: ReceiptRow[];
+  loading: boolean;
+  deleting: string | null;
+  onDelete: (id: string) => void;
+}) {
+  const [agentFilter, setAgentFilter] = useState<string>("");
+
+  const filtered = agentFilter.trim()
+    ? receipts.filter(
+        (r) =>
+          (r.agentFullCode ?? "").toLowerCase().includes(agentFilter.toLowerCase()) ||
+          (r.agentName ?? "").toLowerCase().includes(agentFilter.toLowerCase()),
+      )
+    : receipts;
+
+  // Group by agent
+  const byAgent = useMemo(() => {
+    const map = new Map<string, { agentId: string; agentFullCode: string; agentName: string | null; rows: ReceiptRow[] }>();
+    for (const r of filtered) {
+      const key = r.agentId;
+      if (!map.has(key)) {
+        map.set(key, { agentId: r.agentId, agentFullCode: r.agentFullCode ?? r.agentId.slice(0, 8), agentName: r.agentName ?? null, rows: [] });
+      }
+      map.get(key)!.rows.push(r);
+    }
+    return [...map.values()].sort((a, b) => a.agentFullCode.localeCompare(b.agentFullCode));
+  }, [filtered]);
+
+  const totalDue = filtered.reduce((s, r) => s + Number(r.amountDue), 0);
+  const totalPaid = filtered.reduce((s, r) => s + Number(r.amountPaid), 0);
+  const totalGap = totalDue - totalPaid;
+  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
+
+  function toggleAgent(agentId: string) {
+    setExpandedAgents((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
+      return next;
+    });
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Filters */}
+      <div className="flex gap-3 items-center flex-wrap">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-500 font-medium whitespace-nowrap">From</label>
+          <Input type="date" value={dateFrom} onChange={(e) => onDateFromChange(e.target.value)} className="h-8 text-sm w-36" />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-slate-500 font-medium whitespace-nowrap">To</label>
+          <Input type="date" value={dateTo} onChange={(e) => onDateToChange(e.target.value)} className="h-8 text-sm w-36" />
+        </div>
+        <Input
+          placeholder="Filter by agent…"
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
+          className="h-8 text-sm w-52"
+        />
+      </div>
+
+      {/* Summary chips */}
+      <div className="flex gap-3 flex-wrap">
+        {[
+          { label: "Total Receipts", value: filtered.length, color: "bg-slate-100 text-slate-700" },
+          { label: "Total Due", value: GHS(totalDue), color: "bg-slate-100 text-slate-700" },
+          { label: "Total Paid", value: GHS(totalPaid), color: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+          { label: "Shortfall", value: GHS(Math.max(0, totalGap)), color: totalGap > 0 ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-slate-100 text-slate-500" },
+        ].map((c) => (
+          <div key={c.label} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${c.color}`}>
+            {c.label}: <span className="font-bold">{c.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-agent accordion */}
+      {loading ? (
+        <Card className="border-0 shadow-sm bg-white">
+          <CardContent className="py-12 text-center text-sm text-slate-400">Loading receipts…</CardContent>
+        </Card>
+      ) : byAgent.length === 0 ? (
+        <Card className="border-0 shadow-sm bg-white">
+          <CardContent className="py-12 text-center">
+            <svg className="w-8 h-8 text-slate-300 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <p className="text-sm text-slate-400">No receipts found</p>
+            <p className="text-xs text-slate-400 mt-1">Use the date filters above, or record payments via the Cashier's Reserve Receipts page</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {byAgent.map((agent) => {
+            const agentDue = agent.rows.reduce((s, r) => s + Number(r.amountDue), 0);
+            const agentPaid = agent.rows.reduce((s, r) => s + Number(r.amountPaid), 0);
+            const agentGap = agentDue - agentPaid;
+            const expanded = expandedAgents.has(agent.agentId);
+            return (
+              <Card key={agent.agentId} className="border-0 shadow-sm bg-white overflow-hidden">
+                <button
+                  className="w-full text-left"
+                  onClick={() => toggleAgent(agent.agentId)}
+                >
+                  <div className="px-5 py-4 flex items-center gap-4 hover:bg-slate-50/60 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-bold text-slate-800">{agent.agentFullCode}</span>
+                        {agent.agentName && <span className="text-xs text-slate-500">{agent.agentName}</span>}
+                        <Badge variant="outline" className="text-xs ml-1">{agent.rows.length} payment{agent.rows.length !== 1 ? "s" : ""}</Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6 text-right flex-shrink-0">
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">Due</p>
+                        <p className="text-sm font-mono font-semibold text-slate-700">{GHS(agentDue)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">Paid</p>
+                        <p className="text-sm font-mono font-semibold text-emerald-600">{GHS(agentPaid)}</p>
+                      </div>
+                      {agentGap > 0.005 && (
+                        <div>
+                          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium">Shortfall</p>
+                          <p className="text-sm font-mono font-semibold text-amber-600">{GHS(agentGap)}</p>
+                        </div>
+                      )}
+                      <svg
+                        className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+
+                {expanded && (
+                  <div className="border-t">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-slate-50/80">
+                          <TableHead className="pl-5 text-xs text-slate-500">Date</TableHead>
+                          <TableHead className="text-xs text-slate-500 text-right">Amount Due</TableHead>
+                          <TableHead className="text-xs text-slate-500 text-right">Amount Paid</TableHead>
+                          <TableHead className="text-xs text-slate-500">Notes</TableHead>
+                          <TableHead className="text-xs text-slate-500">Marked By</TableHead>
+                          <TableHead className="text-xs text-slate-500">Marked At</TableHead>
+                          <TableHead className="text-xs text-slate-500 pr-5 text-right">Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {agent.rows.map((r) => (
+                          <TableRow key={r.id} className="hover:bg-slate-50/40">
+                            <TableCell className="pl-5 font-mono text-sm text-slate-700">{r.calcDate}</TableCell>
+                            <TableCell className="text-right font-mono text-sm text-slate-700">{GHS(r.amountDue)}</TableCell>
+                            <TableCell className="text-right font-mono text-sm font-semibold text-emerald-600">{GHS(r.amountPaid)}</TableCell>
+                            <TableCell className="text-xs text-slate-500 max-w-[140px] truncate">{r.notes ?? <span className="text-slate-300">—</span>}</TableCell>
+                            <TableCell className="text-xs text-slate-500">{r.markedByName ?? r.markedBy.slice(0, 8) + "…"}</TableCell>
+                            <TableCell className="text-xs text-slate-500">{new Date(r.markedAt).toLocaleString("en-GH", { dateStyle: "short", timeStyle: "short" })}</TableCell>
+                            <TableCell className="pr-5 text-right">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                disabled={deleting === r.id}
+                                onClick={() => onDelete(r.id)}
+                              >
+                                {deleting === r.id ? "Removing…" : "Remove"}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+

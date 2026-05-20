@@ -584,6 +584,31 @@ export interface AllocateReserveResult {
   items: AllocateReserveResultItemsItem[];
 }
 
+export interface ReserveReceipt {
+  id: string;
+  agentId: string;
+  agentFullCode?: string;
+  /** @nullable */
+  agentName?: string | null;
+  calcDate: string;
+  amountDue: string;
+  amountPaid: string;
+  markedBy: string;
+  /** @nullable */
+  markedByName?: string | null;
+  markedAt: string;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export interface CreateReserveReceiptBody {
+  agentId: string;
+  calcDate: string;
+  amountDue: string;
+  amountPaid: string;
+  notes?: string;
+}
+
 export type NotificationMessageType = typeof NotificationMessageType[keyof typeof NotificationMessageType];
 
 
@@ -881,6 +906,13 @@ dateTo?: string;
 };
 
 export type ListReserveAllocationsParams = {
+dateFrom?: string;
+dateTo?: string;
+};
+
+export type ListReserveReceiptsParams = {
+agentId?: string;
+calcDate?: string;
 dateFrom?: string;
 dateTo?: string;
 };

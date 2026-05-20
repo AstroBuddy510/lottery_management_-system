@@ -21,6 +21,7 @@ import { Payments } from "@/pages/payments";
 import { Calculations } from "@/pages/calculations";
 import { Reports } from "@/pages/reports";
 import { Reserve } from "@/pages/reserve";
+import { ReserveReceipts } from "@/pages/reserve-receipts";
 import { Notifications } from "@/pages/notifications";
 import { MyWriters } from "@/pages/my-writers";
 import { WinsDebt } from "@/pages/wins-debt";
@@ -120,6 +121,10 @@ function Router() {
 
       <Route path="/reserve">
         {() => <ProtectedRoute component={Reserve} roles={['director', 'administrator']} />}
+      </Route>
+
+      <Route path="/reserve-receipts">
+        {() => <ProtectedRoute component={ReserveReceipts} roles={['cashier', 'administrator']} />}
       </Route>
 
       <Route path="/my-writers">
