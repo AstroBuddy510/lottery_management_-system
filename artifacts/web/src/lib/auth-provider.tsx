@@ -247,7 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           <div className="text-center space-y-3 py-2">
             <p className="text-sm text-muted-foreground">
-              You've been inactive. For security, you'll be logged out in:
+              You've been inactive. You will be automatically logged out in:
             </p>
             <div
               className="text-7xl font-mono font-bold tabular-nums leading-none transition-colors"
@@ -258,12 +258,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             <p className="text-xs text-muted-foreground">seconds</p>
           </div>
 
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
+          <DialogFooter>
             <Button className="w-full" size="lg" onClick={handleStayLoggedIn}>
               Stay Logged In
-            </Button>
-            <Button variant="outline" className="w-full" onClick={performLogout}>
-              Log Out Now
             </Button>
           </DialogFooter>
         </DialogContent>
