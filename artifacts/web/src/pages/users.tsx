@@ -1,4 +1,4 @@
-import { Fragment, useState, useMemo } from "react";
+import { Fragment, useState, useMemo, useRef } from "react";
 import {
   useListUsers, useCreateUser, useUpdateUser, useDeactivateUser, useRegeneratePin,
   useListAgents, useCreateAgent, useUpdateAgent, useUpdateMyPhoto,
@@ -52,6 +52,24 @@ function UserAvatar({ name, picture }: { name: string; picture?: string | null }
       {initials || "?"}
     </div>
   );
+}
+
+function resizeImageToDataUrl(file: File, maxPx = 320): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
 }
 
 // ─── Writers sub-section (inside Agents tab) ─────────────────────────────────
@@ -200,6 +218,31 @@ function UsersTab() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoTarget, setPhotoTarget] = useState<User | null>(null);
+
+  const handlePhotoClick = (e: React.MouseEvent, u: User) => {
+    e.stopPropagation();
+    setPhotoTarget(u);
+    photoInputRef.current?.click();
+  };
+
+  const handlePhotoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !photoTarget) return;
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 320);
+      await updateMutation.mutateAsync({ id: photoTarget.id, data: { profilePicture: dataUrl } });
+      invalidateAll();
+      toast({ title: `Photo updated for ${photoTarget.fullName}` });
+    } catch {
+      toast({ title: "Failed to upload photo", variant: "destructive" });
+    } finally {
+      setPhotoTarget(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     let list = Array.isArray(users) ? users : [];
@@ -353,7 +396,17 @@ function UsersTab() {
               <TableRow key={u.id} className={!u.isActive ? "opacity-50" : ""}>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
-                    <UserAvatar name={u.fullName} picture={u.profilePicture} />
+                    <button
+                      type="button"
+                      onClick={e => handlePhotoClick(e, u)}
+                      className="relative group flex-shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      title="Click to upload profile photo"
+                    >
+                      <UserAvatar name={u.fullName} picture={u.profilePicture} />
+                      <span className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                      </span>
+                    </button>
                     <span className="font-medium text-sm">{u.fullName}</span>
                   </div>
                 </TableCell>
@@ -373,6 +426,15 @@ function UsersTab() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Hidden file input for inline avatar upload */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handlePhotoFile}
+      />
 
       {/* Create User Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
