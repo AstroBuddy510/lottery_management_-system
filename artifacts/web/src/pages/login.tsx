@@ -134,7 +134,7 @@ export function Login() {
 
             <Button
               type="submit"
-              className="w-full h-10 mt-1 font-semibold bg-blue-600 hover:bg-blue-500 text-white border-0 shadow-lg"
+              className="w-full h-10 mt-1 font-bold bg-blue-500 hover:bg-blue-400 active:bg-blue-600 text-white border-2 border-blue-300 hover:border-white shadow-[0_0_18px_rgba(59,130,246,0.7)] hover:shadow-[0_0_26px_rgba(147,197,253,0.8)] transition-all duration-200 tracking-wide"
               disabled={isLoading || !phone || !role || pin.length !== 4}
             >
               {isLoading ? "Signing in…" : "Sign in"}
