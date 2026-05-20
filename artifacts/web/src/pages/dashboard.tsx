@@ -53,14 +53,17 @@ function AgentAvatar({ name, picture, size = "lg" }: { name: string; picture?: s
   );
 }
 
-function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
+function StatCard({ label, value, accent, pending }: { label: string; value: string | number; accent?: boolean; pending?: boolean }) {
   return (
-    <Card>
+    <Card className={pending ? "border-amber-200 bg-amber-50/30" : ""}>
       <CardHeader className="pb-1 pt-4 px-4">
-        <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</CardTitle>
+        <CardTitle className={`text-xs font-medium uppercase tracking-wide flex items-center gap-1.5 ${pending ? "text-amber-700/80" : "text-muted-foreground"}`}>
+          {label}
+          {pending && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block flex-shrink-0" />}
+        </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4">
-        <div className={`text-xl font-bold ${accent ? "text-primary" : ""}`}>{value}</div>
+        <div className={`text-xl font-bold ${accent ? "text-primary" : pending ? "text-amber-800" : ""}`}>{value}</div>
       </CardContent>
     </Card>
   );
@@ -351,9 +354,18 @@ function DirectorDashboard() {
   );
 
   const totals = useMemo(() => agentStats.reduce(
-    (acc, s) => ({ gross: acc.gross + s.gross, net: acc.net + s.net, reserve: acc.reserve + s.reserve, balance: acc.balance + s.balance }),
-    { gross: 0, net: 0, reserve: 0, balance: 0 }
+    (acc, s) => ({
+      gross:      acc.gross      + s.gross,
+      commission: acc.commission + s.commission,
+      net:        acc.net        + s.net,
+      wins:       acc.wins       + s.wins,
+      reserve:    acc.reserve    + s.reserve,
+      balance:    acc.balance    + s.balance,
+    }),
+    { gross: 0, commission: 0, net: 0, wins: 0, reserve: 0, balance: 0 }
   ), [agentStats]);
+
+  const anyPending = useMemo(() => agentStats.some(s => s.isPending), [agentStats]);
 
   const accumulatedReserve = Number(reserve?.balance ?? 0);
 
@@ -455,13 +467,35 @@ function DirectorDashboard() {
         </div>
       </div>
 
-      {/* Summary cards — based on last calculation run */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <StatCard label="Calculated Gross" value={fmtGHS(totals.gross)} />
-        <StatCard label="Calculated Net" value={fmtGHS(totals.net)} />
-        <StatCard label="Calculated Reserve" value={fmtGHS(totals.reserve)} />
-        <StatCard label="Accumulated Reserve" value={fmtGHS(accumulatedReserve)} accent />
-        <StatCard label="Overall Balance" value={fmtGHS(totals.balance)} accent={totals.balance >= 0} />
+      {/* Summary cards — live or calculated */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <StatCard
+          label={anyPending ? "Gross (Live ~)" : "Total Gross"}
+          value={fmtGHS(totals.gross)}
+          pending={anyPending}
+        />
+        <StatCard
+          label={anyPending ? "Wins (Live ~)" : "Total Wins"}
+          value={fmtGHS(totals.wins)}
+          pending={anyPending}
+        />
+        <StatCard
+          label={anyPending ? "Commission ~" : "Commission"}
+          value={fmtGHS(totals.commission)}
+          pending={anyPending}
+        />
+        <StatCard
+          label={anyPending ? "Net Gross ~" : "Net Gross"}
+          value={fmtGHS(totals.net)}
+          pending={anyPending}
+        />
+        <StatCard label="Reserve Fund" value={fmtGHS(accumulatedReserve)} accent />
+        <StatCard
+          label={anyPending ? "Est. Balance ~" : "Overall Balance"}
+          value={fmtGHS(totals.balance)}
+          accent={totals.balance >= 0}
+          pending={anyPending}
+        />
       </div>
 
       {/* Controls row */}
