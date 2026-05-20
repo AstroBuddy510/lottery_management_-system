@@ -1132,6 +1132,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/OrgReport"
 
+  /reports/wins-debt:
+    get:
+      operationId: getWinsDebtReport
+      tags: [reports]
+      summary: Wins debt overview — queue aging, clearance breakdown, payment speed
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WinsDebtReport"
+
   /reserve/balance:
     get:
       operationId: getReserveBalance
@@ -2191,4 +2206,122 @@ components:
         status:
           type: string
           enum: [offline, live]
+
+    WinsDebtAgingBucket:
+      type: object
+      required: [count, amount]
+      properties:
+        count:
+          type: integer
+        amount:
+          type: string
+
+    WinsDebtQueueItem:
+      type: object
+      required: [id, writerId, writerName, writerCode, agentId, agentName, agentCode, entryDate, winsAmount, daysInQueue, urgency]
+      properties:
+        id:
+          type: string
+        writerId:
+          type: string
+        writerName:
+          type: string
+        writerCode:
+          type: string
+        agentId:
+          type: string
+        agentName:
+          type: string
+        agentCode:
+          type: string
+        entryDate:
+          type: string
+        winsAmount:
+          type: string
+        daysInQueue:
+          type: integer
+        urgency:
+          type: string
+          enum: [ok, warning, critical]
+
+    WinsDebtHistoryItem:
+      type: object
+      required: [calcDate, writerId, writerName, writerCode, agentName, winsAmount, clearedBy, reserveDrawn, daysToCalculate, writerBalance]
+      properties:
+        calcDate:
+          type: string
+        writerId:
+          type: string
+        writerName:
+          type: string
+        writerCode:
+          type: string
+        agentName:
+          type: string
+        winsAmount:
+          type: string
+        clearedBy:
+          type: string
+          enum: [agent_net, reserve, deficit]
+        reserveDrawn:
+          type: string
+        daysToCalculate:
+          type: integer
+        writerBalance:
+          type: string
+
+    WinsDebtReport:
+      type: object
+      required: [summary, aging, paymentSpeed, queue, history]
+      properties:
+        summary:
+          type: object
+          required: [totalWinsRecorded, totalCalculated, totalPending, clearedByAgentNet, clearedByReserve, remainingDeficit, pendingCount, calculatedCount]
+          properties:
+            totalWinsRecorded:
+              type: string
+            totalCalculated:
+              type: string
+            totalPending:
+              type: string
+            clearedByAgentNet:
+              type: string
+            clearedByReserve:
+              type: string
+            remainingDeficit:
+              type: string
+            pendingCount:
+              type: integer
+            calculatedCount:
+              type: integer
+        aging:
+          type: object
+          required: [under7Days, days7to14, days14to30, over30Days]
+          properties:
+            under7Days:
+              $ref: "#/components/schemas/WinsDebtAgingBucket"
+            days7to14:
+              $ref: "#/components/schemas/WinsDebtAgingBucket"
+            days14to30:
+              $ref: "#/components/schemas/WinsDebtAgingBucket"
+            over30Days:
+              $ref: "#/components/schemas/WinsDebtAgingBucket"
+        paymentSpeed:
+          type: object
+          required: []
+          properties:
+            avgDaysToCalculate:
+              type: ["number", "null"]
+            fastestDays:
+              type: ["integer", "null"]
+            slowestDays:
+              type: ["integer", "null"]
+        queue:
+          type: array
+          items:
+            $ref: "#/components/schemas/WinsDebtQueueItem"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/WinsDebtHistoryItem"
 

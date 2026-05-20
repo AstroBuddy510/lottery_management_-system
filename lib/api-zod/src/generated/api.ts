@@ -991,6 +991,71 @@ export const GetOrgReportResponse = zod.object({
 
 
 /**
+ * @summary Wins debt overview — queue aging, clearance breakdown, payment speed
+ */
+export const GetWinsDebtReportResponse = zod.object({
+  "summary": zod.object({
+  "totalWinsRecorded": zod.string(),
+  "totalCalculated": zod.string(),
+  "totalPending": zod.string(),
+  "clearedByAgentNet": zod.string(),
+  "clearedByReserve": zod.string(),
+  "remainingDeficit": zod.string(),
+  "pendingCount": zod.number(),
+  "calculatedCount": zod.number()
+}),
+  "aging": zod.object({
+  "under7Days": zod.object({
+  "count": zod.number(),
+  "amount": zod.string()
+}),
+  "days7to14": zod.object({
+  "count": zod.number(),
+  "amount": zod.string()
+}),
+  "days14to30": zod.object({
+  "count": zod.number(),
+  "amount": zod.string()
+}),
+  "over30Days": zod.object({
+  "count": zod.number(),
+  "amount": zod.string()
+})
+}),
+  "paymentSpeed": zod.object({
+  "avgDaysToCalculate": zod.number().nullish(),
+  "fastestDays": zod.number().nullish(),
+  "slowestDays": zod.number().nullish()
+}),
+  "queue": zod.array(zod.object({
+  "id": zod.string(),
+  "writerId": zod.string(),
+  "writerName": zod.string(),
+  "writerCode": zod.string(),
+  "agentId": zod.string(),
+  "agentName": zod.string(),
+  "agentCode": zod.string(),
+  "entryDate": zod.string(),
+  "winsAmount": zod.string(),
+  "daysInQueue": zod.number(),
+  "urgency": zod.enum(['ok', 'warning', 'critical'])
+})),
+  "history": zod.array(zod.object({
+  "calcDate": zod.string(),
+  "writerId": zod.string(),
+  "writerName": zod.string(),
+  "writerCode": zod.string(),
+  "agentName": zod.string(),
+  "winsAmount": zod.string(),
+  "clearedBy": zod.enum(['agent_net', 'reserve', 'deficit']),
+  "reserveDrawn": zod.string(),
+  "daysToCalculate": zod.number(),
+  "writerBalance": zod.string()
+}))
+})
+
+
+/**
  * @summary Get current reserve fund balance
  */
 export const GetReserveBalanceResponse = zod.object({

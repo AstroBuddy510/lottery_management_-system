@@ -78,6 +78,7 @@ import type {
   UserInput,
   UserUpdate,
   VoidInput,
+  WinsDebtReport,
   WinsEntry,
   WinsEntryInput,
   WinsEntryUpdate,
@@ -3705,6 +3706,83 @@ export function useGetOrgReport<TData = Awaited<ReturnType<typeof getOrgReport>>
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetOrgReportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetWinsDebtReportUrl = () => {
+
+
+
+
+  return `/api/reports/wins-debt`
+}
+
+/**
+ * @summary Wins debt overview — queue aging, clearance breakdown, payment speed
+ */
+export const getWinsDebtReport = async ( options?: RequestInit): Promise<WinsDebtReport> => {
+
+  return customFetch<WinsDebtReport>(getGetWinsDebtReportUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWinsDebtReportQueryKey = () => {
+    return [
+    `/api/reports/wins-debt`
+    ] as const;
+    }
+
+
+export const getGetWinsDebtReportQueryOptions = <TData = Awaited<ReturnType<typeof getWinsDebtReport>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWinsDebtReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWinsDebtReportQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWinsDebtReport>>> = ({ signal }) => getWinsDebtReport({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWinsDebtReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWinsDebtReportQueryResult = NonNullable<Awaited<ReturnType<typeof getWinsDebtReport>>>
+export type GetWinsDebtReportQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Wins debt overview — queue aging, clearance breakdown, payment speed
+ */
+
+export function useGetWinsDebtReport<TData = Awaited<ReturnType<typeof getWinsDebtReport>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWinsDebtReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWinsDebtReportQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

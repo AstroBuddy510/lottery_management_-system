@@ -681,6 +681,91 @@ export interface UpdateGameBody {
   status?: UpdateGameBodyStatus;
 }
 
+export interface WinsDebtAgingBucket {
+  count: number;
+  amount: string;
+}
+
+export type WinsDebtQueueItemUrgency = typeof WinsDebtQueueItemUrgency[keyof typeof WinsDebtQueueItemUrgency];
+
+
+export const WinsDebtQueueItemUrgency = {
+  ok: 'ok',
+  warning: 'warning',
+  critical: 'critical',
+} as const;
+
+export interface WinsDebtQueueItem {
+  id: string;
+  writerId: string;
+  writerName: string;
+  writerCode: string;
+  agentId: string;
+  agentName: string;
+  agentCode: string;
+  entryDate: string;
+  winsAmount: string;
+  daysInQueue: number;
+  urgency: WinsDebtQueueItemUrgency;
+}
+
+export type WinsDebtHistoryItemClearedBy = typeof WinsDebtHistoryItemClearedBy[keyof typeof WinsDebtHistoryItemClearedBy];
+
+
+export const WinsDebtHistoryItemClearedBy = {
+  agent_net: 'agent_net',
+  reserve: 'reserve',
+  deficit: 'deficit',
+} as const;
+
+export interface WinsDebtHistoryItem {
+  calcDate: string;
+  writerId: string;
+  writerName: string;
+  writerCode: string;
+  agentName: string;
+  winsAmount: string;
+  clearedBy: WinsDebtHistoryItemClearedBy;
+  reserveDrawn: string;
+  daysToCalculate: number;
+  writerBalance: string;
+}
+
+export type WinsDebtReportSummary = {
+  totalWinsRecorded: string;
+  totalCalculated: string;
+  totalPending: string;
+  clearedByAgentNet: string;
+  clearedByReserve: string;
+  remainingDeficit: string;
+  pendingCount: number;
+  calculatedCount: number;
+};
+
+export type WinsDebtReportAging = {
+  under7Days: WinsDebtAgingBucket;
+  days7to14: WinsDebtAgingBucket;
+  days14to30: WinsDebtAgingBucket;
+  over30Days: WinsDebtAgingBucket;
+};
+
+export type WinsDebtReportPaymentSpeed = {
+  /** @nullable */
+  avgDaysToCalculate?: number | null;
+  /** @nullable */
+  fastestDays?: number | null;
+  /** @nullable */
+  slowestDays?: number | null;
+};
+
+export interface WinsDebtReport {
+  summary: WinsDebtReportSummary;
+  aging: WinsDebtReportAging;
+  paymentSpeed: WinsDebtReportPaymentSpeed;
+  queue: WinsDebtQueueItem[];
+  history: WinsDebtHistoryItem[];
+}
+
 export type ListUsersParams = {
 role?: string;
 isActive?: boolean;
