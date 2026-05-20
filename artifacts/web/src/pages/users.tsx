@@ -610,6 +610,8 @@ function AgentsTab() {
 
   const [locatingCreate, setLocatingCreate] = useState(false);
   const [locatingEdit,   setLocatingEdit]   = useState(false);
+  const geocodeTimerCreate = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocodeTimerEdit   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredAgents = useMemo(() => {
     let list = Array.isArray(agents) ? agents : [];
@@ -647,35 +649,38 @@ function AgentsTab() {
 
   const geocodeLocation = async (
     locationText: string,
-    city: string,
     setter: (fn: (f: any) => any) => void,
     setLocating: (v: boolean) => void,
   ) => {
-    const parts = [locationText.trim(), city && city !== "Other / Custom" ? city : "", "Ghana"].filter(Boolean);
-    const query = parts.join(", ");
-    if (parts.length < 2) {
-      toast({ title: "Enter a location name first", variant: "destructive" });
-      return;
-    }
+    const text = locationText.trim();
+    if (!text) return;
+    const query = `${text}, Ghana`;
     setLocating(true);
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=gh`,
         { headers: { "Accept-Language": "en" } },
       );
       const results: { lat: string; lon: string; display_name: string }[] = await res.json();
-      if (!results.length) {
-        toast({ title: "Location not found", description: `Could not find "${query}" — try a more specific name.`, variant: "destructive" });
-        return;
-      }
-      const { lat, lon, display_name } = results[0];
+      if (!results.length) return; // silently skip — user may still be typing
+      const { lat, lon } = results[0];
       setter(f => ({ ...f, lat: parseFloat(lat).toFixed(6), lng: parseFloat(lon).toFixed(6) }));
-      toast({ title: "Location pinpointed", description: display_name.split(",").slice(0, 2).join(",").trim() });
     } catch {
-      toast({ title: "Geocoding failed", description: "Check your connection and try again.", variant: "destructive" });
+      // silently ignore network errors during auto-geocode
     } finally {
       setLocating(false);
     }
+  };
+
+  const scheduleGeocode = (
+    text: string,
+    setter: (fn: (f: any) => any) => void,
+    setLocating: (v: boolean) => void,
+    timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  ) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!text.trim()) return;
+    timerRef.current = setTimeout(() => geocodeLocation(text, setter, setLocating), 900);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -921,19 +926,24 @@ function AgentsTab() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Physical Location <span className="text-muted-foreground">(street / neighbourhood)</span></Label>
-                <button
-                  type="button"
-                  disabled={locatingCreate}
-                  onClick={() => geocodeLocation(createForm.location, createForm.city, setCreateForm, setLocatingCreate)}
-                  className="flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {locatingCreate
-                    ? <><svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" strokeOpacity=".3"/><path d="M21 12a9 9 0 0 1-9 9"/></svg>Locating…</>
-                    : <><svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Locate on map</>
-                  }
-                </button>
+                {locatingCreate && (
+                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" strokeOpacity=".3"/><path d="M21 12a9 9 0 0 1-9 9"/></svg>
+                    Locating…
+                  </span>
+                )}
               </div>
-              <Input value={createForm.location} onChange={e => setCreateForm(f => ({ ...f, location: e.target.value }))} className="h-9 text-sm" placeholder="e.g. Teshie, near the beach" />
+              <Input
+                value={createForm.location}
+                onChange={e => {
+                  const val = e.target.value;
+                  setCreateForm(f => ({ ...f, location: val }));
+                  scheduleGeocode(val, setCreateForm, setLocatingCreate, geocodeTimerCreate);
+                }}
+                className="h-9 text-sm"
+                placeholder="e.g. Teshie, Adenta, Fotobi…"
+              />
+              <p className="text-[11px] text-muted-foreground">Type the specific neighbourhood — coordinates update automatically.</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -997,19 +1007,24 @@ function AgentsTab() {
               <div className="space-y-1.5 col-span-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">Physical Location</Label>
-                  <button
-                    type="button"
-                    disabled={locatingEdit}
-                    onClick={() => geocodeLocation(editForm.location, editForm.city, setEditForm, setLocatingEdit)}
-                    className="flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {locatingEdit
-                      ? <><svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" strokeOpacity=".3"/><path d="M21 12a9 9 0 0 1-9 9"/></svg>Locating…</>
-                      : <><svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Locate on map</>
-                    }
-                  </button>
+                  {locatingEdit && (
+                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" strokeOpacity=".3"/><path d="M21 12a9 9 0 0 1-9 9"/></svg>
+                      Locating…
+                    </span>
+                  )}
                 </div>
-                <Input value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} className="h-9 text-sm" />
+                <Input
+                  value={editForm.location}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setEditForm(f => ({ ...f, location: val }));
+                    scheduleGeocode(val, setEditForm, setLocatingEdit, geocodeTimerEdit);
+                  }}
+                  className="h-9 text-sm"
+                  placeholder="e.g. Teshie, Adenta, Fotobi…"
+                />
+                <p className="text-[11px] text-muted-foreground">Type the specific neighbourhood — coordinates update automatically.</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Latitude</Label>
