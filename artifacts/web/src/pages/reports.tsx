@@ -100,7 +100,7 @@ function ReportLetterhead({ title, subtitle, dateFrom, dateTo }: { title: string
   const range = dateFrom || dateTo ? `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}` : "All periods";
   return (
     <div className="flex items-center gap-4 bg-card border rounded-xl px-5 py-4 mb-1">
-      <img src="/company-logo.png" alt="VS2000" className="w-11 h-11 rounded-full object-cover flex-shrink-0 ring-2 ring-border shadow-sm" />
+      <img src="/company-logo.png" alt="VS2000" className="w-6 h-6 object-contain flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">VS2000 Smart Office</div>
         <div className="text-base font-bold text-foreground leading-tight mt-0.5">{title}</div>
@@ -965,9 +965,9 @@ export function Reports() {
   const isDirectorOrAdmin = user?.role === "director" || user?.role === "administrator";
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6">
       <div className="mb-5 flex items-center gap-3">
-        <img src="/company-logo.png" alt="VS2000" className="w-10 h-10 rounded-full object-cover ring-2 ring-border shadow" />
+        <img src="/company-logo.png" alt="VS2000" className="w-5 h-5 object-contain" />
         <div>
           <h1 className="text-xl font-bold">Reports</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
