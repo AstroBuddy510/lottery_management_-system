@@ -9,6 +9,7 @@ import {
   winsEntriesTable,
   paymentsTable,
   reserveAllocationsTable,
+  salesLogsTable,
 } from "@workspace/db";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { GetWriterReportParams, GetAgentReportParams } from "@workspace/api-zod";
@@ -240,6 +241,147 @@ router.get(
     res.json({
       totals: sumRows(allCalcRows),
       agents: agentSummaries,
+    });
+  },
+);
+
+// ── GET /reports/agent/:agentId/game-sales ────────────────────────────────────
+router.get(
+  "/reports/agent/:agentId/game-sales",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (req, res) => {
+    const paramsResult = GetAgentReportParams.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({ error: "Invalid params" });
+      return;
+    }
+    const { dateFrom, dateTo } = req.query as Record<string, string>;
+    const agentId = paramsResult.data.agentId;
+
+    const [agentRow] = await db
+      .select({
+        id: agentsTable.id,
+        fullCode: agentsTable.fullCode,
+        agentCode: agentsTable.agentCode,
+        userId: agentsTable.userId,
+        isActive: agentsTable.isActive,
+        status: agentsTable.status,
+        agencyName: agentsTable.agencyName,
+        user: { id: usersTable.id, fullName: usersTable.fullName, phone: usersTable.phone, role: usersTable.role },
+      })
+      .from(agentsTable)
+      .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+      .where(eq(agentsTable.id, agentId))
+      .limit(1);
+
+    if (!agentRow) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    const writers = await db
+      .select({ id: writersTable.id, fullCode: writersTable.fullCode, fullName: writersTable.fullName })
+      .from(writersTable)
+      .where(eq(writersTable.agentId, agentId));
+
+    if (writers.length === 0) {
+      res.json({
+        agent: agentRow,
+        summary: { totalEntries: 0, totalAmount: "0.00", gameTypeCount: 0, writerCount: 0 },
+        byGameType: [],
+        byWriter: [],
+        entries: [],
+      });
+      return;
+    }
+
+    const writerIds = writers.map(w => w.id);
+    const writerMap = new Map(writers.map(w => [w.id, w]));
+
+    const conditions = [inArray(salesLogsTable.writerId, writerIds)];
+    if (dateFrom) conditions.push(gte(salesLogsTable.saleDate, dateFrom));
+    if (dateTo) conditions.push(lte(salesLogsTable.saleDate, dateTo));
+
+    const sales = await db
+      .select()
+      .from(salesLogsTable)
+      .where(and(...conditions))
+      .orderBy(desc(salesLogsTable.saleDate));
+
+    const totalAmount = sales.reduce((s, e) => s + parseFloat(e.ticketAmount), 0);
+
+    // Group by game type
+    const gameTypeMap = new Map<string, { ticketCount: number; totalAmount: number; writerAmounts: Map<string, number> }>();
+    for (const s of sales) {
+      let entry = gameTypeMap.get(s.gameType);
+      if (!entry) { entry = { ticketCount: 0, totalAmount: 0, writerAmounts: new Map() }; gameTypeMap.set(s.gameType, entry); }
+      entry.ticketCount++;
+      entry.totalAmount += parseFloat(s.ticketAmount);
+      entry.writerAmounts.set(s.writerId, (entry.writerAmounts.get(s.writerId) ?? 0) + parseFloat(s.ticketAmount));
+    }
+
+    const byGameType = [...gameTypeMap.entries()]
+      .sort((a, b) => b[1].totalAmount - a[1].totalAmount)
+      .map(([gameType, data]) => ({
+        gameType,
+        ticketCount: data.ticketCount,
+        totalAmount: data.totalAmount.toFixed(2),
+        pct: totalAmount > 0 ? Math.round((data.totalAmount / totalAmount) * 1000) / 10 : 0,
+        writers: [...data.writerAmounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([writerId, amount]) => ({
+            writer: writerMap.get(writerId) ?? { id: writerId, fullCode: "—", fullName: "—" },
+            ticketCount: sales.filter(s => s.writerId === writerId && s.gameType === gameType).length,
+            totalAmount: amount.toFixed(2),
+          })),
+      }));
+
+    // Group by writer
+    const writerAmountMap = new Map<string, { ticketCount: number; totalAmount: number; byGameType: Map<string, { ticketCount: number; totalAmount: number }> }>();
+    for (const s of sales) {
+      let entry = writerAmountMap.get(s.writerId);
+      if (!entry) { entry = { ticketCount: 0, totalAmount: 0, byGameType: new Map() }; writerAmountMap.set(s.writerId, entry); }
+      entry.ticketCount++;
+      entry.totalAmount += parseFloat(s.ticketAmount);
+      let gt = entry.byGameType.get(s.gameType);
+      if (!gt) { gt = { ticketCount: 0, totalAmount: 0 }; entry.byGameType.set(s.gameType, gt); }
+      gt.ticketCount++;
+      gt.totalAmount += parseFloat(s.ticketAmount);
+    }
+
+    const byWriter = [...writerAmountMap.entries()]
+      .sort((a, b) => b[1].totalAmount - a[1].totalAmount)
+      .map(([writerId, data]) => ({
+        writer: writerMap.get(writerId) ?? { id: writerId, fullCode: "—", fullName: "—" },
+        ticketCount: data.ticketCount,
+        totalAmount: data.totalAmount.toFixed(2),
+        pct: totalAmount > 0 ? Math.round((data.totalAmount / totalAmount) * 1000) / 10 : 0,
+        byGameType: [...data.byGameType.entries()]
+          .sort((a, b) => b[1].totalAmount - a[1].totalAmount)
+          .map(([gameType, gt]) => ({ gameType, ticketCount: gt.ticketCount, totalAmount: gt.totalAmount.toFixed(2) })),
+      }));
+
+    res.json({
+      agent: agentRow,
+      summary: {
+        totalEntries: sales.length,
+        totalAmount: totalAmount.toFixed(2),
+        gameTypeCount: gameTypeMap.size,
+        writerCount: writerAmountMap.size,
+      },
+      byGameType,
+      byWriter,
+      entries: sales.map(s => ({
+        id: s.id,
+        saleDate: s.saleDate,
+        gameType: s.gameType,
+        ticketAmount: s.ticketAmount,
+        writerId: s.writerId,
+        writerCode: writerMap.get(s.writerId)?.fullCode ?? "—",
+        writerFullName: writerMap.get(s.writerId)?.fullName ?? "—",
+        imageUrl: s.imageUrl,
+      })),
     });
   },
 );

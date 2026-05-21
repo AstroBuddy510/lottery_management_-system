@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetWriterReport, useGetAgentReport, useGetOrgReport,
   useListAgents, useListWriters,
@@ -635,6 +636,326 @@ function OrgReportView() {
   );
 }
 
+// ── Game Sales Report ─────────────────────────────────────────────────────────
+
+type GameSalesWriter = { id: string; fullCode: string; fullName: string };
+type GameSalesByGameType = {
+  gameType: string;
+  ticketCount: number;
+  totalAmount: string;
+  pct: number;
+  writers: { writer: GameSalesWriter; ticketCount: number; totalAmount: string }[];
+};
+type GameSalesByWriter = {
+  writer: GameSalesWriter;
+  ticketCount: number;
+  totalAmount: string;
+  pct: number;
+  byGameType: { gameType: string; ticketCount: number; totalAmount: string }[];
+};
+type GameSalesEntry = {
+  id: string;
+  saleDate: string;
+  gameType: string;
+  ticketAmount: string;
+  writerId: string;
+  writerCode: string;
+  writerFullName: string;
+  imageUrl?: string | null;
+};
+type GameSalesReport = {
+  agent: { id: string; fullCode: string; user?: { fullName?: string } | null };
+  summary: { totalEntries: number; totalAmount: string; gameTypeCount: number; writerCount: number };
+  byGameType: GameSalesByGameType[];
+  byWriter: GameSalesByWriter[];
+  entries: GameSalesEntry[];
+};
+
+const GAME_TYPE_COLOURS: Record<string, string> = {
+  Lotto:    "bg-blue-500",
+  Lucky5:   "bg-emerald-500",
+  Fortune3: "bg-violet-500",
+  Banker:   "bg-amber-500",
+};
+function gameTypeColour(gt: string) { return GAME_TYPE_COLOURS[gt] ?? "bg-gray-400"; }
+
+async function fetchGameSalesReport(agentId: string, dateFrom: string, dateTo: string): Promise<GameSalesReport> {
+  const token = localStorage.getItem("accessToken");
+  const params = new URLSearchParams();
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`/api/reports/agent/${agentId}/game-sales${qs}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<GameSalesReport>;
+}
+
+function GameSalesView() {
+  const [agentId, setAgentId] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [run, setRun] = useState(false);
+  const [showWriterBreakdown, setShowWriterBreakdown] = useState(false);
+  const [showEntries, setShowEntries] = useState(false);
+
+  const { data: agents } = useListAgents({});
+  const agentList = Array.isArray(agents) ? agents : [];
+
+  const { data: report, isLoading, error } = useQuery({
+    queryKey: ["game-sales", agentId, dateFrom, dateTo],
+    queryFn: () => fetchGameSalesReport(agentId, dateFrom, dateTo),
+    enabled: run && !!agentId,
+  });
+
+  const reset = () => setRun(false);
+  const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); reset(); };
+  const r = report;
+
+  return (
+    <div className="space-y-4 pt-4">
+      <ParamPanel onRun={() => setRun(true)} disabled={!agentId} loading={isLoading}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Agent</Label>
+            <Select value={agentId || "_none"} onValueChange={v => { setAgentId(v === "_none" ? "" : v); reset(); }}>
+              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="Select agent…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">— Select agent —</SelectItem>
+                {agentList.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">From</Label>
+            <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); reset(); }} className="h-9 text-sm bg-background" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">To</Label>
+            <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); reset(); }} className="h-9 text-sm bg-background" />
+          </div>
+        </div>
+        <DateShortcuts onSelect={applyDates} />
+      </ParamPanel>
+
+      {!run && !isLoading && (
+        <div className="text-center py-12 text-sm text-muted-foreground">Select an agent and click Run Report.</div>
+      )}
+
+      {error && (
+        <div className="text-center py-8 text-sm text-red-600 border border-red-200 rounded-xl">
+          Failed to load report. Please try again.
+        </div>
+      )}
+
+      {r && (
+        <div className="space-y-4">
+          <ReportLetterhead
+            title="Game Sales Report"
+            subtitle={`${r.agent?.fullCode ?? "—"} — ${r.agent?.user?.fullName ?? "—"}`}
+            dateFrom={dateFrom} dateTo={dateTo}
+          />
+
+          {/* Summary strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Total Sales", value: `GH₵ ${Number(r.summary.totalAmount).toFixed(2)}`, sub: `${r.summary.totalEntries} ticket entries` },
+              { label: "Game Types", value: String(r.summary.gameTypeCount), sub: "distinct games" },
+              { label: "Active Writers", value: String(r.summary.writerCount), sub: "logged sales" },
+              {
+                label: "Avg per Entry",
+                value: r.summary.totalEntries > 0
+                  ? `GH₵ ${(Number(r.summary.totalAmount) / r.summary.totalEntries).toFixed(2)}`
+                  : "—",
+                sub: "per ticket entry",
+              },
+            ].map(({ label, value, sub }) => (
+              <div key={label} className="rounded-xl border bg-card px-4 py-3">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</div>
+                <div className="font-mono font-bold text-base">{value}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* By game type */}
+          {r.byGameType.length > 0 ? (
+            <div className="rounded-xl border overflow-hidden">
+              <div className="bg-muted/40 px-4 py-2.5 border-b flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sales by Game Type</span>
+                <span className="text-xs text-muted-foreground">{r.byGameType.length} games</span>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/20">
+                    <TableHead className="text-xs w-[160px]">Game</TableHead>
+                    <TableHead className="text-xs">Share</TableHead>
+                    <TableHead className="text-right text-xs">Entries</TableHead>
+                    <TableHead className="text-right text-xs">Total Sales</TableHead>
+                    <TableHead className="text-right text-xs">%</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {r.byGameType.map(gt => (
+                    <TableRow key={gt.gameType} className="hover:bg-muted/20">
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${gameTypeColour(gt.gameType)}`} />
+                          <span className="font-semibold text-sm">{gt.gameType}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="pr-6 w-[140px]">
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${gameTypeColour(gt.gameType)}`} style={{ width: `${gt.pct}%` }} />
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">{gt.ticketCount}</TableCell>
+                      <TableCell className="text-right font-mono font-semibold text-sm">
+                        GH₵ {Number(gt.totalAmount).toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className="font-mono text-xs">{gt.pct.toFixed(1)}%</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <tfoot>
+                  <tr className="border-t-2 bg-muted/30">
+                    <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground">Total</td>
+                    <td />
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold">{r.summary.totalEntries}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold">
+                      GH₵ {Number(r.summary.totalAmount).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold">100%</td>
+                  </tr>
+                </tfoot>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-10 text-sm text-muted-foreground border rounded-xl">
+              No game sales recorded for this agent in the selected period.
+            </div>
+          )}
+
+          {/* By writer breakdown (toggle) */}
+          {r.byWriter.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Writer Breakdown ({r.byWriter.length})
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowWriterBreakdown(v => !v)}>
+                  {showWriterBreakdown ? "Hide" : "Show Writer Breakdown"}
+                </Button>
+              </div>
+              {showWriterBreakdown && (
+                <div className="rounded-xl border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/40">
+                        <TableHead className="text-xs">Writer</TableHead>
+                        <TableHead className="text-xs">Games</TableHead>
+                        <TableHead className="text-right text-xs">Entries</TableHead>
+                        <TableHead className="text-right text-xs">Total Sales</TableHead>
+                        <TableHead className="text-right text-xs">% Share</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {r.byWriter.map(ws => (
+                        <TableRow key={ws.writer.id} className="hover:bg-muted/20">
+                          <TableCell>
+                            <div className="font-mono text-sm font-semibold">{ws.writer.fullCode}</div>
+                            <div className="text-xs text-muted-foreground">{ws.writer.fullName}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {ws.byGameType.slice(0, 3).map(g => (
+                                <span key={g.gameType} className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full text-white ${gameTypeColour(g.gameType)}`}>
+                                  {g.gameType}
+                                </span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm">{ws.ticketCount}</TableCell>
+                          <TableCell className="text-right font-mono font-semibold text-sm">
+                            GH₵ {Number(ws.totalAmount).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="outline" className="font-mono text-xs">{ws.pct.toFixed(1)}%</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Individual entries (toggle) */}
+          {r.entries.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  All Entries ({r.entries.length})
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowEntries(v => !v)}>
+                  {showEntries ? "Hide Entries" : "View All Entries"}
+                </Button>
+              </div>
+              {showEntries && (
+                <div className="rounded-xl border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/40">
+                        <TableHead className="text-xs">Date</TableHead>
+                        <TableHead className="text-xs">Writer</TableHead>
+                        <TableHead className="text-xs">Game</TableHead>
+                        <TableHead className="text-right text-xs">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {r.entries.map(e => (
+                        <TableRow key={e.id} className="hover:bg-muted/20">
+                          <TableCell className="text-sm">{fmtDate(e.saleDate)}</TableCell>
+                          <TableCell>
+                            <span className="font-mono text-xs font-semibold">{e.writerCode}</span>
+                            <span className="text-xs text-muted-foreground ml-1.5">{e.writerFullName}</span>
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full text-white ${gameTypeColour(e.gameType)}`}>
+                              {e.gameType}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-mono font-semibold text-sm">
+                            GH₵ {Number(e.ticketAmount).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <tfoot>
+                      <tr className="border-t-2 bg-muted/30">
+                        <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground" colSpan={3}>Total</td>
+                        <td className="px-4 py-2.5 text-right font-mono font-semibold">
+                          GH₵ {Number(r.summary.totalAmount).toFixed(2)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function Reports() {
@@ -657,10 +978,12 @@ export function Reports() {
         <TabsList className="mb-1">
           <TabsTrigger value="writer">Writer</TabsTrigger>
           <TabsTrigger value="agent">Agent</TabsTrigger>
+          <TabsTrigger value="gamesales">Game Sales</TabsTrigger>
           {isDirectorOrAdmin && <TabsTrigger value="org">Organisation</TabsTrigger>}
         </TabsList>
         <TabsContent value="writer"><WriterReportView /></TabsContent>
         <TabsContent value="agent"><AgentReportView /></TabsContent>
+        <TabsContent value="gamesales"><GameSalesView /></TabsContent>
         {isDirectorOrAdmin && <TabsContent value="org"><OrgReportView /></TabsContent>}
       </Tabs>
     </div>
