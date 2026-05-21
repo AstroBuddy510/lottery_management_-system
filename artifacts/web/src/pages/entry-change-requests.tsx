@@ -18,7 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { fmtGHS } from "@/lib/utils";
-import { Layout } from "@/components/layout";
 
 function relDate(s: string) {
   if (!s) return s;
@@ -107,8 +106,8 @@ export function EntryChangeRequests() {
   const pendingDirectorCount = requests.filter(r => r.status === "pending_director").length;
 
   return (
-    <Layout>
-      <div className="max-w-4xl mx-auto px-4 py-6">
+    <>
+    <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight">{pageTitle}</h1>
@@ -283,7 +282,7 @@ export function EntryChangeRequests() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Layout>
+    </>
   );
 }
 
