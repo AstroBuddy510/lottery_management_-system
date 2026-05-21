@@ -34,6 +34,7 @@ function fmtDate(s?: string | null) {
 }
 
 const todayStr = () => new Date().toISOString().split("T")[0];
+const yesterdayStr = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split("T")[0]; };
 const firstOfMonth = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
@@ -118,6 +119,8 @@ function ReportLetterhead({ title, subtitle, dateFrom, dateTo }: { title: string
 
 function DateShortcuts({ onSelect }: { onSelect: (from: string, to: string) => void }) {
   const shortcuts = [
+    { label: "Today", from: todayStr(), to: todayStr() },
+    { label: "Yesterday", from: yesterdayStr(), to: yesterdayStr() },
     { label: "This Month", from: firstOfMonth(), to: todayStr() },
     { label: "Last Month", from: firstOfLastMonth(), to: lastOfLastMonth() },
     { label: "This Year", from: firstOfYear(), to: todayStr() },
@@ -135,16 +138,17 @@ function DateShortcuts({ onSelect }: { onSelect: (from: string, to: string) => v
   );
 }
 
-function ParamPanel({ children, onRun, disabled, loading }: {
+function ParamPanel({ children, onRun, disabled, loading, buttonLabel, hint }: {
   children: React.ReactNode; onRun: () => void; disabled?: boolean; loading?: boolean;
+  buttonLabel?: string; hint?: string;
 }) {
   return (
     <div className="bg-muted/20 border rounded-xl p-4 space-y-3">
       {children}
       <div className="flex items-center justify-between pt-1">
-        <span className="text-xs text-muted-foreground">Adjust parameters above, then run.</span>
+        <span className="text-xs text-muted-foreground">{hint ?? "Adjust parameters above, then run."}</span>
         <Button size="sm" disabled={disabled || loading} onClick={onRun} className="min-w-[96px]">
-          {loading ? "Loading…" : "Run Report"}
+          {loading ? "Loading…" : (buttonLabel ?? "Run Report")}
         </Button>
       </div>
     </div>
@@ -696,30 +700,28 @@ function GameSalesView() {
   const [agentId, setAgentId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [run, setRun] = useState(false);
   const [showWriterBreakdown, setShowWriterBreakdown] = useState(false);
   const [showEntries, setShowEntries] = useState(false);
 
   const { data: agents } = useListAgents({});
   const agentList = Array.isArray(agents) ? agents : [];
 
-  const { data: report, isLoading, error } = useQuery({
+  const { data: report, isLoading, error, refetch } = useQuery({
     queryKey: ["game-sales", agentId, dateFrom, dateTo],
     queryFn: () => fetchGameSalesReport(agentId, dateFrom, dateTo),
-    enabled: run && !!agentId,
+    enabled: !!agentId,
   });
 
-  const reset = () => setRun(false);
-  const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); reset(); };
+  const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); };
   const r = report;
 
   return (
     <div className="space-y-4 pt-4">
-      <ParamPanel onRun={() => setRun(true)} disabled={!agentId} loading={isLoading}>
+      <ParamPanel onRun={() => void refetch()} disabled={!agentId} loading={isLoading} buttonLabel="Refresh" hint="Select an agent — data loads automatically. Use Refresh to reload.">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Agent</Label>
-            <Select value={agentId || "_none"} onValueChange={v => { setAgentId(v === "_none" ? "" : v); reset(); }}>
+            <Select value={agentId || "_none"} onValueChange={v => setAgentId(v === "_none" ? "" : v)}>
               <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="Select agent…" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="_none">— Select agent —</SelectItem>
@@ -731,18 +733,18 @@ function GameSalesView() {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">From</Label>
-            <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); reset(); }} className="h-9 text-sm bg-background" />
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 text-sm bg-background" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">To</Label>
-            <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); reset(); }} className="h-9 text-sm bg-background" />
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 text-sm bg-background" />
           </div>
         </div>
         <DateShortcuts onSelect={applyDates} />
       </ParamPanel>
 
-      {!run && !isLoading && (
-        <div className="text-center py-12 text-sm text-muted-foreground">Select an agent and click Run Report.</div>
+      {!agentId && !isLoading && (
+        <div className="text-center py-12 text-sm text-muted-foreground">Select an agent above to view their game sales.</div>
       )}
 
       {error && (
