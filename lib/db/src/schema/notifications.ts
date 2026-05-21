@@ -11,8 +11,10 @@ export const messageTypeEnum = pgEnum("message_type", [
   "wins_summary",
   "deficit_alert",
   "debt_query",
+  "change_request",
+  "change_request_update",
 ]);
-export const targetTypeEnum = pgEnum("target_type", ["all", "all_agents", "agent", "writer"]);
+export const targetTypeEnum = pgEnum("target_type", ["all", "all_agents", "agent", "writer", "system"]);
 
 export const notificationsTable = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(),

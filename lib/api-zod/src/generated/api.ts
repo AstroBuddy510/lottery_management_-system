@@ -725,6 +725,140 @@ export const UpdateWinsEntryResponse = zod.object({
 
 
 /**
+ * @summary List entry change requests (agent sees own; admin/director see all)
+ */
+export const ListEntryChangeRequestsQueryParams = zod.object({
+  "status": zod.coerce.string().optional()
+})
+
+export const ListEntryChangeRequestsResponseItem = zod.object({
+  "id": zod.string(),
+  "requestedBy": zod.string(),
+  "requestedByName": zod.string().nullish(),
+  "entryType": zod.enum(['gross', 'wins']),
+  "entryId": zod.string(),
+  "writerId": zod.string(),
+  "writerFullCode": zod.string().nullish(),
+  "writerFullName": zod.string().nullish(),
+  "agentFullCode": zod.string().nullish(),
+  "agentName": zod.string().nullish(),
+  "entryDate": zod.string(),
+  "currentAmount": zod.string(),
+  "requestedAmount": zod.string(),
+  "reason": zod.string(),
+  "status": zod.enum(['pending_admin', 'pending_director', 'approved', 'rejected']),
+  "adminNote": zod.string().nullish(),
+  "reviewedByAdmin": zod.string().nullish(),
+  "reviewedByAdminName": zod.string().nullish(),
+  "adminReviewedAt": zod.string().nullish(),
+  "directorNote": zod.string().nullish(),
+  "reviewedByDirector": zod.string().nullish(),
+  "reviewedByDirectorName": zod.string().nullish(),
+  "directorReviewedAt": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListEntryChangeRequestsResponse = zod.array(ListEntryChangeRequestsResponseItem)
+
+
+/**
+ * @summary Agent submits a change request for a locked entry
+ */
+export const createEntryChangeRequestBodyReasonMin = 5;
+
+
+
+export const CreateEntryChangeRequestBody = zod.object({
+  "entryType": zod.enum(['gross', 'wins']),
+  "entryId": zod.string(),
+  "requestedAmount": zod.string(),
+  "reason": zod.string().min(createEntryChangeRequestBodyReasonMin)
+})
+
+
+/**
+ * @summary Admin approves (forwards to director) or rejects a pending request
+ */
+export const AdminReviewEntryChangeRequestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AdminReviewEntryChangeRequestBody = zod.object({
+  "action": zod.enum(['approve', 'reject']),
+  "note": zod.string().optional()
+})
+
+export const AdminReviewEntryChangeRequestResponse = zod.object({
+  "id": zod.string(),
+  "requestedBy": zod.string(),
+  "requestedByName": zod.string().nullish(),
+  "entryType": zod.enum(['gross', 'wins']),
+  "entryId": zod.string(),
+  "writerId": zod.string(),
+  "writerFullCode": zod.string().nullish(),
+  "writerFullName": zod.string().nullish(),
+  "agentFullCode": zod.string().nullish(),
+  "agentName": zod.string().nullish(),
+  "entryDate": zod.string(),
+  "currentAmount": zod.string(),
+  "requestedAmount": zod.string(),
+  "reason": zod.string(),
+  "status": zod.enum(['pending_admin', 'pending_director', 'approved', 'rejected']),
+  "adminNote": zod.string().nullish(),
+  "reviewedByAdmin": zod.string().nullish(),
+  "reviewedByAdminName": zod.string().nullish(),
+  "adminReviewedAt": zod.string().nullish(),
+  "directorNote": zod.string().nullish(),
+  "reviewedByDirector": zod.string().nullish(),
+  "reviewedByDirectorName": zod.string().nullish(),
+  "directorReviewedAt": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Director gives final approval or rejection; approval applies the entry change
+ */
+export const DirectorReviewEntryChangeRequestParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DirectorReviewEntryChangeRequestBody = zod.object({
+  "action": zod.enum(['approve', 'reject']),
+  "note": zod.string().optional()
+})
+
+export const DirectorReviewEntryChangeRequestResponse = zod.object({
+  "id": zod.string(),
+  "requestedBy": zod.string(),
+  "requestedByName": zod.string().nullish(),
+  "entryType": zod.enum(['gross', 'wins']),
+  "entryId": zod.string(),
+  "writerId": zod.string(),
+  "writerFullCode": zod.string().nullish(),
+  "writerFullName": zod.string().nullish(),
+  "agentFullCode": zod.string().nullish(),
+  "agentName": zod.string().nullish(),
+  "entryDate": zod.string(),
+  "currentAmount": zod.string(),
+  "requestedAmount": zod.string(),
+  "reason": zod.string(),
+  "status": zod.enum(['pending_admin', 'pending_director', 'approved', 'rejected']),
+  "adminNote": zod.string().nullish(),
+  "reviewedByAdmin": zod.string().nullish(),
+  "reviewedByAdminName": zod.string().nullish(),
+  "adminReviewedAt": zod.string().nullish(),
+  "directorNote": zod.string().nullish(),
+  "reviewedByDirector": zod.string().nullish(),
+  "reviewedByDirectorName": zod.string().nullish(),
+  "directorReviewedAt": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
  * @summary List expense categories
  */
 export const ListExpenseCategoriesResponseItem = zod.object({

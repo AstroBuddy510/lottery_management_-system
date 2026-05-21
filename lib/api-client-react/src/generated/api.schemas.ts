@@ -144,6 +144,107 @@ export interface UserUpdate {
   profilePicture?: string | null;
 }
 
+export type EntryChangeRequestEntryType = typeof EntryChangeRequestEntryType[keyof typeof EntryChangeRequestEntryType];
+
+
+export const EntryChangeRequestEntryType = {
+  gross: 'gross',
+  wins: 'wins',
+} as const;
+
+export type EntryChangeRequestStatus = typeof EntryChangeRequestStatus[keyof typeof EntryChangeRequestStatus];
+
+
+export const EntryChangeRequestStatus = {
+  pending_admin: 'pending_admin',
+  pending_director: 'pending_director',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface EntryChangeRequest {
+  id: string;
+  requestedBy: string;
+  /** @nullable */
+  requestedByName?: string | null;
+  entryType: EntryChangeRequestEntryType;
+  entryId: string;
+  writerId: string;
+  /** @nullable */
+  writerFullCode?: string | null;
+  /** @nullable */
+  writerFullName?: string | null;
+  /** @nullable */
+  agentFullCode?: string | null;
+  /** @nullable */
+  agentName?: string | null;
+  entryDate: string;
+  currentAmount: string;
+  requestedAmount: string;
+  reason: string;
+  status: EntryChangeRequestStatus;
+  /** @nullable */
+  adminNote?: string | null;
+  /** @nullable */
+  reviewedByAdmin?: string | null;
+  /** @nullable */
+  reviewedByAdminName?: string | null;
+  /** @nullable */
+  adminReviewedAt?: string | null;
+  /** @nullable */
+  directorNote?: string | null;
+  /** @nullable */
+  reviewedByDirector?: string | null;
+  /** @nullable */
+  reviewedByDirectorName?: string | null;
+  /** @nullable */
+  directorReviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateEntryChangeRequestBodyEntryType = typeof CreateEntryChangeRequestBodyEntryType[keyof typeof CreateEntryChangeRequestBodyEntryType];
+
+
+export const CreateEntryChangeRequestBodyEntryType = {
+  gross: 'gross',
+  wins: 'wins',
+} as const;
+
+export interface CreateEntryChangeRequestBody {
+  entryType: CreateEntryChangeRequestBodyEntryType;
+  entryId: string;
+  requestedAmount: string;
+  /** @minLength 5 */
+  reason: string;
+}
+
+export type AdminReviewEntryChangeRequestBodyAction = typeof AdminReviewEntryChangeRequestBodyAction[keyof typeof AdminReviewEntryChangeRequestBodyAction];
+
+
+export const AdminReviewEntryChangeRequestBodyAction = {
+  approve: 'approve',
+  reject: 'reject',
+} as const;
+
+export interface AdminReviewEntryChangeRequestBody {
+  action: AdminReviewEntryChangeRequestBodyAction;
+  note?: string;
+}
+
+export type DirectorReviewEntryChangeRequestBodyAction = typeof DirectorReviewEntryChangeRequestBodyAction[keyof typeof DirectorReviewEntryChangeRequestBodyAction];
+
+
+export const DirectorReviewEntryChangeRequestBodyAction = {
+  approve: 'approve',
+  reject: 'reject',
+} as const;
+
+export interface DirectorReviewEntryChangeRequestBody {
+  action: DirectorReviewEntryChangeRequestBodyAction;
+  note?: string;
+}
+
 export interface AgentDebtReduction {
   id: string;
   agentId: string;
@@ -897,6 +998,10 @@ export type ListWinsEntriesParams = {
 writerId?: string;
 dateFrom?: string;
 dateTo?: string;
+};
+
+export type ListEntryChangeRequestsParams = {
+status?: string;
 };
 
 export type ListPaymentsParams = {

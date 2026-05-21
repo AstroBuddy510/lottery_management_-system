@@ -151,6 +151,18 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
                   <div className="text-sm font-semibold text-gray-900 truncate">{user?.fullName}</div>
                   <div className="text-xs text-gray-500 mt-0.5">Agent</div>
                 </div>
+                <Link href="/entry-change-requests" onClick={() => setMenuOpen(false)}>
+                  <div className="flex items-center gap-3 px-4 py-3.5 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-50 transition-colors font-medium">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                      <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    Change Requests
+                  </div>
+                </Link>
                 <button
                   onClick={() => { setMenuOpen(false); logout(); }}
                   className="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-red-600 hover:bg-red-50 active:bg-red-50 transition-colors font-semibold"

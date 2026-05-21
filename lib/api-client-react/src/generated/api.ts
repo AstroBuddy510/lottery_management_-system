@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminReviewEntryChangeRequestBody,
   AgentDailyTotal,
   AgentDebtReduction,
   AgentInput,
@@ -31,10 +32,13 @@ import type {
   AuthTokens,
   CalcRunInput,
   CalcRunResult,
+  CreateEntryChangeRequestBody,
   CreateExpenseCategoryBody,
   CreateGameBody,
   CreateReserveReceiptBody,
   DailyCalculation,
+  DirectorReviewEntryChangeRequestBody,
+  EntryChangeRequest,
   ErrorResponse,
   ExpenseCategory,
   Game,
@@ -48,6 +52,7 @@ import type {
   ListAgentDailyTotalsParams,
   ListAgentsParams,
   ListCalculationsParams,
+  ListEntryChangeRequestsParams,
   ListGrossEntriesParams,
   ListPaymentsParams,
   ListReserveAllocationsParams,
@@ -2937,6 +2942,305 @@ export const useUpdateWinsEntry = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateWinsEntryMutationOptions(options));
+    }
+
+export const getListEntryChangeRequestsUrl = (params?: ListEntryChangeRequestsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/entries/change-requests?${stringifiedParams}` : `/api/entries/change-requests`
+}
+
+/**
+ * @summary List entry change requests (agent sees own; admin/director see all)
+ */
+export const listEntryChangeRequests = async (params?: ListEntryChangeRequestsParams, options?: RequestInit): Promise<EntryChangeRequest[]> => {
+
+  return customFetch<EntryChangeRequest[]>(getListEntryChangeRequestsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListEntryChangeRequestsQueryKey = (params?: ListEntryChangeRequestsParams,) => {
+    return [
+    `/api/entries/change-requests`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListEntryChangeRequestsQueryOptions = <TData = Awaited<ReturnType<typeof listEntryChangeRequests>>, TError = ErrorType<unknown>>(params?: ListEntryChangeRequestsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEntryChangeRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListEntryChangeRequestsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listEntryChangeRequests>>> = ({ signal }) => listEntryChangeRequests(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listEntryChangeRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListEntryChangeRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof listEntryChangeRequests>>>
+export type ListEntryChangeRequestsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List entry change requests (agent sees own; admin/director see all)
+ */
+
+export function useListEntryChangeRequests<TData = Awaited<ReturnType<typeof listEntryChangeRequests>>, TError = ErrorType<unknown>>(
+ params?: ListEntryChangeRequestsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEntryChangeRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListEntryChangeRequestsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateEntryChangeRequestUrl = () => {
+
+
+
+
+  return `/api/entries/change-requests`
+}
+
+/**
+ * @summary Agent submits a change request for a locked entry
+ */
+export const createEntryChangeRequest = async (createEntryChangeRequestBody: CreateEntryChangeRequestBody, options?: RequestInit): Promise<EntryChangeRequest> => {
+
+  return customFetch<EntryChangeRequest>(getCreateEntryChangeRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createEntryChangeRequestBody,)
+  }
+);}
+
+
+
+
+export const getCreateEntryChangeRequestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEntryChangeRequest>>, TError,{data: BodyType<CreateEntryChangeRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createEntryChangeRequest>>, TError,{data: BodyType<CreateEntryChangeRequestBody>}, TContext> => {
+
+const mutationKey = ['createEntryChangeRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEntryChangeRequest>>, {data: BodyType<CreateEntryChangeRequestBody>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createEntryChangeRequest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateEntryChangeRequestMutationResult = NonNullable<Awaited<ReturnType<typeof createEntryChangeRequest>>>
+    export type CreateEntryChangeRequestMutationBody = BodyType<CreateEntryChangeRequestBody>
+    export type CreateEntryChangeRequestMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Agent submits a change request for a locked entry
+ */
+export const useCreateEntryChangeRequest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEntryChangeRequest>>, TError,{data: BodyType<CreateEntryChangeRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createEntryChangeRequest>>,
+        TError,
+        {data: BodyType<CreateEntryChangeRequestBody>},
+        TContext
+      > => {
+      return useMutation(getCreateEntryChangeRequestMutationOptions(options));
+    }
+
+export const getAdminReviewEntryChangeRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/entries/change-requests/${id}/admin-review`
+}
+
+/**
+ * @summary Admin approves (forwards to director) or rejects a pending request
+ */
+export const adminReviewEntryChangeRequest = async (id: string,
+    adminReviewEntryChangeRequestBody: AdminReviewEntryChangeRequestBody, options?: RequestInit): Promise<EntryChangeRequest> => {
+
+  return customFetch<EntryChangeRequest>(getAdminReviewEntryChangeRequestUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      adminReviewEntryChangeRequestBody,)
+  }
+);}
+
+
+
+
+export const getAdminReviewEntryChangeRequestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminReviewEntryChangeRequest>>, TError,{id: string;data: BodyType<AdminReviewEntryChangeRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminReviewEntryChangeRequest>>, TError,{id: string;data: BodyType<AdminReviewEntryChangeRequestBody>}, TContext> => {
+
+const mutationKey = ['adminReviewEntryChangeRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminReviewEntryChangeRequest>>, {id: string;data: BodyType<AdminReviewEntryChangeRequestBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  adminReviewEntryChangeRequest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminReviewEntryChangeRequestMutationResult = NonNullable<Awaited<ReturnType<typeof adminReviewEntryChangeRequest>>>
+    export type AdminReviewEntryChangeRequestMutationBody = BodyType<AdminReviewEntryChangeRequestBody>
+    export type AdminReviewEntryChangeRequestMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Admin approves (forwards to director) or rejects a pending request
+ */
+export const useAdminReviewEntryChangeRequest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminReviewEntryChangeRequest>>, TError,{id: string;data: BodyType<AdminReviewEntryChangeRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminReviewEntryChangeRequest>>,
+        TError,
+        {id: string;data: BodyType<AdminReviewEntryChangeRequestBody>},
+        TContext
+      > => {
+      return useMutation(getAdminReviewEntryChangeRequestMutationOptions(options));
+    }
+
+export const getDirectorReviewEntryChangeRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/entries/change-requests/${id}/director-review`
+}
+
+/**
+ * @summary Director gives final approval or rejection; approval applies the entry change
+ */
+export const directorReviewEntryChangeRequest = async (id: string,
+    directorReviewEntryChangeRequestBody: DirectorReviewEntryChangeRequestBody, options?: RequestInit): Promise<EntryChangeRequest> => {
+
+  return customFetch<EntryChangeRequest>(getDirectorReviewEntryChangeRequestUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      directorReviewEntryChangeRequestBody,)
+  }
+);}
+
+
+
+
+export const getDirectorReviewEntryChangeRequestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof directorReviewEntryChangeRequest>>, TError,{id: string;data: BodyType<DirectorReviewEntryChangeRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof directorReviewEntryChangeRequest>>, TError,{id: string;data: BodyType<DirectorReviewEntryChangeRequestBody>}, TContext> => {
+
+const mutationKey = ['directorReviewEntryChangeRequest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof directorReviewEntryChangeRequest>>, {id: string;data: BodyType<DirectorReviewEntryChangeRequestBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  directorReviewEntryChangeRequest(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DirectorReviewEntryChangeRequestMutationResult = NonNullable<Awaited<ReturnType<typeof directorReviewEntryChangeRequest>>>
+    export type DirectorReviewEntryChangeRequestMutationBody = BodyType<DirectorReviewEntryChangeRequestBody>
+    export type DirectorReviewEntryChangeRequestMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Director gives final approval or rejection; approval applies the entry change
+ */
+export const useDirectorReviewEntryChangeRequest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof directorReviewEntryChangeRequest>>, TError,{id: string;data: BodyType<DirectorReviewEntryChangeRequestBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof directorReviewEntryChangeRequest>>,
+        TError,
+        {id: string;data: BodyType<DirectorReviewEntryChangeRequestBody>},
+        TContext
+      > => {
+      return useMutation(getDirectorReviewEntryChangeRequestMutationOptions(options));
     }
 
 export const getListExpenseCategoriesUrl = () => {

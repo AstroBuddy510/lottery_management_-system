@@ -3,6 +3,7 @@ import {
   useListWinsEntries, useCreateWinsEntry, useUpdateWinsEntry,
   useListWriters, getListWinsEntriesQueryKey, getListWritersQueryKey,
   useGetMyAgent, getGetMyAgentQueryKey, WinsEntry,
+  useCreateEntryChangeRequest, getListEntryChangeRequestsQueryKey,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useAuth } from "@/lib/auth";
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,8 +82,11 @@ function AgentWinsView() {
 
   const createMutation = useCreateWinsEntry();
   const updateMutation = useUpdateWinsEntry();
+  const changeRequestMutation = useCreateEntryChangeRequest();
   const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
   const [editForm, setEditForm] = useState({ winsAmount: "" });
+  const [changeReqEntry, setChangeReqEntry] = useState<WinsEntry | null>(null);
+  const [changeReqForm, setChangeReqForm] = useState({ requestedAmount: "", reason: "" });
 
   // Exclude writers who already have a wins entry on the selected date
   const usedWriterIds = useMemo(
@@ -115,6 +120,27 @@ function AgentWinsView() {
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to update entry");
+    }
+  };
+
+  const handleChangeRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!changeReqEntry) return;
+    try {
+      await changeRequestMutation.mutateAsync({
+        data: {
+          entryType: "wins",
+          entryId: changeReqEntry.id,
+          requestedAmount: changeReqForm.requestedAmount,
+          reason: changeReqForm.reason,
+        },
+      });
+      toast.success("Change request submitted");
+      setChangeReqEntry(null);
+      setChangeReqForm({ requestedAmount: "", reason: "" });
+      qc.invalidateQueries({ queryKey: getListEntryChangeRequestsQueryKey({}) });
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to submit change request");
     }
   };
 
@@ -231,12 +257,19 @@ function AgentWinsView() {
                   <div className="text-right">
                     <div className="text-sm font-bold tabular-nums">{fmtGHS(Number(entry.winsAmount ?? 0))}</div>
                   </div>
-                  {!entry.locked && (
+                  {!entry.locked ? (
                     <button
                       onClick={() => { setEditEntry(entry); setEditForm({ winsAmount: entry.winsAmount }); }}
                       className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
                     >
                       <EditIcon />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => { setChangeReqEntry(entry); setChangeReqForm({ requestedAmount: entry.winsAmount ?? "", reason: "" }); }}
+                      className="text-[11px] font-semibold px-2 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-300 transition-colors active:scale-95"
+                    >
+                      Request Change
                     </button>
                   )}
                 </div>
@@ -312,6 +345,57 @@ function AgentWinsView() {
               <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setEditEntry(null)}>Cancel</Button>
               <Button type="submit" className="flex-1 h-11 rounded-xl font-semibold" disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? "Saving…" : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Request dialog */}
+      <Dialog open={!!changeReqEntry} onOpenChange={o => { if (!o) { setChangeReqEntry(null); setChangeReqForm({ requestedAmount: "", reason: "" }); } }}>
+        <DialogContent className="max-w-sm mx-4 rounded-2xl">
+          <DialogHeader><DialogTitle>Request Entry Change</DialogTitle></DialogHeader>
+          {changeReqEntry && (
+            <div className="bg-muted/50 rounded-xl p-3 text-sm space-y-1 mb-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Writer</span>
+                <span className="font-mono font-semibold">{writerList.find(w => w.id === changeReqEntry.writerId)?.fullCode ?? changeReqEntry.writerId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Date</span>
+                <span>{relDate(changeReqEntry.entryDate ?? "")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Current amount</span>
+                <span className="tabular-nums font-semibold">{fmtGHS(Number(changeReqEntry.winsAmount ?? 0))}</span>
+              </div>
+            </div>
+          )}
+          <form onSubmit={handleChangeRequest} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Requested Amount (GH₵)</Label>
+              <Input
+                type="number" step="0.01" min="0"
+                value={changeReqForm.requestedAmount}
+                onChange={e => setChangeReqForm(f => ({ ...f, requestedAmount: e.target.value }))}
+                required className="h-11 text-sm rounded-xl" inputMode="decimal"
+                placeholder="New amount…"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Reason <span className="text-muted-foreground">(required)</span></Label>
+              <Textarea
+                value={changeReqForm.reason}
+                onChange={e => setChangeReqForm(f => ({ ...f, reason: e.target.value }))}
+                required minLength={5}
+                placeholder="Explain why the entry amount should be changed…"
+                className="resize-none text-sm h-20 rounded-xl"
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => { setChangeReqEntry(null); setChangeReqForm({ requestedAmount: "", reason: "" }); }}>Cancel</Button>
+              <Button type="submit" className="flex-1 h-11 rounded-xl font-semibold bg-amber-600 hover:bg-amber-700" disabled={changeRequestMutation.isPending}>
+                {changeRequestMutation.isPending ? "Submitting…" : "Submit Request"}
               </Button>
             </DialogFooter>
           </form>

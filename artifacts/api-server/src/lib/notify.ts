@@ -8,9 +8,11 @@ type MessageType =
   | "payment_received"
   | "wins_summary"
   | "deficit_alert"
-  | "debt_query";
+  | "debt_query"
+  | "change_request"
+  | "change_request_update";
 
-type TargetType = "all" | "all_agents" | "agent" | "writer";
+type TargetType = "all" | "all_agents" | "agent" | "writer" | "system";
 
 interface DispatchOptions {
   sentBy: string;

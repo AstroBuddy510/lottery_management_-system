@@ -11,3 +11,4 @@ export * from "./notifications";
 export * from "./games";
 export * from "./expenses";
 export * from "./debt-reductions";
+export * from "./entry-change-requests";

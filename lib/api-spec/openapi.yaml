@@ -883,6 +883,101 @@ paths:
               schema:
                 $ref: "#/components/schemas/WinsEntry"
 
+  /entries/change-requests:
+    get:
+      operationId: listEntryChangeRequests
+      tags: [entries]
+      summary: List entry change requests (agent sees own; admin/director see all)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EntryChangeRequest"
+    post:
+      operationId: createEntryChangeRequest
+      tags: [entries]
+      summary: Agent submits a change request for a locked entry
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEntryChangeRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryChangeRequest"
+
+  /entries/change-requests/{id}/admin-review:
+    patch:
+      operationId: adminReviewEntryChangeRequest
+      tags: [entries]
+      summary: Admin approves (forwards to director) or rejects a pending request
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminReviewEntryChangeRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryChangeRequest"
+
+  /entries/change-requests/{id}/director-review:
+    patch:
+      operationId: directorReviewEntryChangeRequest
+      tags: [entries]
+      summary: Director gives final approval or rejection; approval applies the entry change
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DirectorReviewEntryChangeRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryChangeRequest"
+
   /expenses:
     get:
       operationId: listExpenseCategories
@@ -1573,6 +1668,98 @@ components:
           type: boolean
         profilePicture:
           type: ["string", "null"]
+
+    EntryChangeRequest:
+      type: object
+      required: [id, requestedBy, entryType, entryId, writerId, entryDate, currentAmount, requestedAmount, reason, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        requestedBy:
+          type: string
+        requestedByName:
+          type: ["string", "null"]
+        entryType:
+          type: string
+          enum: [gross, wins]
+        entryId:
+          type: string
+        writerId:
+          type: string
+        writerFullCode:
+          type: ["string", "null"]
+        writerFullName:
+          type: ["string", "null"]
+        agentFullCode:
+          type: ["string", "null"]
+        agentName:
+          type: ["string", "null"]
+        entryDate:
+          type: string
+        currentAmount:
+          type: string
+        requestedAmount:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [pending_admin, pending_director, approved, rejected]
+        adminNote:
+          type: ["string", "null"]
+        reviewedByAdmin:
+          type: ["string", "null"]
+        reviewedByAdminName:
+          type: ["string", "null"]
+        adminReviewedAt:
+          type: ["string", "null"]
+        directorNote:
+          type: ["string", "null"]
+        reviewedByDirector:
+          type: ["string", "null"]
+        reviewedByDirectorName:
+          type: ["string", "null"]
+        directorReviewedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    CreateEntryChangeRequestBody:
+      type: object
+      required: [entryType, entryId, requestedAmount, reason]
+      properties:
+        entryType:
+          type: string
+          enum: [gross, wins]
+        entryId:
+          type: string
+        requestedAmount:
+          type: string
+        reason:
+          type: string
+          minLength: 5
+
+    AdminReviewEntryChangeRequestBody:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, reject]
+        note:
+          type: string
+
+    DirectorReviewEntryChangeRequestBody:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [approve, reject]
+        note:
+          type: string
 
     AgentDebtReduction:
       type: object
