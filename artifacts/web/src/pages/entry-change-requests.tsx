@@ -48,15 +48,16 @@ export function EntryChangeRequests() {
   const qc = useQueryClient();
   const role = user?.role ?? "";
 
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
   const [reviewDialog, setReviewDialog] = useState<ReviewDialogState>(null);
   const [reviewAction, setReviewAction] = useState<"approve" | "reject">("approve");
   const [reviewNote, setReviewNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const activeFilter = filterStatus !== "all" ? filterStatus : undefined;
   const { data, isLoading } = useListEntryChangeRequests(
-    filterStatus ? { status: filterStatus } : {},
-    { query: { queryKey: getListEntryChangeRequestsQueryKey(filterStatus ? { status: filterStatus } : {}) } },
+    activeFilter ? { status: activeFilter } : {},
+    { query: { queryKey: getListEntryChangeRequestsQueryKey(activeFilter ? { status: activeFilter } : {}) } },
   );
   const requests = Array.isArray(data) ? data : [];
 
@@ -65,7 +66,9 @@ export function EntryChangeRequests() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getListEntryChangeRequestsQueryKey({}) });
-    qc.invalidateQueries({ queryKey: getListEntryChangeRequestsQueryKey({ status: filterStatus }) });
+    if (activeFilter) {
+      qc.invalidateQueries({ queryKey: getListEntryChangeRequestsQueryKey({ status: activeFilter }) });
+    }
   };
 
   const openReviewDialog = (request: EntryChangeRequest, reviewRole: "admin" | "director") => {
@@ -149,15 +152,15 @@ export function EntryChangeRequests() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All statuses</SelectItem>
+              <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="pending_admin">Pending Admin</SelectItem>
               <SelectItem value="pending_director">Pending Director</SelectItem>
               <SelectItem value="approved">Approved</SelectItem>
               <SelectItem value="rejected">Rejected</SelectItem>
             </SelectContent>
           </Select>
-          {filterStatus && (
-            <Button variant="ghost" size="sm" onClick={() => setFilterStatus("")}>Clear</Button>
+          {filterStatus !== "all" && (
+            <Button variant="ghost" size="sm" onClick={() => setFilterStatus("all")}>Clear</Button>
           )}
         </div>
 
