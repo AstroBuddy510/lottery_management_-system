@@ -28,6 +28,7 @@ import { WinsDebt } from "@/pages/wins-debt";
 import { AgencyDashboard } from "@/pages/agency-dashboard";
 import { EntryChangeRequests } from "@/pages/entry-change-requests";
 import { OnlinePayment } from "@/pages/online-payment";
+import { AgencyStaffExpenses } from "@/pages/agency-staff-expenses";
 
 import { Layout } from "@/components/layout";
 
@@ -78,7 +79,11 @@ function Router() {
       </Route>
       
       <Route path="/users">
-        {() => <ProtectedRoute component={Users} roles={['administrator']} />}
+        {() => <ProtectedRoute component={Users} roles={['administrator', 'director', 'cashier']} />}
+      </Route>
+
+      <Route path="/agency-staff-expenses">
+        {() => <ProtectedRoute component={AgencyStaffExpenses} roles={['cashier', 'administrator', 'director']} />}
       </Route>
 
       <Route path="/agents/:agentId/detail">

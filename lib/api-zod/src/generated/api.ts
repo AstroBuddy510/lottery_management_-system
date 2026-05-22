@@ -497,6 +497,169 @@ export const ListAgentDebtReductionsResponse = zod.array(ListAgentDebtReductions
 
 
 /**
+ * @summary List staff under an agency
+ */
+export const ListAgencyStaffParams = zod.object({
+  "agentId": zod.coerce.string()
+})
+
+export const ListAgencyStaffResponseItem = zod.object({
+  "id": zod.string(),
+  "agentId": zod.string(),
+  "name": zod.string(),
+  "salary": zod.string(),
+  "allowances": zod.string(),
+  "bonuses": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListAgencyStaffResponse = zod.array(ListAgencyStaffResponseItem)
+
+
+/**
+ * @summary Create a staff member under an agency
+ */
+export const CreateAgencyStaffParams = zod.object({
+  "agentId": zod.coerce.string()
+})
+
+export const CreateAgencyStaffBody = zod.object({
+  "name": zod.string(),
+  "salary": zod.string(),
+  "allowances": zod.string().optional(),
+  "bonuses": zod.string().optional()
+})
+
+
+/**
+ * @summary Update agency staff details
+ */
+export const UpdateAgencyStaffParams = zod.object({
+  "agentId": zod.coerce.string(),
+  "id": zod.coerce.string()
+})
+
+export const UpdateAgencyStaffBody = zod.object({
+  "name": zod.string().optional(),
+  "salary": zod.string().optional(),
+  "allowances": zod.string().optional(),
+  "bonuses": zod.string().optional()
+})
+
+export const UpdateAgencyStaffResponse = zod.object({
+  "id": zod.string(),
+  "agentId": zod.string(),
+  "name": zod.string(),
+  "salary": zod.string(),
+  "allowances": zod.string(),
+  "bonuses": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete agency staff member
+ */
+export const DeleteAgencyStaffParams = zod.object({
+  "agentId": zod.coerce.string(),
+  "id": zod.coerce.string()
+})
+
+export const DeleteAgencyStaffResponse = zod.object({
+  "success": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Get general financial overview of every agent staff expenses
+ */
+export const ListAgencyStaffExpensesResponseItem = zod.object({
+  "agentId": zod.string(),
+  "agentCode": zod.string(),
+  "fullCode": zod.string(),
+  "agencyName": zod.string().nullish(),
+  "agentName": zod.string(),
+  "totalSalary": zod.string(),
+  "totalAllowances": zod.string(),
+  "totalBonuses": zod.string(),
+  "totalExpenses": zod.string()
+})
+export const ListAgencyStaffExpensesResponse = zod.array(ListAgencyStaffExpensesResponseItem)
+
+
+/**
+ * @summary List all internal company staff members
+ */
+export const ListCompanyStaffResponseItem = zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "profilePicture": zod.string().nullish(),
+  "position": zod.string(),
+  "salary": zod.string(),
+  "allowances": zod.string(),
+  "bonuses": zod.string(),
+  "status": zod.enum(['active', 'suspended']),
+  "createdAt": zod.string()
+})
+export const ListCompanyStaffResponse = zod.array(ListCompanyStaffResponseItem)
+
+
+/**
+ * @summary Add a new company staff member
+ */
+export const CreateCompanyStaffBody = zod.object({
+  "fullName": zod.string(),
+  "profilePicture": zod.string().nullish(),
+  "position": zod.string(),
+  "salary": zod.string(),
+  "allowances": zod.string().optional(),
+  "bonuses": zod.string().optional(),
+  "status": zod.enum(['active', 'suspended']).optional()
+})
+
+
+/**
+ * @summary Update company staff member details or status
+ */
+export const UpdateCompanyStaffParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateCompanyStaffBody = zod.object({
+  "fullName": zod.string().optional(),
+  "profilePicture": zod.string().nullish(),
+  "position": zod.string().optional(),
+  "salary": zod.string().optional(),
+  "allowances": zod.string().optional(),
+  "bonuses": zod.string().optional(),
+  "status": zod.enum(['active', 'suspended']).optional()
+})
+
+export const UpdateCompanyStaffResponse = zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "profilePicture": zod.string().nullish(),
+  "position": zod.string(),
+  "salary": zod.string(),
+  "allowances": zod.string(),
+  "bonuses": zod.string(),
+  "status": zod.enum(['active', 'suspended']),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a company staff member
+ */
+export const DeleteCompanyStaffParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteCompanyStaffResponse = zod.object({
+  "success": zod.boolean().optional()
+})
+
+
+/**
  * @summary Get current system settings
  */
 export const GetSettingsResponse = zod.object({

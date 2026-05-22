@@ -3,15 +3,21 @@ import {
   useListUsers, useCreateUser, useUpdateUser, useDeactivateUser, useRegeneratePin,
   useListAgents, useCreateAgent, useUpdateAgent, useUpdateMyPhoto,
   useListWriters, useCreateWriter, useUpdateWriter,
+  useListAgencyStaff, useCreateAgencyStaff, useUpdateAgencyStaff, useDeleteAgencyStaff,
+  useListCompanyStaff, useCreateCompanyStaff, useUpdateCompanyStaff, useDeleteCompanyStaff,
   getListUsersQueryKey, getGetMeQueryKey, getListAgentsQueryKey, getListWritersQueryKey,
-  User, UserInput, UserUpdate, AgentWithUser, Writer,
+  getListAgencyStaffQueryKey, getListCompanyStaffQueryKey,
+  User, UserInput, UserUpdate, AgentWithUser, Writer, AgencyStaff, CompanyStaff,
+  AgencyStaffInput, CompanyStaffInput,
 } from "@workspace/api-client-react";
 import { ProfilePhotoInput } from "@/components/profile-photo-input";
+import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -413,7 +419,11 @@ function UsersTab() {
                 <TableCell className="text-sm text-muted-foreground font-mono">{u.phone ?? "—"}</TableCell>
                 <TableCell><Badge variant="outline" className="text-xs">{ROLE_LABELS[u.role] ?? u.role}</Badge></TableCell>
                 <TableCell><Badge variant={u.isActive ? "default" : "secondary"} className="text-xs">{u.isActive ? "Active" : "Inactive"}</Badge></TableCell>
-                <TableCell className="text-xs text-muted-foreground">{u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : "—"}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {u.lastLogin
+                    ? `${new Date(u.lastLogin).toLocaleDateString()} ${new Date(u.lastLogin).toLocaleTimeString()}`
+                    : "—"}
+                </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(u)}>Edit</Button>
@@ -800,7 +810,7 @@ function AgentsTab() {
           {(agentSearch || agentStatusFilter !== "all") && (
             <span className="text-xs text-muted-foreground">{filteredAgents.length} result{filteredAgents.length !== 1 ? "s" : ""}</span>
           )}
-          <Button size="sm" onClick={() => setCreateOpen(true)}>Add Agent</Button>
+          <Button size="sm" onClick={() => setCreateOpen(true)}>Add Agency</Button>
         </div>
       </div>
 
@@ -875,7 +885,7 @@ function AgentsTab() {
       {/* ── Create Agent Dialog ── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Add Agent</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Add Agency</DialogTitle></DialogHeader>
           <p className="text-xs text-muted-foreground -mt-2">Creates the agent user account and registers the agency in one step.</p>
           <form onSubmit={handleCreate} className="space-y-4">
             {/* Agent user details */}
@@ -1066,28 +1076,528 @@ function AgentsTab() {
   );
 }
 
+// ─── Agency Staff tab ─────────────────────────────────────────────────────────
+
+function AgencyStaffTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: agents } = useListAgents({});
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+
+  const { data: staff, isLoading } = useListAgencyStaff(selectedAgentId, {
+    query: { queryKey: getListAgencyStaffQueryKey(selectedAgentId), enabled: !!selectedAgentId }
+  });
+
+  const createMutation = useCreateAgencyStaff();
+  const updateMutation = useUpdateAgencyStaff();
+  const deleteMutation = useDeleteAgencyStaff();
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [editItem, setEditItem] = useState<AgencyStaff | null>(null);
+  const [form, setForm] = useState({ name: "", salary: "", allowances: "", bonuses: "" });
+  const [editForm, setEditForm] = useState({ name: "", salary: "", allowances: "", bonuses: "" });
+
+  const invalidate = () => { if (selectedAgentId) qc.invalidateQueries({ queryKey: getListAgencyStaffQueryKey(selectedAgentId) }); };
+
+  const selectedAgent = useMemo(() => {
+    const list = Array.isArray(agents) ? agents : [];
+    return list.find(a => a.id === selectedAgentId);
+  }, [agents, selectedAgentId]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAgentId) return;
+    try {
+      await createMutation.mutateAsync({
+        agentId: selectedAgentId,
+        data: {
+          name: form.name.trim(),
+          salary: form.salary || "0",
+          allowances: form.allowances || "0",
+          bonuses: form.bonuses || "0",
+        }
+      });
+      toast({ title: "Staff member added" });
+      setAddOpen(false);
+      setForm({ name: "", salary: "", allowances: "", bonuses: "" });
+      invalidate();
+    } catch {
+      toast({ title: "Failed to add staff member", variant: "destructive" });
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editItem || !selectedAgentId) return;
+    try {
+      await updateMutation.mutateAsync({
+        agentId: selectedAgentId,
+        id: editItem.id,
+        data: {
+          name: editForm.name.trim() || undefined,
+          salary: editForm.salary || undefined,
+          allowances: editForm.allowances || undefined,
+          bonuses: editForm.bonuses || undefined,
+        }
+      });
+      toast({ title: "Staff member updated" });
+      setEditItem(null);
+      invalidate();
+    } catch {
+      toast({ title: "Failed to update staff member", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (s: AgencyStaff) => {
+    if (!confirm(`Delete staff member "${s.name}"?`)) return;
+    try {
+      await deleteMutation.mutateAsync({ agentId: selectedAgentId, id: s.id });
+      toast({ title: "Staff member deleted" });
+      invalidate();
+    } catch {
+      toast({ title: "Failed to delete staff member", variant: "destructive" });
+    }
+  };
+
+  const openEdit = (s: AgencyStaff) => {
+    setEditItem(s);
+    setEditForm({ name: s.name, salary: s.salary, allowances: s.allowances, bonuses: s.bonuses });
+  };
+
+  const agentsList = Array.isArray(agents) ? agents : [];
+  const staffList = Array.isArray(staff) ? staff : [];
+
+  return (
+    <>
+      {/* Agent selection */}
+      <div className="flex flex-wrap items-end gap-3 mb-5">
+        <div className="space-y-1.5 flex-1 min-w-56 max-w-sm">
+          <Label className="text-xs font-medium">Select Agency</Label>
+          <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+            <SelectTrigger className="h-9 text-sm bg-slate-50">
+              <SelectValue placeholder="Choose an agency…" />
+            </SelectTrigger>
+            <SelectContent>
+              {agentsList.map(a => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.fullCode} — {a.agencyName || a.user?.fullName || "Unnamed"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {selectedAgentId && (
+          <Button size="sm" className="bg-accent hover:bg-accent/90 text-white font-semibold" onClick={() => setAddOpen(true)}>+ Add Staff</Button>
+        )}
+      </div>
+
+      {!selectedAgentId ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">Select an agency above to view and manage its staff.</div>
+      ) : isLoading ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">Loading staff…</div>
+      ) : staffList.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">No staff members for {selectedAgent?.agencyName || "this agency"} yet.</div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="text-right">Salary (GHS)</TableHead>
+                <TableHead className="text-right">Allowances (GHS)</TableHead>
+                <TableHead className="text-right">Bonuses (GHS)</TableHead>
+                <TableHead className="text-right font-semibold">Total (GHS)</TableHead>
+                <TableHead className="w-32">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {staffList.map(s => {
+                const total = parseFloat(s.salary) + parseFloat(s.allowances) + parseFloat(s.bonuses);
+                return (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium text-sm">{s.name}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{parseFloat(s.salary).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm text-blue-600">{parseFloat(s.allowances).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm text-emerald-600">{parseFloat(s.bonuses).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm font-bold text-primary">{total.toFixed(2)}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(s)}>Edit</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDelete(s)}>Delete</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* Add Staff Dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Staff — {selectedAgent?.agencyName || selectedAgent?.fullCode}</DialogTitle></DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Staff Name</Label>
+              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Kwame Mensah" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Salary (GHS)</Label>
+                <Input type="number" min="0" step="0.01" value={form.salary} onChange={e => setForm(f => ({ ...f, salary: e.target.value }))} className="h-9 text-sm font-mono" placeholder="0.00" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Allowances</Label>
+                <Input type="number" min="0" step="0.01" value={form.allowances} onChange={e => setForm(f => ({ ...f, allowances: e.target.value }))} className="h-9 text-sm font-mono" placeholder="0.00" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Bonuses</Label>
+                <Input type="number" min="0" step="0.01" value={form.bonuses} onChange={e => setForm(f => ({ ...f, bonuses: e.target.value }))} className="h-9 text-sm font-mono" placeholder="0.00" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={createMutation.isPending}>Add Staff</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Staff Dialog */}
+      <Dialog open={!!editItem} onOpenChange={open => !open && setEditItem(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Staff — {editItem?.name}</DialogTitle></DialogHeader>
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Staff Name</Label>
+              <Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Salary (GHS)</Label>
+                <Input type="number" min="0" step="0.01" value={editForm.salary} onChange={e => setEditForm(f => ({ ...f, salary: e.target.value }))} className="h-9 text-sm font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Allowances</Label>
+                <Input type="number" min="0" step="0.01" value={editForm.allowances} onChange={e => setEditForm(f => ({ ...f, allowances: e.target.value }))} className="h-9 text-sm font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Bonuses</Label>
+                <Input type="number" min="0" step="0.01" value={editForm.bonuses} onChange={e => setEditForm(f => ({ ...f, bonuses: e.target.value }))} className="h-9 text-sm font-mono" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditItem(null)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save Changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+// ─── Company Staff tab ────────────────────────────────────────────────────────
+
+function CompanyStaffTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: staff, isLoading } = useListCompanyStaff();
+  const createMutation = useCreateCompanyStaff();
+  const updateMutation = useUpdateCompanyStaff();
+  const deleteMutation = useDeleteCompanyStaff();
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [editItem, setEditItem] = useState<CompanyStaff | null>(null);
+  const [form, setForm] = useState({ fullName: "", position: "", salary: "", allowances: "", bonuses: "", profilePicture: null as string | null });
+  const [editForm, setEditForm] = useState({ fullName: "", position: "", salary: "", allowances: "", bonuses: "", profilePicture: null as string | null });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: getListCompanyStaffQueryKey() });
+  const staffList = Array.isArray(staff) ? staff : [];
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createMutation.mutateAsync({
+        data: {
+          fullName: form.fullName.trim(),
+          position: form.position.trim(),
+          salary: form.salary || "0",
+          allowances: form.allowances || "0",
+          bonuses: form.bonuses || "0",
+          profilePicture: form.profilePicture,
+        }
+      });
+      toast({ title: "Company staff member added" });
+      setAddOpen(false);
+      setForm({ fullName: "", position: "", salary: "", allowances: "", bonuses: "", profilePicture: null });
+      invalidate();
+    } catch {
+      toast({ title: "Failed to add company staff", variant: "destructive" });
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editItem) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: editItem.id,
+        data: {
+          fullName: editForm.fullName.trim() || undefined,
+          position: editForm.position.trim() || undefined,
+          salary: editForm.salary || undefined,
+          allowances: editForm.allowances || undefined,
+          bonuses: editForm.bonuses || undefined,
+          profilePicture: editForm.profilePicture,
+        }
+      });
+      toast({ title: "Staff member updated" });
+      setEditItem(null);
+      invalidate();
+    } catch {
+      toast({ title: "Failed to update staff member", variant: "destructive" });
+    }
+  };
+
+  const handleToggleStatus = async (s: CompanyStaff) => {
+    const newStatus = s.status === "active" ? "suspended" : "active";
+    if (!confirm(`${newStatus === "suspended" ? "Suspend" : "Reactivate"} ${s.fullName}?`)) return;
+    try {
+      await updateMutation.mutateAsync({ id: s.id, data: { status: newStatus } });
+      toast({ title: `${s.fullName} ${newStatus === "suspended" ? "suspended" : "reactivated"}` });
+      invalidate();
+    } catch {
+      toast({ title: "Failed to update status", variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (s: CompanyStaff) => {
+    if (!confirm(`Permanently delete ${s.fullName}?`)) return;
+    try {
+      await deleteMutation.mutateAsync({ id: s.id });
+      toast({ title: "Staff member deleted" });
+      invalidate();
+    } catch {
+      toast({ title: "Failed to delete staff", variant: "destructive" });
+    }
+  };
+
+  const openEdit = (s: CompanyStaff) => {
+    setEditItem(s);
+    setEditForm({ fullName: s.fullName, position: s.position, salary: s.salary, allowances: s.allowances, bonuses: s.bonuses, profilePicture: s.profilePicture ?? null });
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground">Internal company employees — manage payroll, positions and status.</p>
+        <Button size="sm" className="bg-accent hover:bg-accent/90 text-white font-semibold" onClick={() => setAddOpen(true)}>+ Add Staff</Button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">Loading company staff…</div>
+      ) : staffList.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground text-sm">No company staff members yet. Click "+ Add Staff" to begin.</div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {staffList.map(s => {
+            const total = parseFloat(s.salary) + parseFloat(s.allowances) + parseFloat(s.bonuses);
+            const initials = s.fullName.split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+            const color = AVATAR_COLORS[s.fullName.charCodeAt(0) % AVATAR_COLORS.length];
+            const isSuspended = s.status === "suspended";
+            return (
+              <Card key={s.id} className={`overflow-hidden transition-all hover:shadow-md ${isSuspended ? "opacity-60" : ""}`}>
+                <CardContent className="p-4 space-y-3">
+                  {/* Header */}
+                  <div className="flex items-center gap-3">
+                    {s.profilePicture ? (
+                      <img src={s.profilePicture} alt={s.fullName} className="w-12 h-12 rounded-full object-cover ring-2 ring-border flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    ) : (
+                      <div className={`w-12 h-12 rounded-full ${color} flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>{initials || "?"}</div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-sm truncate">{s.fullName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{s.position}</p>
+                    </div>
+                    <Badge variant={isSuspended ? "secondary" : "default"} className="text-[10px] flex-shrink-0">{isSuspended ? "Suspended" : "Active"}</Badge>
+                  </div>
+                  {/* Financials */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground font-medium">Salary</p>
+                      <p className="text-sm font-mono font-semibold">{parseFloat(s.salary).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground font-medium">Allowance</p>
+                      <p className="text-sm font-mono font-semibold text-blue-600">{parseFloat(s.allowances).toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase text-muted-foreground font-medium">Bonus</p>
+                      <p className="text-sm font-mono font-semibold text-emerald-600">{parseFloat(s.bonuses).toFixed(2)}</p>
+                    </div>
+                  </div>
+                  <div className="border-t pt-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-primary">Total: GHS {total.toFixed(2)}</span>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => openEdit(s)}>Edit</Button>
+                      <Button size="sm" variant="ghost" className={`h-6 text-xs px-2 ${isSuspended ? "text-emerald-600" : "text-amber-600"}`} onClick={() => handleToggleStatus(s)}>{isSuspended ? "Activate" : "Suspend"}</Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2 text-destructive" onClick={() => handleDelete(s)}>Delete</Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add Company Staff Dialog */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Add Company Staff</DialogTitle></DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="flex justify-center pb-1">
+              <ProfilePhotoInput
+                value={form.profilePicture}
+                onChange={v => setForm(f => ({ ...f, profilePicture: v }))}
+                name={form.fullName}
+                size={72}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Full Name</Label>
+                <Input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" placeholder="Jane Mensah" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Position</Label>
+                <Input value={form.position} onChange={e => setForm(f => ({ ...f, position: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Accountant" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Salary (GHS)</Label>
+                <Input type="number" min="0" step="0.01" value={form.salary} onChange={e => setForm(f => ({ ...f, salary: e.target.value }))} className="h-9 text-sm font-mono" placeholder="0.00" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Allowances</Label>
+                <Input type="number" min="0" step="0.01" value={form.allowances} onChange={e => setForm(f => ({ ...f, allowances: e.target.value }))} className="h-9 text-sm font-mono" placeholder="0.00" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Bonuses</Label>
+                <Input type="number" min="0" step="0.01" value={form.bonuses} onChange={e => setForm(f => ({ ...f, bonuses: e.target.value }))} className="h-9 text-sm font-mono" placeholder="0.00" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={createMutation.isPending}>Add Staff</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Company Staff Dialog */}
+      <Dialog open={!!editItem} onOpenChange={open => !open && setEditItem(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Edit Staff — {editItem?.fullName}</DialogTitle></DialogHeader>
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <div className="flex justify-center pb-1">
+              <ProfilePhotoInput
+                value={editForm.profilePicture}
+                onChange={v => setEditForm(f => ({ ...f, profilePicture: v }))}
+                name={editForm.fullName}
+                size={72}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Full Name</Label>
+                <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Position</Label>
+                <Input value={editForm.position} onChange={e => setEditForm(f => ({ ...f, position: e.target.value }))} required className="h-9 text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Salary (GHS)</Label>
+                <Input type="number" min="0" step="0.01" value={editForm.salary} onChange={e => setEditForm(f => ({ ...f, salary: e.target.value }))} className="h-9 text-sm font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Allowances</Label>
+                <Input type="number" min="0" step="0.01" value={editForm.allowances} onChange={e => setEditForm(f => ({ ...f, allowances: e.target.value }))} className="h-9 text-sm font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Bonuses</Label>
+                <Input type="number" min="0" step="0.01" value={editForm.bonuses} onChange={e => setEditForm(f => ({ ...f, bonuses: e.target.value }))} className="h-9 text-sm font-mono" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditItem(null)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save Changes</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // ─── Page root ────────────────────────────────────────────────────────────────
 
 export function Users() {
+  const { user } = useAuth();
+  const role = user?.role ?? "";
+  const isAdmin = role === "administrator";
+
+  // Admins default to "users" tab, Director/Cashier default to "company-staff"
+  const defaultTab = isAdmin ? "users" : "company-staff";
+
+  // Dynamic header based on role
+  const heading = isAdmin ? "Users & Agents" : "Company Staff";
+  const subHeading = isAdmin
+    ? "Manage system users, agent accounts, agency staff and company employees."
+    : "View and manage internal company staff members.";
+
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold">Users &amp; Agents</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Manage system users, agent accounts and their writers.</p>
+        <h1 className="text-xl font-semibold">{heading}</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{subHeading}</p>
       </div>
 
-      <Tabs defaultValue="users">
+      <Tabs defaultValue={defaultTab}>
         <TabsList className="mb-4">
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="agents">Agents</TabsTrigger>
+          {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="agents">Agents</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="agency-staff">Agency Staff</TabsTrigger>}
+          <TabsTrigger value="company-staff">Company Staff</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="users">
-          <UsersTab />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="users">
+            <UsersTab />
+          </TabsContent>
+        )}
 
-        <TabsContent value="agents">
-          <AgentsTab />
+        {isAdmin && (
+          <TabsContent value="agents">
+            <AgentsTab />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="agency-staff">
+            <AgencyStaffTab />
+          </TabsContent>
+        )}
+
+        <TabsContent value="company-staff">
+          <CompanyStaffTab />
         </TabsContent>
       </Tabs>
     </div>

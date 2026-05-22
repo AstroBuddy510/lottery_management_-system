@@ -15,7 +15,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
   { label: "Agency Dashboard", path: "/agencies", roles: ["director", "administrator"] },
-  { label: "Users & Agents", path: "/users", roles: ["administrator"] },
+  { label: "Users & Agents", path: "/users", roles: ["administrator", "director", "cashier"] },
   { label: "Games", path: "/games", roles: ["administrator"] },
   { label: "Settings", path: "/settings", roles: ["administrator"] },
   { label: "My Writers", path: "/my-writers", roles: ["agent"] },
@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Wins Entries", path: "/entries/wins", roles: ["wins_entry", "agent"] },
   { label: "Sales Log", path: "/sales", roles: ["agent", "administrator"] },
   { label: "Payments", path: "/payments", roles: ["cashier", "administrator"] },
+  { label: "Agency Staff Expenses", path: "/agency-staff-expenses", roles: ["cashier", "administrator", "director"] },
   { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier", "administrator"] },
   { label: "Calculations", path: "/calculations", roles: ["director", "administrator"] },
   { label: "Reports", path: "/reports", roles: ["director", "administrator", "cashier"] },

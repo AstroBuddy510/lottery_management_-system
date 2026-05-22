@@ -564,6 +564,215 @@ paths:
                 items:
                   $ref: "#/components/schemas/AgentDebtReduction"
 
+  /agents/{agentId}/staff:
+    get:
+      operationId: listAgencyStaff
+      tags: [agents]
+      summary: List staff under an agency
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgencyStaff"
+    post:
+      operationId: createAgencyStaff
+      tags: [agents]
+      summary: Create a staff member under an agency
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgencyStaffInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgencyStaff"
+
+  /agents/{agentId}/staff/{id}:
+    patch:
+      operationId: updateAgencyStaff
+      tags: [agents]
+      summary: Update agency staff details
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgencyStaffUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgencyStaff"
+    delete:
+      operationId: deleteAgencyStaff
+      tags: [agents]
+      summary: Delete agency staff member
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /agents/staff-expenses:
+    get:
+      operationId: listAgencyStaffExpenses
+      tags: [agents]
+      summary: Get general financial overview of every agent staff expenses
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgencyStaffExpensesOverview"
+
+  /company-staff:
+    get:
+      operationId: listCompanyStaff
+      tags: [users]
+      summary: List all internal company staff members
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanyStaff"
+    post:
+      operationId: createCompanyStaff
+      tags: [users]
+      summary: Add a new company staff member
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyStaffInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyStaff"
+
+  /company-staff/{id}:
+    patch:
+      operationId: updateCompanyStaff
+      tags: [users]
+      summary: Update company staff member details or status
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyStaffUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyStaff"
+    delete:
+      operationId: deleteCompanyStaff
+      tags: [users]
+      summary: Delete a company staff member
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
   /settings:
     get:
       operationId: getSettings
@@ -2775,4 +2984,134 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WinsDebtHistoryItem"
+
+    AgencyStaff:
+      type: object
+      required: [id, agentId, name, salary, allowances, bonuses, createdAt]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        name:
+          type: string
+        salary:
+          type: string
+        allowances:
+          type: string
+        bonuses:
+          type: string
+        createdAt:
+          type: string
+
+    AgencyStaffInput:
+      type: object
+      required: [name, salary]
+      properties:
+        name:
+          type: string
+        salary:
+          type: string
+        allowances:
+          type: string
+        bonuses:
+          type: string
+
+    AgencyStaffUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        salary:
+          type: string
+        allowances:
+          type: string
+        bonuses:
+          type: string
+
+    AgencyStaffExpensesOverview:
+      type: object
+      required: [agentId, agentCode, fullCode, agentName, totalSalary, totalAllowances, totalBonuses, totalExpenses]
+      properties:
+        agentId:
+          type: string
+        agentCode:
+          type: string
+        fullCode:
+          type: string
+        agencyName:
+          type: ["string", "null"]
+        agentName:
+          type: string
+        totalSalary:
+          type: string
+        totalAllowances:
+          type: string
+        totalBonuses:
+          type: string
+        totalExpenses:
+          type: string
+
+    CompanyStaff:
+      type: object
+      required: [id, fullName, position, salary, allowances, bonuses, status, createdAt]
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        profilePicture:
+          type: ["string", "null"]
+        position:
+          type: string
+        salary:
+          type: string
+        allowances:
+          type: string
+        bonuses:
+          type: string
+        status:
+          type: string
+          enum: [active, suspended]
+        createdAt:
+          type: string
+
+    CompanyStaffInput:
+      type: object
+      required: [fullName, position, salary]
+      properties:
+        fullName:
+          type: string
+        profilePicture:
+          type: ["string", "null"]
+        position:
+          type: string
+        salary:
+          type: string
+        allowances:
+          type: string
+        bonuses:
+          type: string
+        status:
+          type: string
+          enum: [active, suspended]
+
+    CompanyStaffUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+        profilePicture:
+          type: ["string", "null"]
+        position:
+          type: string
+        salary:
+          type: string
+        allowances:
+          type: string
+        bonuses:
+          type: string
+        status:
+          type: string
+          enum: [active, suspended]
 

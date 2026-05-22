@@ -15,6 +15,8 @@ import gamesRouter from "./games";
 import expensesRouter from "./expenses";
 import entryChangeRequestsRouter from "./entry-change-requests";
 import paystackRouter from "./paystack";
+import agencyStaffRouter from "./agency-staff";
+import companyStaffRouter from "./company-staff";
 
 const router: IRouter = Router();
 
@@ -34,5 +36,7 @@ router.use(reserveRouter);
 router.use(notificationsRouter);
 router.use(gamesRouter);
 router.use(paystackRouter);
+router.use(agencyStaffRouter);
+router.use(companyStaffRouter);
 
 export default router;

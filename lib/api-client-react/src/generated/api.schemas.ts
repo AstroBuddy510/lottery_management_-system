@@ -969,6 +969,102 @@ export interface WinsDebtReport {
   history: WinsDebtHistoryItem[];
 }
 
+export interface AgencyStaff {
+  id: string;
+  agentId: string;
+  name: string;
+  salary: string;
+  allowances: string;
+  bonuses: string;
+  createdAt: string;
+}
+
+export interface AgencyStaffInput {
+  name: string;
+  salary: string;
+  allowances?: string;
+  bonuses?: string;
+}
+
+export interface AgencyStaffUpdate {
+  name?: string;
+  salary?: string;
+  allowances?: string;
+  bonuses?: string;
+}
+
+export interface AgencyStaffExpensesOverview {
+  agentId: string;
+  agentCode: string;
+  fullCode: string;
+  /** @nullable */
+  agencyName?: string | null;
+  agentName: string;
+  totalSalary: string;
+  totalAllowances: string;
+  totalBonuses: string;
+  totalExpenses: string;
+}
+
+export type CompanyStaffStatus = typeof CompanyStaffStatus[keyof typeof CompanyStaffStatus];
+
+
+export const CompanyStaffStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export interface CompanyStaff {
+  id: string;
+  fullName: string;
+  /** @nullable */
+  profilePicture?: string | null;
+  position: string;
+  salary: string;
+  allowances: string;
+  bonuses: string;
+  status: CompanyStaffStatus;
+  createdAt: string;
+}
+
+export type CompanyStaffInputStatus = typeof CompanyStaffInputStatus[keyof typeof CompanyStaffInputStatus];
+
+
+export const CompanyStaffInputStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export interface CompanyStaffInput {
+  fullName: string;
+  /** @nullable */
+  profilePicture?: string | null;
+  position: string;
+  salary: string;
+  allowances?: string;
+  bonuses?: string;
+  status?: CompanyStaffInputStatus;
+}
+
+export type CompanyStaffUpdateStatus = typeof CompanyStaffUpdateStatus[keyof typeof CompanyStaffUpdateStatus];
+
+
+export const CompanyStaffUpdateStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export interface CompanyStaffUpdate {
+  fullName?: string;
+  /** @nullable */
+  profilePicture?: string | null;
+  position?: string;
+  salary?: string;
+  allowances?: string;
+  bonuses?: string;
+  status?: CompanyStaffUpdateStatus;
+}
+
 export type ListUsersParams = {
 role?: string;
 isActive?: boolean;
@@ -980,6 +1076,14 @@ isActive?: boolean;
 
 export type ListWritersParams = {
 isActive?: boolean;
+};
+
+export type DeleteAgencyStaff200 = {
+  success?: boolean;
+};
+
+export type DeleteCompanyStaff200 = {
+  success?: boolean;
 };
 
 export type ListSalesParams = {
