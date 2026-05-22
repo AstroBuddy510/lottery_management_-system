@@ -163,6 +163,15 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
                     Change Requests
                   </div>
                 </Link>
+                <Link href="/online-payment" onClick={() => setMenuOpen(false)}>
+                  <div className="flex items-center gap-3 px-4 py-3.5 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-50 transition-colors font-medium">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="4" width="20" height="16" rx="2"/>
+                      <line x1="2" y1="10" x2="22" y2="10"/>
+                    </svg>
+                    Make Deposit
+                  </div>
+                </Link>
                 <button
                   onClick={() => { setMenuOpen(false); logout(); }}
                   className="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-red-600 hover:bg-red-50 active:bg-red-50 transition-colors font-semibold"

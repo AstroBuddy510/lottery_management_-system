@@ -14,6 +14,7 @@ import notificationsRouter from "./notifications";
 import gamesRouter from "./games";
 import expensesRouter from "./expenses";
 import entryChangeRequestsRouter from "./entry-change-requests";
+import paystackRouter from "./paystack";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(reportsRouter);
 router.use(reserveRouter);
 router.use(notificationsRouter);
 router.use(gamesRouter);
+router.use(paystackRouter);
 
 export default router;

@@ -24,6 +24,8 @@ export const paymentsTable = pgTable("payments", {
   isVoided: boolean("is_voided").notNull().default(false),
   voidedBy: uuid("voided_by").references(() => usersTable.id),
   voidedReason: text("voided_reason"),
+  paymentMethod: text("payment_method").notNull().default("manual"),
+  paystackReference: text("paystack_reference").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

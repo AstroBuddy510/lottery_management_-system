@@ -27,6 +27,7 @@ import { MyWriters } from "@/pages/my-writers";
 import { WinsDebt } from "@/pages/wins-debt";
 import { AgencyDashboard } from "@/pages/agency-dashboard";
 import { EntryChangeRequests } from "@/pages/entry-change-requests";
+import { OnlinePayment } from "@/pages/online-payment";
 
 import { Layout } from "@/components/layout";
 
@@ -130,6 +131,10 @@ function Router() {
 
       <Route path="/my-writers">
         {() => <ProtectedRoute component={MyWriters} roles={["agent"]} />}
+      </Route>
+
+      <Route path="/online-payment">
+        {() => <ProtectedRoute component={OnlinePayment} roles={["agent"]} />}
       </Route>
 
       <Route path="/wins-debt">

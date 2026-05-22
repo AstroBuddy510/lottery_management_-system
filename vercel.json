@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "outputDirectory": "artifacts/web/dist/public",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}
