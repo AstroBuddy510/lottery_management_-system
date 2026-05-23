@@ -64,7 +64,7 @@ router.get("/staff-payroll/summary", requireAuth, requireRole("director", "admin
     const wallet = await getWallet();
     const payrollCompletionPercent = monthlyPayrollDue > 0 ? (paidThisMonth / monthlyPayrollDue) * 100 : 0;
 
-    const summary: PayrollSummary = {
+    const summary = {
       totalCompanyStaff: Number(companyCount) || 0,
       totalAgencyStaff: Number(agencyCount) || 0,
       monthlyPayrollDue: monthlyPayrollDue.toFixed(2),
@@ -101,7 +101,7 @@ router.get("/staff-payroll/payments", requireAuth, requireRole("director", "admi
     .orderBy(desc(salaryPaymentsTable.createdAt));
 
     // Resolve staff names manually
-    const records: SalaryPaymentRecord[] = await Promise.all(payments.map(async ({ payment, paidByUser }) => {
+    const records = await Promise.all(payments.map(async ({ payment, paidByUser }) => {
       let staffName = "Unknown";
       let staffPosition = "Staff";
       let agencyName = null;
@@ -256,7 +256,7 @@ router.get("/staff-payroll/calendar", requireAuth, requireRole("director", "admi
       }
     }
 
-    const calendar: PayrollCalendarEntry[] = Array.from(calendarMap.entries()).map(([date, data]) => ({
+    const calendar = Array.from(calendarMap.entries()).map(([date, data]) => ({
       date,
       staffCount: data.count,
       totalAmount: data.total.toFixed(2),
@@ -347,7 +347,7 @@ router.get("/staff-payroll/wallet/transactions", requireAuth, requireRole("direc
     .leftJoin(usersTable, eq(salaryWalletTransactionsTable.performedBy, usersTable.id))
     .orderBy(desc(salaryWalletTransactionsTable.createdAt));
 
-    const result: WalletTransaction[] = txs.map(({ tx, user }) => ({
+    const result = txs.map(({ tx, user }) => ({
       id: tx.id,
       type: tx.type as "fund" | "disburse",
       amount: parseFloat(tx.amount).toFixed(2),
