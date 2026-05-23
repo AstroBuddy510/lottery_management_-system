@@ -76,9 +76,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <aside className="w-56 flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border">
-        <div className="px-4 py-4 border-b border-sidebar-border">
-          <div className="text-lg font-bold text-sidebar-primary tracking-tight">VS2000</div>
-          <div className="text-xs text-sidebar-foreground/60 mt-0.5">Smart Office</div>
+        <div className="px-4 py-4 border-b border-sidebar-border flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg overflow-hidden bg-white flex items-center justify-center p-1.5 shadow-sm border border-sidebar-border/50 flex-shrink-0">
+            <img src="/company-logo.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-base font-bold text-sidebar-primary tracking-tight leading-none">VS2000</div>
+            <div className="text-[10px] text-sidebar-foreground/60 mt-1 truncate">Smart Office</div>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
