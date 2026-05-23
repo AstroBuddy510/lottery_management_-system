@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import {
   useListPayments, useCreatePayment, useVoidPayment,
   useListAgents, useListExpenseCategories, useListCalculations,
-  useListTimeWindows,
+  useListTimeWindows, useApprovePayment, useRejectPayment,
   getListPaymentsQueryKey, getListCalculationsQueryKey,
   getListTimeWindowsQueryKey,
 } from "@workspace/api-client-react";
@@ -117,6 +117,9 @@ export function Payments() {
     dateFrom: filterFrom || undefined,
     dateTo:   filterTo   || undefined,
   });
+  const { data: pendingPayments, isLoading: loadingPending } = useListPayments({
+    status: "pending",
+  });
   const { data: allPaymentsRaw } = useListPayments({});
   const { data: agents }         = useListAgents({});
   const { data: expenseCategories } = useListExpenseCategories();
@@ -126,6 +129,8 @@ export function Payments() {
 
   const createMutation = useCreatePayment();
   const voidMutation   = useVoidPayment();
+  const approveMutation = useApprovePayment();
+  const rejectMutation = useRejectPayment();
 
   /* ── modal state ── */
   const [open, setOpen]   = useState(false);
@@ -138,6 +143,7 @@ export function Payments() {
   const agentList   = useMemo(() => Array.isArray(agents) ? agents : [], [agents]);
   const expenseList = useMemo(() => Array.isArray(expenseCategories) ? expenseCategories.filter(e => e.isActive) : [], [expenseCategories]);
   const calcList    = useMemo(() => Array.isArray(allCalcs) ? allCalcs : [], [allCalcs]);
+  const pendingList = useMemo(() => Array.isArray(pendingPayments) ? pendingPayments : [], [pendingPayments]);
   const paymentList = useMemo(() => Array.isArray(rawPayments) ? rawPayments : [], [rawPayments]);
   const allPayments = useMemo(() => Array.isArray(allPaymentsRaw) ? allPaymentsRaw : [], [allPaymentsRaw]);
   const windows     = useMemo(() => Array.isArray(timeWindows) ? timeWindows : [], [timeWindows]);
@@ -216,7 +222,30 @@ export function Payments() {
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getListPaymentsQueryKey({}) });
+    qc.invalidateQueries({ queryKey: getListPaymentsQueryKey({ status: "pending" }) });
     qc.invalidateQueries({ queryKey: getListCalculationsQueryKey({}) });
+  };
+
+  const handleApprove = async (id: string, amount: string) => {
+    if (!confirm(`Confirm collection of cash for GH₵ ${Number(amount).toFixed(2)}?`)) return;
+    try {
+      const result = await approveMutation.mutateAsync({ id });
+      toast({ title: `Payment request approved — ${result.receiptNumber ?? ""}` });
+      invalidate();
+    } catch {
+      toast({ title: "Failed to approve payment request", variant: "destructive" });
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    if (!confirm("Reject this payment request?")) return;
+    try {
+      await rejectMutation.mutateAsync({ id });
+      toast({ title: "Payment request rejected" });
+      invalidate();
+    } catch {
+      toast({ title: "Failed to reject payment request", variant: "destructive" });
+    }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -347,6 +376,14 @@ export function Payments() {
           <TabsTrigger value="settlement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 py-2.5 text-sm">
             Settlement Board
           </TabsTrigger>
+          <TabsTrigger value="pending-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 py-2.5 text-sm relative">
+            Pending Cash Requests
+            {pendingList.length > 0 && (
+              <span className="ml-2 bg-amber-500 text-white rounded-full px-2 py-0.5 text-[10px] font-bold">
+                {pendingList.length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 py-2.5 text-sm">
             Transaction History
           </TabsTrigger>
@@ -463,6 +500,67 @@ export function Payments() {
                 </div>
               </div>
             )}
+          </div>
+        </TabsContent>
+
+        {/* ── Pending Cash Requests ── */}
+        <TabsContent value="pending-requests" className="mt-5 space-y-4">
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40">
+                  <TableHead className="font-semibold">Agent</TableHead>
+                  <TableHead className="font-semibold">Request Date</TableHead>
+                  <TableHead className="font-semibold">Method</TableHead>
+                  <TableHead className="text-right font-semibold">Amount</TableHead>
+                  <TableHead className="text-center font-semibold">Status</TableHead>
+                  <TableHead className="text-right font-semibold">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingPending ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading requests…</TableCell></TableRow>
+                ) : pendingList.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No pending cash requests found.</TableCell></TableRow>
+                ) : pendingList.map(req => {
+                  const agentInfo = agentMap[req.agentId];
+                  const name = agentInfo?.name ?? "—";
+                  const code = agentInfo?.code ?? "";
+                  return (
+                    <TableRow key={req.id}>
+                      <TableCell>
+                        <div className="font-medium text-sm">{name}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{code}</div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {req.paymentDate}
+                      </TableCell>
+                      <TableCell className="text-sm font-semibold uppercase">
+                        {req.paymentMethod}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm font-bold text-primary">
+                        {fmtGHS(Number(req.amount))}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                          PENDING CASHIER
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleApprove(req.id, req.amount)} disabled={approveMutation.isPending}>
+                            Approve & Collect Cash
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:bg-destructive/10" onClick={() => handleReject(req.id)} disabled={rejectMutation.isPending}>
+                            Reject
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         </TabsContent>
 

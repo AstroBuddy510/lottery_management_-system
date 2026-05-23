@@ -512,11 +512,24 @@ export const PaymentTransactionType = {
   pay_out: 'pay_out',
 } as const;
 
+export type PaymentStatus = typeof PaymentStatus[keyof typeof PaymentStatus];
+
+
+export const PaymentStatus = {
+  pending: 'pending',
+  completed: 'completed',
+  rejected: 'rejected',
+  voided: 'voided',
+} as const;
+
 export interface Payment {
   id: string;
   agentId: string;
-  cashierId: string;
+  /** @nullable */
+  cashierId?: string | null;
   transactionType: PaymentTransactionType;
+  status: PaymentStatus;
+  paymentMethod: string;
   /** @nullable */
   grossAmount?: string | null;
   amount: string;
@@ -549,6 +562,20 @@ export interface PaymentInput {
   grossAmount: string;
   expenseItems?: ExpenseLineItem[];
   paymentDate: string;
+  notes?: string;
+}
+
+export type PaymentRequestInputPaymentMethod = typeof PaymentRequestInputPaymentMethod[keyof typeof PaymentRequestInputPaymentMethod];
+
+
+export const PaymentRequestInputPaymentMethod = {
+  cash: 'cash',
+  paystack: 'paystack',
+} as const;
+
+export interface PaymentRequestInput {
+  amount: string;
+  paymentMethod: PaymentRequestInputPaymentMethod;
   notes?: string;
 }
 
@@ -1112,6 +1139,7 @@ export type ListPaymentsParams = {
 agentId?: string;
 dateFrom?: string;
 dateTo?: string;
+status?: string;
 };
 
 export type ListCalculationsParams = {

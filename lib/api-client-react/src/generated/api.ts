@@ -77,6 +77,7 @@ import type {
   OrgReport,
   Payment,
   PaymentInput,
+  PaymentRequestInput,
   PinRegenResponse,
   RefreshInput,
   ReserveAllocation,
@@ -4357,6 +4358,217 @@ export const useCreatePayment = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getCreatePaymentMutationOptions(options));
+    }
+
+export const getRequestPaymentUrl = () => {
+
+
+
+
+  return `/api/payments/request`
+}
+
+/**
+ * @summary Request a cash payment (agent only)
+ */
+export const requestPayment = async (paymentRequestInput: PaymentRequestInput, options?: RequestInit): Promise<Payment> => {
+
+  return customFetch<Payment>(getRequestPaymentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      paymentRequestInput,)
+  }
+);}
+
+
+
+
+export const getRequestPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPayment>>, TError,{data: BodyType<PaymentRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestPayment>>, TError,{data: BodyType<PaymentRequestInput>}, TContext> => {
+
+const mutationKey = ['requestPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestPayment>>, {data: BodyType<PaymentRequestInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestPayment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof requestPayment>>>
+    export type RequestPaymentMutationBody = BodyType<PaymentRequestInput>
+    export type RequestPaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Request a cash payment (agent only)
+ */
+export const useRequestPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestPayment>>, TError,{data: BodyType<PaymentRequestInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestPayment>>,
+        TError,
+        {data: BodyType<PaymentRequestInput>},
+        TContext
+      > => {
+      return useMutation(getRequestPaymentMutationOptions(options));
+    }
+
+export const getApprovePaymentUrl = (id: string,) => {
+
+
+
+
+  return `/api/payments/${id}/approve`
+}
+
+/**
+ * @summary Approve a pending cash payment (cashier/admin)
+ */
+export const approvePayment = async (id: string, options?: RequestInit): Promise<Payment> => {
+
+  return customFetch<Payment>(getApprovePaymentUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getApprovePaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approvePayment>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approvePayment>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['approvePayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approvePayment>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  approvePayment(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApprovePaymentMutationResult = NonNullable<Awaited<ReturnType<typeof approvePayment>>>
+
+    export type ApprovePaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Approve a pending cash payment (cashier/admin)
+ */
+export const useApprovePayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approvePayment>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approvePayment>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getApprovePaymentMutationOptions(options));
+    }
+
+export const getRejectPaymentUrl = (id: string,) => {
+
+
+
+
+  return `/api/payments/${id}/reject`
+}
+
+/**
+ * @summary Reject a pending cash payment (cashier/admin)
+ */
+export const rejectPayment = async (id: string, options?: RequestInit): Promise<Payment> => {
+
+  return customFetch<Payment>(getRejectPaymentUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRejectPaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectPayment>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectPayment>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['rejectPayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectPayment>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  rejectPayment(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof rejectPayment>>>
+
+    export type RejectPaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Reject a pending cash payment (cashier/admin)
+ */
+export const useRejectPayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectPayment>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof rejectPayment>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRejectPaymentMutationOptions(options));
     }
 
 export const getVoidPaymentUrl = (id: string,) => {

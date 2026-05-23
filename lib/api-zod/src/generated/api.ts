@@ -1086,14 +1086,17 @@ export const DeleteExpenseCategoryParams = zod.object({
 export const ListPaymentsQueryParams = zod.object({
   "agentId": zod.coerce.string().optional(),
   "dateFrom": zod.coerce.string().optional(),
-  "dateTo": zod.coerce.string().optional()
+  "dateTo": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional()
 })
 
 export const ListPaymentsResponseItem = zod.object({
   "id": zod.string(),
   "agentId": zod.string(),
-  "cashierId": zod.string(),
+  "cashierId": zod.string().nullish(),
   "transactionType": zod.enum(['pay_in', 'pay_out']),
+  "status": zod.enum(['pending', 'completed', 'rejected', 'voided']),
+  "paymentMethod": zod.string(),
   "grossAmount": zod.string().nullish(),
   "amount": zod.string(),
   "expenseItems": zod.array(zod.object({
@@ -1130,6 +1133,78 @@ export const CreatePaymentBody = zod.object({
 
 
 /**
+ * @summary Request a cash payment (agent only)
+ */
+export const RequestPaymentBody = zod.object({
+  "amount": zod.string(),
+  "paymentMethod": zod.enum(['cash', 'paystack']),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Approve a pending cash payment (cashier/admin)
+ */
+export const ApprovePaymentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ApprovePaymentResponse = zod.object({
+  "id": zod.string(),
+  "agentId": zod.string(),
+  "cashierId": zod.string().nullish(),
+  "transactionType": zod.enum(['pay_in', 'pay_out']),
+  "status": zod.enum(['pending', 'completed', 'rejected', 'voided']),
+  "paymentMethod": zod.string(),
+  "grossAmount": zod.string().nullish(),
+  "amount": zod.string(),
+  "expenseItems": zod.array(zod.object({
+  "expenseCategoryId": zod.string(),
+  "name": zod.string(),
+  "amount": zod.string()
+})).nullish(),
+  "paymentDate": zod.string(),
+  "receiptNumber": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "isVoided": zod.boolean(),
+  "voidedBy": zod.string().nullish(),
+  "voidedReason": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Reject a pending cash payment (cashier/admin)
+ */
+export const RejectPaymentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const RejectPaymentResponse = zod.object({
+  "id": zod.string(),
+  "agentId": zod.string(),
+  "cashierId": zod.string().nullish(),
+  "transactionType": zod.enum(['pay_in', 'pay_out']),
+  "status": zod.enum(['pending', 'completed', 'rejected', 'voided']),
+  "paymentMethod": zod.string(),
+  "grossAmount": zod.string().nullish(),
+  "amount": zod.string(),
+  "expenseItems": zod.array(zod.object({
+  "expenseCategoryId": zod.string(),
+  "name": zod.string(),
+  "amount": zod.string()
+})).nullish(),
+  "paymentDate": zod.string(),
+  "receiptNumber": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "isVoided": zod.boolean(),
+  "voidedBy": zod.string().nullish(),
+  "voidedReason": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary Void a payment
  */
 export const VoidPaymentParams = zod.object({
@@ -1143,8 +1218,10 @@ export const VoidPaymentBody = zod.object({
 export const VoidPaymentResponse = zod.object({
   "id": zod.string(),
   "agentId": zod.string(),
-  "cashierId": zod.string(),
+  "cashierId": zod.string().nullish(),
   "transactionType": zod.enum(['pay_in', 'pay_out']),
+  "status": zod.enum(['pending', 'completed', 'rejected', 'voided']),
+  "paymentMethod": zod.string(),
   "grossAmount": zod.string().nullish(),
   "amount": zod.string(),
   "expenseItems": zod.array(zod.object({

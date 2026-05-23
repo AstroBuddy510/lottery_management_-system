@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { db, paymentsTable, agentsTable } from "@workspace/db";
-import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql, inArray } from "drizzle-orm";
 import {
   CreatePaymentBody,
   VoidPaymentParams,
   VoidPaymentBody,
+  RequestPaymentBody,
+  ApprovePaymentParams,
+  RejectPaymentParams,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { dispatchSystemNotification } from "../lib/notify";
@@ -23,13 +26,36 @@ async function generateReceiptNumber(): Promise<string> {
 router.get(
   "/payments",
   requireAuth,
-  requireRole("director", "administrator", "cashier"),
+  requireRole("director", "administrator", "cashier", "agent"),
   async (req, res) => {
-    const { agentId, dateFrom, dateTo } = req.query as Record<string, string>;
+    const { agentId, dateFrom, dateTo, status } = req.query as Record<string, string>;
     const conditions = [];
-    if (agentId) conditions.push(eq(paymentsTable.agentId, agentId));
+
+    // Role-based gate: agents can only view their own payments
+    if (req.user!.role === "agent") {
+      const [agentRecord] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, req.user!.userId))
+        .limit(1);
+      if (!agentRecord) {
+        res.status(404).json({ error: "Agent record not found" });
+        return;
+      }
+      conditions.push(eq(paymentsTable.agentId, agentRecord.id));
+    } else if (agentId) {
+      conditions.push(eq(paymentsTable.agentId, agentId));
+    }
+
     if (dateFrom) conditions.push(gte(paymentsTable.paymentDate, dateFrom));
     if (dateTo) conditions.push(lte(paymentsTable.paymentDate, dateTo));
+
+    if (status) {
+      conditions.push(eq(paymentsTable.status, status));
+    } else {
+      // By default, only show completed (or voided) payments in general lists
+      conditions.push(inArray(paymentsTable.status, ["completed", "voided"]));
+    }
 
     const payments = await db
       .select()
@@ -200,6 +226,174 @@ router.patch(
       })
       .where(eq(paymentsTable.id, paramsResult.data.id))
       .returning();
+    res.json(payment);
+  },
+);
+
+router.post(
+  "/payments/request",
+  requireAuth,
+  requireRole("agent"),
+  async (req, res) => {
+    const parse = RequestPaymentBody.safeParse(req.body);
+    if (!parse.success) {
+      res.status(400).json({ error: "Invalid request body" });
+      return;
+    }
+
+    const [agentRecord] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, req.user!.userId))
+      .limit(1);
+
+    if (!agentRecord) {
+      res.status(404).json({ error: "Agent record not found" });
+      return;
+    }
+
+    const amount = Number(parse.data.amount);
+    if (isNaN(amount) || amount <= 0) {
+      res.status(400).json({ error: "Amount must be a positive number" });
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const [payment] = await db
+      .insert(paymentsTable)
+      .values({
+        agentId: agentRecord.id,
+        cashierId: null,
+        transactionType: "pay_in",
+        status: "pending",
+        grossAmount: amount.toFixed(2),
+        amount: amount.toFixed(2),
+        paymentDate: todayStr,
+        paymentMethod: parse.data.paymentMethod,
+        notes: parse.data.notes ?? null,
+      })
+      .returning();
+
+    res.status(201).json(payment);
+  },
+);
+
+router.post(
+  "/payments/:id/approve",
+  requireAuth,
+  requireRole("cashier", "administrator"),
+  async (req, res) => {
+    const paramsResult = ApprovePaymentParams.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({ error: "Invalid params" });
+      return;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(paymentsTable)
+      .where(eq(paymentsTable.id, paramsResult.data.id))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ error: "Payment request not found" });
+      return;
+    }
+
+    if (existing.status !== "pending") {
+      res.status(400).json({ error: `Payment request is not pending (status: ${existing.status})` });
+      return;
+    }
+
+    const receiptNumber = await generateReceiptNumber();
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    // Atomically update balance and mark payment as completed
+    const [payment] = await db
+      .update(paymentsTable)
+      .set({
+        status: "completed",
+        cashierId: req.user!.userId,
+        receiptNumber,
+        paymentDate: todayStr,
+      })
+      .where(eq(paymentsTable.id, paramsResult.data.id))
+      .returning();
+
+    const [agentRow] = await db
+      .select({ userId: agentsTable.userId, outstandingDebt: agentsTable.outstandingDebt })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, existing.agentId))
+      .limit(1);
+
+    if (agentRow) {
+      const currentDebt = parseFloat(agentRow.outstandingDebt || "0");
+      const pmtAmount = parseFloat(existing.amount);
+      const newDebt = currentDebt + pmtAmount; // since it is pay_in
+
+      const debtSinceVal = newDebt < 0 
+        ? (currentDebt >= 0 ? new Date() : undefined) 
+        : null;
+
+      await db
+        .update(agentsTable)
+        .set({
+          outstandingDebt: newDebt.toFixed(2),
+          debtSince: debtSinceVal,
+        })
+        .where(eq(agentsTable.id, existing.agentId));
+
+      await dispatchSystemNotification({
+        sentBy: req.user!.userId,
+        messageType: "payment_received",
+        title: `Payment Approved — Receipt ${receiptNumber}`,
+        body: `Your cash payment request of GH₵${pmtAmount.toFixed(2)} has been approved and collected by cashier.`,
+        targetType: "agent",
+        targetId: existing.agentId,
+        recipientUserIds: [agentRow.userId],
+      });
+    }
+
+    res.json(payment);
+  },
+);
+
+router.post(
+  "/payments/:id/reject",
+  requireAuth,
+  requireRole("cashier", "administrator"),
+  async (req, res) => {
+    const paramsResult = RejectPaymentParams.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({ error: "Invalid params" });
+      return;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(paymentsTable)
+      .where(eq(paymentsTable.id, paramsResult.data.id))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ error: "Payment request not found" });
+      return;
+    }
+
+    if (existing.status !== "pending") {
+      res.status(400).json({ error: `Payment request is not pending` });
+      return;
+    }
+
+    const [payment] = await db
+      .update(paymentsTable)
+      .set({
+        status: "rejected",
+      })
+      .where(eq(paymentsTable.id, paramsResult.data.id))
+      .returning();
+
     res.json(payment);
   },
 );

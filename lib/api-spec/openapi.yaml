@@ -1285,6 +1285,10 @@ paths:
           name: dateTo
           schema:
             type: string
+        - in: query
+          name: status
+          schema:
+            type: string
       responses:
         "200":
           description: OK
@@ -1319,6 +1323,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /payments/request:
+    post:
+      operationId: requestPayment
+      tags: [payments]
+      summary: Request a cash payment (agent only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRequestInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/{id}/approve:
+    post:
+      operationId: approvePayment
+      tags: [payments]
+      summary: Approve a pending cash payment (cashier/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/{id}/reject:
+    post:
+      operationId: rejectPayment
+      tags: [payments]
+      summary: Reject a pending cash payment (cashier/admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
 
   /payments/{id}/void:
     post:
@@ -2371,17 +2438,22 @@ components:
 
     Payment:
       type: object
-      required: [id, agentId, cashierId, transactionType, amount, paymentDate, isVoided, createdAt]
+      required: [id, agentId, transactionType, amount, paymentDate, isVoided, createdAt, status, paymentMethod]
       properties:
         id:
           type: string
         agentId:
           type: string
         cashierId:
-          type: string
+          type: ["string", "null"]
         transactionType:
           type: string
           enum: [pay_in, pay_out]
+        status:
+          type: string
+          enum: [pending, completed, rejected, voided]
+        paymentMethod:
+          type: string
         grossAmount:
           type: ["string", "null"]
         amount:
@@ -2422,6 +2494,18 @@ components:
             $ref: "#/components/schemas/ExpenseLineItem"
         paymentDate:
           type: string
+        notes:
+          type: string
+
+    PaymentRequestInput:
+      type: object
+      required: [amount, paymentMethod]
+      properties:
+        amount:
+          type: string
+        paymentMethod:
+          type: string
+          enum: [cash, paystack]
         notes:
           type: string
 
