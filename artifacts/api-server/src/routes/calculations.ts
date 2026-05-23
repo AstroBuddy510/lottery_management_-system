@@ -15,6 +15,7 @@ import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { RunCalculationsBody } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
+import { verifyLedgerAndEscalate } from "../lib/accountant";
 import { dispatchSystemNotification } from "../lib/notify";
 
 const router = Router();
@@ -302,6 +303,11 @@ router.post(
           recipientUserIds: [agentRow.userId],
         });
       }
+    }
+
+    // Verify ledger and escalate conflicts for all affected agents
+    for (const [agentId] of agentDailyNet) {
+      verifyLedgerAndEscalate(agentId, req.user!.userId).catch(console.error);
     }
 
     res.json({

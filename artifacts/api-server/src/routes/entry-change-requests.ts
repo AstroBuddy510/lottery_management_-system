@@ -12,6 +12,7 @@ import {
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { dispatchSystemNotification } from "../lib/notify";
+import { verifyLedgerAndEscalate } from "../lib/accountant";
 
 const router = Router();
 
@@ -351,6 +352,17 @@ router.patch(
           .update(winsEntriesTable)
           .set({ winsAmount: existing.requestedAmount })
           .where(eq(winsEntriesTable.id, existing.entryId));
+      }
+
+      // Fetch writer to find agentId
+      const [writer] = await db
+        .select({ agentId: writersTable.agentId })
+        .from(writersTable)
+        .where(eq(writersTable.id, existing.writerId))
+        .limit(1);
+
+      if (writer) {
+        verifyLedgerAndEscalate(writer.agentId, req.user!.userId).catch(console.error);
       }
     }
 
