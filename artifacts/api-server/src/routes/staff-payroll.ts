@@ -13,12 +13,7 @@ import {
 import { eq, and, desc, asc, gte, lte, sql } from "drizzle-orm";
 import {
   CreateSalaryPaymentBody,
-  FundSalaryWalletBody,
-  SalaryPaymentRecord,
-  PayrollSummary,
-  PayrollCalendarEntry,
-  SalaryWalletInfo,
-  WalletTransaction
+  FundSalaryWalletBody
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { addDays, endOfMonth, startOfMonth, format, isAfter, isBefore } from "date-fns";
@@ -162,7 +157,10 @@ router.get("/staff-payroll/payments", requireAuth, requireRole("director", "admi
 router.post("/staff-payroll/payments", requireAuth, requireRole("cashier"), async (req, res) => {
   try {
     const bodyResult = CreateSalaryPaymentBody.safeParse(req.body);
-    if (!bodyResult.success) return res.status(400).json({ error: "Invalid request body" });
+    if (!bodyResult.success) {
+      res.status(400).json({ error: "Invalid request body" });
+      return;
+    }
     const { salaryPaymentId, deductions, notes } = bodyResult.data;
 
     // Transaction
@@ -195,7 +193,7 @@ router.post("/staff-payroll/payments", requireAuth, requireRole("cashier"), asyn
         amount: netAmount.toString(),
         balanceAfter: newBalance.toString(),
         referenceId: payment.id,
-        performedBy: req.user!.id,
+        performedBy: (req.user as any).id,
         notes: `Salary payment for ${payment.staffType} staff`
       });
 
@@ -203,7 +201,7 @@ router.post("/staff-payroll/payments", requireAuth, requireRole("cashier"), asyn
         deductions: deductAmount.toString(),
         netAmount: netAmount.toString(),
         status: "paid",
-        paidBy: req.user!.id,
+        paidBy: (req.user as any).id,
         paidAt: new Date(),
         notes: notes || payment.notes
       }).where(eq(salaryPaymentsTable.id, payment.id)).returning();
@@ -292,11 +290,17 @@ router.get("/staff-payroll/wallet", requireAuth, requireRole("director", "admini
 router.post("/staff-payroll/wallet/fund", requireAuth, requireRole("director", "administrator"), async (req, res) => {
   try {
     const bodyResult = FundSalaryWalletBody.safeParse(req.body);
-    if (!bodyResult.success) return res.status(400).json({ error: "Invalid request body" });
+    if (!bodyResult.success) {
+      res.status(400).json({ error: "Invalid request body" });
+      return;
+    }
     const { amount, notes } = bodyResult.data;
 
     const fundAmount = parseFloat(amount);
-    if (fundAmount <= 0) return res.status(400).json({ error: "Amount must be positive" });
+    if (fundAmount <= 0) {
+      res.status(400).json({ error: "Amount must be positive" });
+      return;
+    }
 
     const result = await db.transaction(async (tx) => {
       const wallet = await getWallet();
@@ -313,7 +317,7 @@ router.post("/staff-payroll/wallet/fund", requireAuth, requireRole("director", "
         type: "fund",
         amount: fundAmount.toString(),
         balanceAfter: newBalance.toString(),
-        performedBy: req.user!.id,
+        performedBy: (req.user as any).id,
         notes: notes || "Wallet funded by management"
       });
 
