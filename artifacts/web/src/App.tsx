@@ -29,6 +29,7 @@ import { AgencyDashboard } from "@/pages/agency-dashboard";
 import { EntryChangeRequests } from "@/pages/entry-change-requests";
 import { OnlinePayment } from "@/pages/online-payment";
 import { AgencyStaffExpenses } from "@/pages/agency-staff-expenses";
+import { StaffsEmployees } from "@/pages/staffs-employees";
 
 import { Layout } from "@/components/layout";
 
@@ -84,6 +85,10 @@ function Router() {
 
       <Route path="/agency-staff-expenses">
         {() => <ProtectedRoute component={AgencyStaffExpenses} roles={['cashier', 'administrator', 'director']} />}
+      </Route>
+
+      <Route path="/staffs-employees">
+        {() => <ProtectedRoute component={StaffsEmployees} roles={['cashier', 'administrator', 'director']} />}
       </Route>
 
       <Route path="/agents/:agentId/detail">

@@ -1092,6 +1092,123 @@ export interface CompanyStaffUpdate {
   status?: CompanyStaffUpdateStatus;
 }
 
+export interface PayrollSummary {
+  totalCompanyStaff: number;
+  totalAgencyStaff: number;
+  monthlyPayrollDue: string;
+  paidThisMonth: string;
+  accruedUnpaid: string;
+  walletBalance: string;
+  payrollCompletionPercent?: number;
+}
+
+export type SalaryPaymentRecordStaffType = typeof SalaryPaymentRecordStaffType[keyof typeof SalaryPaymentRecordStaffType];
+
+
+export const SalaryPaymentRecordStaffType = {
+  company: 'company',
+  agency: 'agency',
+} as const;
+
+export type SalaryPaymentRecordStatus = typeof SalaryPaymentRecordStatus[keyof typeof SalaryPaymentRecordStatus];
+
+
+export const SalaryPaymentRecordStatus = {
+  pending: 'pending',
+  paid: 'paid',
+  partial: 'partial',
+} as const;
+
+export interface SalaryPaymentRecord {
+  id: string;
+  staffType: SalaryPaymentRecordStaffType;
+  staffId: string;
+  staffName: string;
+  staffPosition?: string;
+  /** @nullable */
+  agencyName?: string | null;
+  /** @nullable */
+  agentId?: string | null;
+  periodMonth: number;
+  periodYear: number;
+  baseSalary: string;
+  allowances: string;
+  bonuses: string;
+  deductions: string;
+  netAmount: string;
+  status: SalaryPaymentRecordStatus;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  paidBy?: string | null;
+  /** @nullable */
+  paidByName?: string | null;
+  /** @nullable */
+  paidAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface PaySalaryInput {
+  salaryPaymentId: string;
+  deductions?: string;
+  notes?: string;
+}
+
+export type PayrollCalendarEntryStatus = typeof PayrollCalendarEntryStatus[keyof typeof PayrollCalendarEntryStatus];
+
+
+export const PayrollCalendarEntryStatus = {
+  upcoming: 'upcoming',
+  due: 'due',
+  overdue: 'overdue',
+  paid: 'paid',
+} as const;
+
+export interface PayrollCalendarEntry {
+  date: string;
+  staffCount: number;
+  totalAmount: string;
+  status: PayrollCalendarEntryStatus;
+  staffNames?: string[];
+}
+
+export interface SalaryWalletInfo {
+  id: string;
+  balance: string;
+  totalFunded: string;
+  totalDisbursed: string;
+  updatedAt: string;
+}
+
+export interface FundWalletInput {
+  amount: string;
+  notes?: string;
+}
+
+export type WalletTransactionType = typeof WalletTransactionType[keyof typeof WalletTransactionType];
+
+
+export const WalletTransactionType = {
+  fund: 'fund',
+  disburse: 'disburse',
+} as const;
+
+export interface WalletTransaction {
+  id: string;
+  type: WalletTransactionType;
+  amount: string;
+  balanceAfter: string;
+  /** @nullable */
+  referenceId?: string | null;
+  performedBy: string;
+  performedByName?: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
 export type ListUsersParams = {
 role?: string;
 isActive?: boolean;
@@ -1111,6 +1228,35 @@ export type DeleteAgencyStaff200 = {
 
 export type DeleteCompanyStaff200 = {
   success?: boolean;
+};
+
+export type ListSalaryPaymentsParams = {
+month?: number;
+year?: number;
+status?: ListSalaryPaymentsStatus;
+staffType?: ListSalaryPaymentsStaffType;
+};
+
+export type ListSalaryPaymentsStatus = typeof ListSalaryPaymentsStatus[keyof typeof ListSalaryPaymentsStatus];
+
+
+export const ListSalaryPaymentsStatus = {
+  pending: 'pending',
+  paid: 'paid',
+  partial: 'partial',
+} as const;
+
+export type ListSalaryPaymentsStaffType = typeof ListSalaryPaymentsStaffType[keyof typeof ListSalaryPaymentsStaffType];
+
+
+export const ListSalaryPaymentsStaffType = {
+  company: 'company',
+  agency: 'agency',
+} as const;
+
+export type GeneratePayrollPeriod200 = {
+  created?: number;
+  message?: string;
 };
 
 export type ListSalesParams = {

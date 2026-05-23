@@ -17,6 +17,7 @@ import entryChangeRequestsRouter from "./entry-change-requests";
 import paystackRouter from "./paystack";
 import agencyStaffRouter from "./agency-staff";
 import companyStaffRouter from "./company-staff";
+import staffPayrollRouter from "./staff-payroll";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(gamesRouter);
 router.use(paystackRouter);
 router.use(agencyStaffRouter);
 router.use(companyStaffRouter);
+router.use(staffPayrollRouter);
 
 export default router;

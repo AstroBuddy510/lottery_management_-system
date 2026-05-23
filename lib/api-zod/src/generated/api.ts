@@ -660,6 +660,158 @@ export const DeleteCompanyStaffResponse = zod.object({
 
 
 /**
+ * @summary Get HRM payroll summary stats
+ */
+export const GetPayrollSummaryResponse = zod.object({
+  "totalCompanyStaff": zod.number(),
+  "totalAgencyStaff": zod.number(),
+  "monthlyPayrollDue": zod.string(),
+  "paidThisMonth": zod.string(),
+  "accruedUnpaid": zod.string(),
+  "walletBalance": zod.string(),
+  "payrollCompletionPercent": zod.number().optional()
+})
+
+
+/**
+ * @summary List all salary payment records
+ */
+export const ListSalaryPaymentsQueryParams = zod.object({
+  "month": zod.coerce.number().optional(),
+  "year": zod.coerce.number().optional(),
+  "status": zod.enum(['pending', 'paid', 'partial']).optional(),
+  "staffType": zod.enum(['company', 'agency']).optional()
+})
+
+export const ListSalaryPaymentsResponseItem = zod.object({
+  "id": zod.string(),
+  "staffType": zod.enum(['company', 'agency']),
+  "staffId": zod.string(),
+  "staffName": zod.string(),
+  "staffPosition": zod.string().optional(),
+  "agencyName": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "periodMonth": zod.number(),
+  "periodYear": zod.number(),
+  "baseSalary": zod.string(),
+  "allowances": zod.string(),
+  "bonuses": zod.string(),
+  "deductions": zod.string(),
+  "netAmount": zod.string(),
+  "status": zod.enum(['pending', 'paid', 'partial']),
+  "dueDate": zod.string().nullish(),
+  "paidBy": zod.string().nullish(),
+  "paidByName": zod.string().nullish(),
+  "paidAt": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListSalaryPaymentsResponse = zod.array(ListSalaryPaymentsResponseItem)
+
+
+/**
+ * @summary Record a salary payment (cashier pays from wallet)
+ */
+export const CreateSalaryPaymentBody = zod.object({
+  "salaryPaymentId": zod.string(),
+  "deductions": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreateSalaryPaymentResponse = zod.object({
+  "id": zod.string(),
+  "staffType": zod.enum(['company', 'agency']),
+  "staffId": zod.string(),
+  "staffName": zod.string(),
+  "staffPosition": zod.string().optional(),
+  "agencyName": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "periodMonth": zod.number(),
+  "periodYear": zod.number(),
+  "baseSalary": zod.string(),
+  "allowances": zod.string(),
+  "bonuses": zod.string(),
+  "deductions": zod.string(),
+  "netAmount": zod.string(),
+  "status": zod.enum(['pending', 'paid', 'partial']),
+  "dueDate": zod.string().nullish(),
+  "paidBy": zod.string().nullish(),
+  "paidByName": zod.string().nullish(),
+  "paidAt": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Get salary pay schedule calendar
+ */
+export const GetPayrollCalendarResponseItem = zod.object({
+  "date": zod.string(),
+  "staffCount": zod.number(),
+  "totalAmount": zod.string(),
+  "status": zod.enum(['upcoming', 'due', 'overdue', 'paid']),
+  "staffNames": zod.array(zod.string()).optional()
+})
+export const GetPayrollCalendarResponse = zod.array(GetPayrollCalendarResponseItem)
+
+
+/**
+ * @summary Get salary wallet balance and totals
+ */
+export const GetSalaryWalletResponse = zod.object({
+  "id": zod.string(),
+  "balance": zod.string(),
+  "totalFunded": zod.string(),
+  "totalDisbursed": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Add funds to the salary wallet (Director/Admin only)
+ */
+export const FundSalaryWalletBody = zod.object({
+  "amount": zod.string(),
+  "notes": zod.string().optional()
+})
+
+export const FundSalaryWalletResponse = zod.object({
+  "id": zod.string(),
+  "balance": zod.string(),
+  "totalFunded": zod.string(),
+  "totalDisbursed": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary List salary wallet transaction history
+ */
+export const ListWalletTransactionsResponseItem = zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['fund', 'disburse']),
+  "amount": zod.string(),
+  "balanceAfter": zod.string(),
+  "referenceId": zod.string().nullish(),
+  "performedBy": zod.string(),
+  "performedByName": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListWalletTransactionsResponse = zod.array(ListWalletTransactionsResponseItem)
+
+
+/**
+ * @summary Auto-generate pending salary records for current month
+ */
+export const GeneratePayrollPeriodResponse = zod.object({
+  "created": zod.number().optional(),
+  "message": zod.string().optional()
+})
+
+
+/**
  * @summary Get current system settings
  */
 export const GetSettingsResponse = zod.object({

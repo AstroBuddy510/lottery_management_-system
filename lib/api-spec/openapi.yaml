@@ -773,6 +773,166 @@ paths:
                   success:
                     type: boolean
 
+  /staff-payroll/summary:
+    get:
+      operationId: getPayrollSummary
+      tags: [payroll]
+      summary: Get HRM payroll summary stats
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayrollSummary"
+
+  /staff-payroll/payments:
+    get:
+      operationId: listSalaryPayments
+      tags: [payroll]
+      summary: List all salary payment records
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: month
+          schema:
+            type: integer
+        - in: query
+          name: year
+          schema:
+            type: integer
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, paid, partial]
+        - in: query
+          name: staffType
+          schema:
+            type: string
+            enum: [company, agency]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalaryPaymentRecord"
+    post:
+      operationId: createSalaryPayment
+      tags: [payroll]
+      summary: Record a salary payment (cashier pays from wallet)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaySalaryInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalaryPaymentRecord"
+
+  /staff-payroll/calendar:
+    get:
+      operationId: getPayrollCalendar
+      tags: [payroll]
+      summary: Get salary pay schedule calendar
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PayrollCalendarEntry"
+
+  /staff-payroll/wallet:
+    get:
+      operationId: getSalaryWallet
+      tags: [payroll]
+      summary: Get salary wallet balance and totals
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalaryWalletInfo"
+
+  /staff-payroll/wallet/fund:
+    post:
+      operationId: fundSalaryWallet
+      tags: [payroll]
+      summary: Add funds to the salary wallet (Director/Admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FundWalletInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalaryWalletInfo"
+
+  /staff-payroll/wallet/transactions:
+    get:
+      operationId: listWalletTransactions
+      tags: [payroll]
+      summary: List salary wallet transaction history
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WalletTransaction"
+
+  /staff-payroll/generate-period:
+    post:
+      operationId: generatePayrollPeriod
+      tags: [payroll]
+      summary: Auto-generate pending salary records for current month
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                  message:
+                    type: string
+
   /settings:
     get:
       operationId: getSettings
@@ -3199,3 +3359,147 @@ components:
           type: string
           enum: [active, suspended]
 
+    PayrollSummary:
+      type: object
+      required: [totalCompanyStaff, totalAgencyStaff, monthlyPayrollDue, paidThisMonth, accruedUnpaid, walletBalance]
+      properties:
+        totalCompanyStaff:
+          type: integer
+        totalAgencyStaff:
+          type: integer
+        monthlyPayrollDue:
+          type: string
+        paidThisMonth:
+          type: string
+        accruedUnpaid:
+          type: string
+        walletBalance:
+          type: string
+        payrollCompletionPercent:
+          type: number
+
+    SalaryPaymentRecord:
+      type: object
+      required: [id, staffType, staffId, staffName, periodMonth, periodYear, baseSalary, allowances, bonuses, deductions, netAmount, status, createdAt]
+      properties:
+        id:
+          type: string
+        staffType:
+          type: string
+          enum: [company, agency]
+        staffId:
+          type: string
+        staffName:
+          type: string
+        staffPosition:
+          type: string
+        agencyName:
+          type: ["string", "null"]
+        agentId:
+          type: ["string", "null"]
+        periodMonth:
+          type: integer
+        periodYear:
+          type: integer
+        baseSalary:
+          type: string
+        allowances:
+          type: string
+        bonuses:
+          type: string
+        deductions:
+          type: string
+        netAmount:
+          type: string
+        status:
+          type: string
+          enum: [pending, paid, partial]
+        dueDate:
+          type: ["string", "null"]
+        paidBy:
+          type: ["string", "null"]
+        paidByName:
+          type: ["string", "null"]
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    PaySalaryInput:
+      type: object
+      required: [salaryPaymentId]
+      properties:
+        salaryPaymentId:
+          type: string
+        deductions:
+          type: string
+        notes:
+          type: string
+
+    PayrollCalendarEntry:
+      type: object
+      required: [date, staffCount, totalAmount, status]
+      properties:
+        date:
+          type: string
+        staffCount:
+          type: integer
+        totalAmount:
+          type: string
+        status:
+          type: string
+          enum: [upcoming, due, overdue, paid]
+        staffNames:
+          type: array
+          items:
+            type: string
+
+    SalaryWalletInfo:
+      type: object
+      required: [id, balance, totalFunded, totalDisbursed, updatedAt]
+      properties:
+        id:
+          type: string
+        balance:
+          type: string
+        totalFunded:
+          type: string
+        totalDisbursed:
+          type: string
+        updatedAt:
+          type: string
+
+    FundWalletInput:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: string
+        notes:
+          type: string
+
+    WalletTransaction:
+      type: object
+      required: [id, type, amount, balanceAfter, performedBy, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [fund, disburse]
+        amount:
+          type: string
+        balanceAfter:
+          type: string
+        referenceId:
+          type: ["string", "null"]
+        performedBy:
+          type: string
+        performedByName:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string

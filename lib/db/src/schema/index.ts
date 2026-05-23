@@ -14,3 +14,5 @@ export * from "./debt-reductions";
 export * from "./entry-change-requests";
 export * from "./agency-staff";
 export * from "./company-staff";
+export * from "./salary-payments";
+export * from "./salary-wallet";
