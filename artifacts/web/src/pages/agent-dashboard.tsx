@@ -297,23 +297,33 @@ export function AgentDashboard() {
           {/* Balance card */}
           {agent && (
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center justify-between border border-white/10 w-full mt-1">
-              <div>
-                <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
-                  Outstanding Balance
-                </span>
-                <span className="text-lg font-black font-mono text-white tracking-tight">
-                  {fmtGHS(Number(agent.outstandingDebt))}
-                </span>
-              </div>
-              <Link href="/online-payment">
-                <button className="bg-white text-[#1d4ed8] font-bold text-xs px-3.5 py-2 rounded-xl hover:bg-blue-50 active:scale-95 transition-all shadow-md flex items-center gap-1.5">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2"/>
-                    <line x1="2" y1="10" x2="22" y2="10"/>
-                  </svg>
-                  Deposit
-                </button>
-              </Link>
+              {(() => {
+                const val = parseFloat(agent.outstandingDebt || "0");
+                const isCompanyOwes = val > 0;
+                const isAgentOwes = val < 0;
+                const absVal = Math.abs(val);
+                return (
+                  <>
+                    <div>
+                      <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
+                        {isCompanyOwes ? "Company Owes You" : isAgentOwes ? "You owe Company" : "Clear Balance"}
+                      </span>
+                      <span className="text-lg font-black font-mono text-white tracking-tight">
+                        {fmtGHS(absVal)}
+                      </span>
+                    </div>
+                    <Link href="/online-payment">
+                      <button className="bg-white text-[#1d4ed8] font-bold text-xs px-3.5 py-2 rounded-xl hover:bg-blue-50 active:scale-95 transition-all shadow-md flex items-center gap-1.5">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="4" width="20" height="16" rx="2"/>
+                          <line x1="2" y1="10" x2="22" y2="10"/>
+                        </svg>
+                        {isAgentOwes ? "Pay Now" : "Deposit"}
+                      </button>
+                    </Link>
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>

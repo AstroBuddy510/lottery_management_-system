@@ -148,7 +148,12 @@ export function AgentDetail() {
     { id: "overview", label: "Overview" },
     { id: "writers",  label: `Writers (${writerList.length})` },
     { id: "entries",  label: `Live Entries${entryRows.length > 0 ? ` (${entryRows.length})` : ""}` },
-    { id: "debt",     label: `Debt${currentDebt > 0 ? ` — GH₵ ${currentDebt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}` : ""}` },
+    { id: "debt",     label: currentDebt > 0 
+        ? `Company owes Agent — GH₵ ${currentDebt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}` 
+        : currentDebt < 0 
+          ? `Agent owes Company — GH₵ ${Math.abs(currentDebt).toLocaleString("en-GH", { minimumFractionDigits: 2 })}` 
+          : "Balance Clear"
+    },
   ];
 
   const fmtTime = (ts: string) =>
@@ -324,21 +329,23 @@ export function AgentDetail() {
         <div className="space-y-6">
           {/* Balance summary cards */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card className={currentDebt > 0 ? "border-amber-300 bg-amber-50/40" : "border-emerald-300 bg-emerald-50/30"}>
+            <Card className={currentDebt < 0 ? "border-amber-300 bg-amber-50/40" : "border-emerald-300 bg-emerald-50/30"}>
               <CardHeader className="pb-1 pt-4 px-4">
-                <CardTitle className="text-xs text-muted-foreground">Outstanding Debt</CardTitle>
+                <CardTitle className="text-xs text-muted-foreground">
+                  {currentDebt > 0 ? "Company owes Agent" : currentDebt < 0 ? "Agent owes Company" : "Clear Balance"}
+                </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-4">
-                <div className={`text-2xl font-bold font-mono ${currentDebt > 0 ? "text-amber-700" : "text-emerald-600"}`}>
-                  {fmtGHS(currentDebt)}
+                <div className={`text-2xl font-bold font-mono ${currentDebt < 0 ? "text-amber-700" : "text-emerald-600"}`}>
+                  {fmtGHS(Math.abs(currentDebt))}
                 </div>
-                {agent?.debtSince && currentDebt > 0 && (
+                {agent?.debtSince && currentDebt < 0 && (
                   <p className="text-xs text-amber-600 mt-1">
                     Since {new Date(agent.debtSince).toLocaleDateString("en-GH", { day: "numeric", month: "long", year: "numeric" })}
                   </p>
                 )}
                 {currentDebt === 0 && (
-                  <p className="text-xs text-emerald-600 mt-1 font-medium">Debt-free</p>
+                  <p className="text-xs text-emerald-600 mt-1 font-medium">Balance Clear</p>
                 )}
               </CardContent>
             </Card>
@@ -382,7 +389,7 @@ export function AgentDetail() {
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
             <p className="text-xs text-blue-700">
-              <strong>Automated reduction</strong> — each time daily calculations are run, the agent's positive net gross is automatically applied against their outstanding debt. If net gross exceeds the debt, the balance is cleared to zero and any surplus is recorded.
+              <strong>Automated balance adjustment</strong> — each time daily calculations are run, the agent's daily net balance (profit/loss) is automatically subtracted from their outstanding balance, netting out correctly. If they make a profit, it increases what they owe the company; if they make a loss, it increases what the company owes them. Cashier payments (pay-in and pay-out) directly reconcile these balances.
             </p>
           </div>
 

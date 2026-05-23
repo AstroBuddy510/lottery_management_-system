@@ -24,13 +24,13 @@ type AgencyStatus = "active-clear" | "active-debt" | "closed";
 
 function getStatus(a: AgentWithUser): AgencyStatus {
   if (a.status === "closed") return "closed";
-  if (parseFloat(a.outstandingDebt) > 0) return "active-debt";
+  if (parseFloat(a.outstandingDebt) < 0) return "active-debt";
   return "active-clear";
 }
 
 const STATUS_CFG = {
   "active-clear": {
-    label: "Active — Clear",
+    label: "Active — Clear / surplus",
     badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
     border: "border-l-emerald-500",
     iconBg: "bg-emerald-500",
@@ -38,7 +38,7 @@ const STATUS_CFG = {
     pin: "#10b981",
   },
   "active-debt": {
-    label: "Active — Outstanding Debt",
+    label: "Active — Agent owes Company",
     badge: "bg-amber-100 text-amber-700 border-amber-200",
     border: "border-l-amber-500",
     iconBg: "bg-amber-500",
@@ -56,7 +56,7 @@ const STATUS_CFG = {
 } as const;
 
 function AgingBadge({ debtSince, debt }: { debtSince: string | null | undefined; debt: string }) {
-  if (parseFloat(debt) <= 0 || !debtSince) return null;
+  if (parseFloat(debt) >= 0 || !debtSince) return null;
   const days = debtDays(debtSince) ?? 0;
   const cls = days < 7
     ? "bg-emerald-50 text-emerald-600 border-emerald-200"
@@ -217,20 +217,32 @@ function AgencyDetailModal({ agent, onClose }: { agent: AgentWithUser | null; on
 
           {/* Debt section */}
           <div className={`p-4 rounded-xl border-l-4 ${cfg.border} bg-slate-50`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-slate-700">Outstanding Debt</span>
-              {days !== null && (
-                <AgingBadge debtSince={agent.debtSince} debt={agent.outstandingDebt} />
-              )}
-            </div>
-            <div className={`text-2xl font-bold ${parseFloat(agent.outstandingDebt) > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-              GHS {parseFloat(agent.outstandingDebt).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
-            </div>
-            {agent.debtSince && parseFloat(agent.outstandingDebt) > 0 && (
-              <p className="text-xs text-slate-400 mt-1">
-                Since {new Date(agent.debtSince).toLocaleDateString("en-GH", { day: "numeric", month: "long", year: "numeric" })}
-              </p>
-            )}
+            {(() => {
+              const val = parseFloat(agent.outstandingDebt || "0");
+              const isCompanyOwes = val > 0;
+              const isAgentOwes = val < 0;
+              const absVal = Math.abs(val);
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-slate-700">
+                      {isCompanyOwes ? "Company owes Agent" : isAgentOwes ? "Agent owes Company" : "Clear Balance"}
+                    </span>
+                    {isAgentOwes && agent.debtSince && (
+                      <AgingBadge debtSince={agent.debtSince} debt={agent.outstandingDebt} />
+                    )}
+                  </div>
+                  <div className={`text-2xl font-bold ${isAgentOwes ? "text-amber-600" : "text-emerald-600"}`}>
+                    GHS {absVal.toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                  </div>
+                  {isAgentOwes && agent.debtSince && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      Since {new Date(agent.debtSince).toLocaleDateString("en-GH", { day: "numeric", month: "long", year: "numeric" })}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* Map coords */}
@@ -354,21 +366,30 @@ function GridView({
             )}
 
             {/* Debt section */}
-            <div className={`mt-4 pt-3 border-t ${debt > 0 ? "border-amber-100" : "border-slate-100"}`}>
-              {debt > 0 ? (
+            <div className={`mt-4 pt-3 border-t ${debt < 0 ? "border-amber-100" : "border-slate-100"}`}>
+              {debt < 0 ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Outstanding</span>
+                    <span className="text-xs text-slate-500">Agent owes Company</span>
                     <AgingBadge debtSince={a.debtSince} debt={a.outstandingDebt} />
                   </div>
                   <div className="text-lg font-bold text-amber-600 mt-0.5">
+                    GHS {Math.abs(debt).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                  </div>
+                </>
+              ) : debt > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Company owes Agent</span>
+                  </div>
+                  <div className="text-lg font-bold text-emerald-600 mt-0.5">
                     GHS {debt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}
                   </div>
                 </>
               ) : (
                 <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold">
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>
-                  No outstanding debt
+                  Clear Balance
                 </div>
               )}
             </div>

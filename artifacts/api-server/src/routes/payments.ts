@@ -84,13 +84,34 @@ router.post(
       })
       .returning();
 
-    // Notify the agent of the payment
+    // Update Agent's outstanding balance and notify
     const [agentRow] = await db
-      .select({ userId: agentsTable.userId })
+      .select({ userId: agentsTable.userId, outstandingDebt: agentsTable.outstandingDebt })
       .from(agentsTable)
       .where(eq(agentsTable.id, parse.data.agentId))
       .limit(1);
+
     if (agentRow) {
+      const currentDebt = parseFloat(agentRow.outstandingDebt || "0");
+      const pmtAmount = parseFloat(netAmount);
+      let newDebt = currentDebt;
+      if (parse.data.transactionType === "pay_out") {
+        newDebt = currentDebt - pmtAmount;
+      } else if (parse.data.transactionType === "pay_in") {
+        newDebt = currentDebt + pmtAmount;
+      }
+      const debtSinceVal = newDebt < 0 
+        ? (currentDebt >= 0 ? new Date() : undefined) 
+        : null;
+
+      await db
+        .update(agentsTable)
+        .set({
+          outstandingDebt: newDebt.toFixed(2),
+          debtSince: debtSinceVal,
+        })
+        .where(eq(agentsTable.id, parse.data.agentId));
+
       const txLabel =
         parse.data.transactionType === "pay_in" ? "Payment Received" : "Pay-Out Issued";
       const direction =
@@ -140,6 +161,34 @@ router.patch(
     if (existing.isVoided) {
       res.status(409).json({ error: "Payment already voided" });
       return;
+    }
+
+    const [agentRow] = await db
+      .select({ outstandingDebt: agentsTable.outstandingDebt })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, existing.agentId))
+      .limit(1);
+
+    if (agentRow) {
+      const currentDebt = parseFloat(agentRow.outstandingDebt || "0");
+      const pmtAmount = parseFloat(existing.amount);
+      let newDebt = currentDebt;
+      if (existing.transactionType === "pay_out") {
+        newDebt = currentDebt + pmtAmount;
+      } else if (existing.transactionType === "pay_in") {
+        newDebt = currentDebt - pmtAmount;
+      }
+      const debtSinceVal = newDebt < 0 
+        ? (currentDebt >= 0 ? new Date() : undefined) 
+        : null;
+
+      await db
+        .update(agentsTable)
+        .set({
+          outstandingDebt: newDebt.toFixed(2),
+          debtSince: debtSinceVal,
+        })
+        .where(eq(agentsTable.id, existing.agentId));
     }
 
     const [payment] = await db

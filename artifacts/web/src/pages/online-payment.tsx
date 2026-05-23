@@ -140,23 +140,33 @@ export function OnlinePayment() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="bg-primary/5 dark:bg-primary/10 rounded-2xl p-4 flex items-center justify-between">
-            <div>
-              <span className="text-xs text-muted-foreground font-medium block">
-                Outstanding Balance
-              </span>
-              <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
-                GH₵ {outstandingDebt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-            <span
-              className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                outstandingDebt > 0
-                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                  : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-              }`}
-            >
-              {outstandingDebt > 0 ? "Pending Debt" : "Clear Balance"}
-            </span>
+            {(() => {
+              const val = parseFloat(agent.outstandingDebt || "0");
+              const isCompanyOwes = val > 0;
+              const isAgentOwes = val < 0;
+              const absVal = Math.abs(val);
+              return (
+                <>
+                  <div>
+                    <span className="text-xs text-muted-foreground font-medium block">
+                      {isCompanyOwes ? "Company owes you" : isAgentOwes ? "Pending Debt" : "Clear Balance"}
+                    </span>
+                    <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                      GH₵ {absVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                      isAgentOwes
+                        ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                        : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                    }`}
+                  >
+                    {isCompanyOwes ? "Company owes you" : isAgentOwes ? "Pending Debt" : "Clear Balance"}
+                  </span>
+                </>
+              );
+            })()}
           </div>
 
           <div className="flex justify-between items-center text-xs px-1">
@@ -219,6 +229,26 @@ export function OnlinePayment() {
                   </Button>
                 ))}
               </div>
+              {(() => {
+                const val = parseFloat(agent.outstandingDebt || "0");
+                const isAgentOwes = val < 0;
+                const absVal = Math.abs(val);
+                if (isAgentOwes) {
+                  return (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="w-full h-10 rounded-xl text-xs font-bold transition-all mt-2 border border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => handlePresetClick(absVal)}
+                      disabled={isInitializing}
+                    >
+                      Pay Outstanding Debt (GH₵ {absVal.toFixed(2)})
+                    </Button>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </CardContent>
           <CardFooter className="flex-col gap-3 pt-2">

@@ -206,13 +206,16 @@ router.post("/payments/paystack/webhook", async (req, res) => {
       .limit(1);
 
     if (agentToUpdate) {
-      const currentDebt = parseFloat(agentToUpdate.outstandingDebt);
-      const newDebt = Math.max(0, currentDebt - parseFloat(paidAmount));
+      const currentDebt = parseFloat(agentToUpdate.outstandingDebt || "0");
+      const newDebt = currentDebt + parseFloat(paidAmount);
+      const debtSinceVal = newDebt < 0 
+        ? (currentDebt >= 0 ? new Date() : undefined) 
+        : null;
       await db
         .update(agentsTable)
         .set({
           outstandingDebt: newDebt.toFixed(2),
-          debtSince: newDebt === 0 ? null : undefined,
+          debtSince: debtSinceVal,
         })
         .where(eq(agentsTable.id, agentId));
     }
