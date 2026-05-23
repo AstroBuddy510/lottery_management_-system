@@ -1,7 +1,5 @@
-const CACHE_NAME = "vs2000-cache-v1";
-const ASSETS_TO_CACHE = [
-  "/",
-  "/index.html",
+const CACHE_NAME = "vs2000-cache-v2";
+const PRECACHE_ASSETS = [
   "/manifest.json",
   "/favicon.ico",
   "/company-logo.png",
@@ -13,7 +11,7 @@ const ASSETS_TO_CACHE = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return cache.addAll(PRECACHE_ASSETS);
     })
   );
   self.skipWaiting();
@@ -23,9 +21,9 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
+        cacheNames.map((name) => {
+          if (name !== CACHE_NAME) {
+            return caches.delete(name);
           }
         })
       );
@@ -35,27 +33,46 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // Skip caching for non-GET requests or api calls
-  if (event.request.method !== "GET" || event.request.url.includes("/api/")) {
+  const { request } = event;
+
+  // Skip non-GET requests and API calls entirely
+  if (request.method !== "GET" || request.url.includes("/api/")) {
     return;
   }
-  
+
+  // Navigation requests (HTML pages): always network-first
+  // This ensures users always get the latest index.html with correct asset hashes
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          // Cache the fresh HTML for offline fallback
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          return networkResponse;
+        })
+        .catch(() => {
+          // Offline fallback: serve cached HTML if available
+          return caches.match(request).then((cached) => cached || caches.match("/"));
+        })
+    );
+    return;
+  }
+
+  // Static assets (JS, CSS, images): cache-first for performance
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
-      return fetch(event.request).then((networkResponse) => {
-        // Cache new successful responses of our own origin
+      return fetch(request).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+            cache.put(request, responseToCache);
           });
         }
         return networkResponse;
-      }).catch(() => {
-        return caches.match("/");
       });
     })
   );
