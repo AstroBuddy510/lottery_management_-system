@@ -77,7 +77,10 @@ export function StaffsEmployees() {
 
   const handleFundWallet = async () => {
     try {
-      if (!fundAmount || parseFloat(fundAmount) <= 0) return toast({ title: "Error", description: "Invalid amount", variant: "destructive" });
+      if (!fundAmount || parseFloat(fundAmount) <= 0) {
+        toast({ title: "Error", description: "Invalid amount", variant: "destructive" });
+        return;
+      }
       await fundWalletMutation.mutateAsync({ data: { amount: fundAmount, notes: fundNotes } });
       toast({ title: "Wallet Funded", description: "Successfully added funds to the salary wallet." });
       setIsFundOpen(false);
@@ -346,7 +349,7 @@ export function StaffsEmployees() {
                       <div className="text-sm text-muted-foreground">{entry.staffCount} Staff Members</div>
                     </div>
                     <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-xs text-muted-foreground">
-                      Includes: {entry.staffNames.join(', ')}{entry.staffCount > entry.staffNames.length ? '...' : ''}
+                      Includes: {(entry.staffNames || []).join(', ')}{entry.staffCount > (entry.staffNames || []).length ? '...' : ''}
                     </div>
                   </div>
                 ))}
