@@ -5,6 +5,8 @@ import {
   useGetMe, useLogin, useLogout, getGetMeQueryKey,
 } from "@workspace/api-client-react";
 import { AuthContext } from "./auth-context";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 const INACTIVITY_MS   = 15 * 60 * 1000; // 15 minutes of no activity
 const WARN_SECONDS    = 59;              // countdown before auto-logout
@@ -38,15 +40,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   setLocationRef.current = setLocation;
 
   const refreshTimerRef   = useRef<ReturnType<typeof setTimeout>  | null>(null);
-  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const warningActiveRef   = useRef(false); // mirrors showWarning without stale-closure issues
   const isLoggedInRef      = useRef(false); // true once a user is authenticated
+  const lastActivityRef    = useRef<number>(Date.now());
 
   /* ── timer helpers ─────────────────────────────────────────────────────── */
 
   const clearRefreshTimer   = () => { if (refreshTimerRef.current)    { clearTimeout(refreshTimerRef.current);    refreshTimerRef.current = null; } };
-  const clearInactivityTimer = () => { if (inactivityTimerRef.current) { clearTimeout(inactivityTimerRef.current); inactivityTimerRef.current = null; } };
   const clearCountdownTimer  = () => { if (countdownTimerRef.current)  { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; } };
 
   /* ── proactive token refresh ───────────────────────────────────────────── */
@@ -106,7 +107,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoggedInRef.current  = false;
     warningActiveRef.current = false;
     clearRefreshTimer();
-    clearInactivityTimer();
     clearCountdownTimer();
     setShowWarning(false);
     try { await logoutMutation.mutateAsync(); } catch { /* ignore */ }
@@ -133,13 +133,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }, 1000);
   }, [performLogout]);
-
-  const resetInactivityTimer = useCallback(() => {
-    if (warningActiveRef.current || !isLoggedInRef.current) return;
-    clearInactivityTimer();
-    inactivityTimerRef.current = setTimeout(startCountdown, INACTIVITY_MS);
-  }, [startCountdown]);
-
 
   /* ── global auth hooks ─────────────────────────────────────────────────── */
 
@@ -168,25 +161,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /* ── start timers + activity listeners when authenticated ───────────────── */
 
+  const startCountdownRef = useRef(startCountdown);
+  startCountdownRef.current = startCountdown;
+
   useEffect(() => {
     if (!me) return;
     isLoggedInRef.current = true;
+    lastActivityRef.current = Date.now();
 
     const token = localStorage.getItem("accessToken");
     if (token) scheduleRefresh(token);
 
-    resetInactivityTimer();
+    const onActivity = () => {
+      // Only record activity if warning is NOT currently showing
+      if (!warningActiveRef.current) {
+        lastActivityRef.current = Date.now();
+      }
+    };
 
-    const onActivity = () => resetInactivityTimer();
     ACTIVITY_EVENTS.forEach(ev => window.addEventListener(ev, onActivity, { passive: true }));
 
+    // Check inactivity every 2 seconds for high responsiveness
+    const interval = setInterval(() => {
+      if (warningActiveRef.current || !isLoggedInRef.current) return;
+      const elapsed = Date.now() - lastActivityRef.current;
+      if (elapsed >= INACTIVITY_MS) {
+        startCountdownRef.current();
+      }
+    }, 2000);
+
     return () => {
+      clearInterval(interval);
       clearRefreshTimer();
-      clearInactivityTimer();
       clearCountdownTimer();
       ACTIVITY_EVENTS.forEach(ev => window.removeEventListener(ev, onActivity));
     };
-  }, [me, scheduleRefresh, resetInactivityTimer]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [me, scheduleRefresh]);
+
+  /* ── prompt actions ────────────────────────────────────────────────────── */
+
+  const handleStayIn = async () => {
+    clearCountdownTimer();
+    setShowWarning(false);
+    warningActiveRef.current = false;
+    lastActivityRef.current = Date.now();
+    try {
+      const refreshed = await doRefresh();
+      if (refreshed) {
+        toast.success("Session renewed successfully.");
+      } else {
+        performLogout();
+      }
+    } catch {
+      performLogout();
+    }
+  };
+
+  const handleLogoutClick = () => {
+    performLogout();
+  };
 
   /* ── login / logout exposed on context ─────────────────────────────────── */
 
@@ -208,19 +241,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{ user, isLoading, login, logout }}>
       {children}
 
-      {/* ── Inactivity warning overlay — no dismiss, no override ─────────── */}
+      {/* ── Inactivity warning overlay — premium glassmorphic modal ─────────── */}
       {showWarning && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          className="fixed inset-0 z-[9999] flex items-center justify-center animate-in fade-in duration-300"
           style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
           onMouseDown={e => e.stopPropagation()}
           onPointerDown={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
         >
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-xs w-full mx-4 text-center select-none">
-            <div className={`mx-auto mb-4 w-12 h-12 rounded-full flex items-center justify-center ${countdown <= 10 ? "bg-red-100" : "bg-amber-100"}`}>
+          <div className="bg-background border border-border rounded-3xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center select-none backdrop-blur-xl animate-in zoom-in-95 duration-300">
+            <div className={`mx-auto mb-4 w-12 h-12 rounded-full flex items-center justify-center ${countdown <= 10 ? "bg-destructive/10 text-destructive animate-bounce" : "bg-amber-500/10 text-amber-500 animate-pulse"}`}>
               <svg
-                className={`w-6 h-6 ${countdown <= 10 ? "text-red-600" : "text-amber-600"}`}
+                className="w-6 h-6"
                 viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
               >
                 <circle cx="12" cy="12" r="10"/>
@@ -228,19 +261,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
             </div>
-            <p className={`text-lg font-semibold mb-1 ${countdown <= 10 ? "text-red-600" : "text-amber-600"}`}>
+            <p className={`text-xl font-bold tracking-tight mb-1.5 ${countdown <= 10 ? "text-destructive" : "text-amber-500"}`}>
               Session Expiring
             </p>
-            <p className="text-sm text-gray-500 mb-5">
-              Inactive session. Logging out in:
+            <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
+              Your session has been inactive. You will be logged out in:
             </p>
             <div
-              className="text-8xl font-mono font-bold tabular-nums leading-none mb-2"
-              style={{ color: countdown <= 10 ? "#dc2626" : "#1e3a5f" }}
+              className="text-7xl font-mono font-bold tracking-tighter leading-none mb-6 tabular-nums"
+              style={{ color: countdown <= 10 ? "var(--destructive)" : "var(--primary)" }}
             >
               {String(countdown).padStart(2, "0")}
             </div>
-            <p className="text-xs text-gray-400">seconds</p>
+            
+            <div className="flex flex-col gap-2.5">
+              <Button
+                onClick={handleStayIn}
+                className="w-full h-11 rounded-xl font-semibold bg-primary text-primary-foreground hover:bg-primary/95 transition-all"
+              >
+                Stay in
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleLogoutClick}
+                className="w-full h-11 rounded-xl font-semibold border-border hover:bg-muted text-muted-foreground transition-all"
+              >
+                Log out
+              </Button>
+            </div>
           </div>
         </div>
       )}
