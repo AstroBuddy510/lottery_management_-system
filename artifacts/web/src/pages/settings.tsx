@@ -241,61 +241,6 @@ export function Settings() {
 
   // ─────────── Sub-forms ───────────
 
-  const WindowForm = ({ onSubmit, onCancel, isPending }: { onSubmit: (e: React.FormEvent) => void; onCancel: () => void; isPending: boolean }) => (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label className="text-xs">Day of Week (leave blank for all days)</Label>
-        <select value={windowForm.dayOfWeek} onChange={e => setWindowForm(f => ({ ...f, dayOfWeek: e.target.value }))} className="w-full h-9 rounded border border-input bg-background px-3 text-sm">
-          <option value="">All Days</option>
-          {DAY_SHORT.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
-        </select>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs">Opens</Label>
-          <Input type="time" value={windowForm.windowOpen} onChange={e => setWindowForm(f => ({ ...f, windowOpen: e.target.value }))} required className="h-9 text-sm" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Closes</Label>
-          <Input type="time" value={windowForm.windowClose} onChange={e => setWindowForm(f => ({ ...f, windowClose: e.target.value }))} required className="h-9 text-sm" />
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={windowForm.isActive} onCheckedChange={v => setWindowForm(f => ({ ...f, isActive: v }))} />
-        <Label className="text-xs">Active</Label>
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
-      </DialogFooter>
-    </form>
-  );
-
-  const ExpenseForm = ({ onSubmit, onCancel, isPending }: { onSubmit: (e: React.FormEvent) => void; onCancel: () => void; isPending: boolean }) => (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label className="text-xs">Category Name</Label>
-        <Input value={expenseForm.name} onChange={e => setExpenseForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Transport, Administration Fee" />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs">Description (optional)</Label>
-        <Input value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="h-9 text-sm" placeholder="Brief description of this expense" />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs">Default Amount (GH₵, optional)</Label>
-        <Input type="number" step="0.01" min="0" value={expenseForm.defaultAmount} onChange={e => setExpenseForm(f => ({ ...f, defaultAmount: e.target.value }))} className="h-9 text-sm" placeholder="0.00" />
-      </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={expenseForm.isActive} onCheckedChange={v => setExpenseForm(f => ({ ...f, isActive: v }))} />
-        <Label className="text-xs">Active (visible to cashiers)</Label>
-      </div>
-      <DialogFooter>
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" size="sm" disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
-      </DialogFooter>
-    </form>
-  );
-
   // ─────────── Render ───────────
 
   return (
@@ -511,28 +456,122 @@ export function Settings() {
       <Dialog open={windowOpen} onOpenChange={setWindowOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Time Window</DialogTitle></DialogHeader>
-          <WindowForm onSubmit={handleCreateWindow} onCancel={() => setWindowOpen(false)} isPending={createWindowMutation.isPending} />
+          <form onSubmit={handleCreateWindow} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Day of Week (leave blank for all days)</Label>
+              <select value={windowForm.dayOfWeek} onChange={e => setWindowForm(f => ({ ...f, dayOfWeek: e.target.value }))} className="w-full h-9 rounded border border-input bg-background px-3 text-sm">
+                <option value="">All Days</option>
+                {DAY_SHORT.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Opens</Label>
+                <Input type="time" value={windowForm.windowOpen} onChange={e => setWindowForm(f => ({ ...f, windowOpen: e.target.value }))} required className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Closes</Label>
+                <Input type="time" value={windowForm.windowClose} onChange={e => setWindowForm(f => ({ ...f, windowClose: e.target.value }))} required className="h-9 text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={windowForm.isActive} onCheckedChange={v => setWindowForm(f => ({ ...f, isActive: v }))} />
+              <Label className="text-xs">Active</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setWindowOpen(false)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={createWindowMutation.isPending}>{createWindowMutation.isPending ? "Saving…" : "Save"}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editWindow} onOpenChange={open => !open && setEditWindow(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Time Window</DialogTitle></DialogHeader>
-          <WindowForm onSubmit={handleEditWindow} onCancel={() => setEditWindow(null)} isPending={updateWindowMutation.isPending} />
+          <form onSubmit={handleEditWindow} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Day of Week (leave blank for all days)</Label>
+              <select value={windowForm.dayOfWeek} onChange={e => setWindowForm(f => ({ ...f, dayOfWeek: e.target.value }))} className="w-full h-9 rounded border border-input bg-background px-3 text-sm">
+                <option value="">All Days</option>
+                {DAY_SHORT.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Opens</Label>
+                <Input type="time" value={windowForm.windowOpen} onChange={e => setWindowForm(f => ({ ...f, windowOpen: e.target.value }))} required className="h-9 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Closes</Label>
+                <Input type="time" value={windowForm.windowClose} onChange={e => setWindowForm(f => ({ ...f, windowClose: e.target.value }))} required className="h-9 text-sm" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={windowForm.isActive} onCheckedChange={v => setWindowForm(f => ({ ...f, isActive: v }))} />
+              <Label className="text-xs">Active</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditWindow(null)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={updateWindowMutation.isPending}>{updateWindowMutation.isPending ? "Saving…" : "Save"}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
       <Dialog open={expenseCreateOpen} onOpenChange={setExpenseCreateOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Expense Category</DialogTitle></DialogHeader>
-          <ExpenseForm onSubmit={handleCreateExpense} onCancel={() => setExpenseCreateOpen(false)} isPending={createExpenseMutation.isPending} />
+          <form onSubmit={handleCreateExpense} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Category Name</Label>
+              <Input value={expenseForm.name} onChange={e => setExpenseForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Transport, Administration Fee" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Description (optional)</Label>
+              <Input value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="h-9 text-sm" placeholder="Brief description of this expense" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Default Amount (GH₵, optional)</Label>
+              <Input type="number" step="0.01" min="0" value={expenseForm.defaultAmount} onChange={e => setExpenseForm(f => ({ ...f, defaultAmount: e.target.value }))} className="h-9 text-sm" placeholder="0.00" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={expenseForm.isActive} onCheckedChange={v => setExpenseForm(f => ({ ...f, isActive: v }))} />
+              <Label className="text-xs">Active (visible to cashiers)</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setExpenseCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={createExpenseMutation.isPending}>{createExpenseMutation.isPending ? "Saving…" : "Save"}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editExpense} onOpenChange={open => !open && setEditExpense(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Expense Category</DialogTitle></DialogHeader>
-          <ExpenseForm onSubmit={handleEditExpense} onCancel={() => setEditExpense(null)} isPending={updateExpenseMutation.isPending} />
+          <form onSubmit={handleEditExpense} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Category Name</Label>
+              <Input value={expenseForm.name} onChange={e => setExpenseForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Transport, Administration Fee" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Description (optional)</Label>
+              <Input value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="h-9 text-sm" placeholder="Brief description of this expense" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Default Amount (GH₵, optional)</Label>
+              <Input type="number" step="0.01" min="0" value={expenseForm.defaultAmount} onChange={e => setExpenseForm(f => ({ ...f, defaultAmount: e.target.value }))} className="h-9 text-sm" placeholder="0.00" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={expenseForm.isActive} onCheckedChange={v => setExpenseForm(f => ({ ...f, isActive: v }))} />
+              <Label className="text-xs">Active (visible to cashiers)</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditExpense(null)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={updateExpenseMutation.isPending}>{updateExpenseMutation.isPending ? "Saving…" : "Save"}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
