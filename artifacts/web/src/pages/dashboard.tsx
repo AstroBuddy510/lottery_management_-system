@@ -724,23 +724,15 @@ function DirectorDashboard() {
         </div>
       </div>
 
-      {/* Redesigned Summary cards — 6 KPI Grid with custom accent colors & icons */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      {/* Redesigned Summary cards — 7 KPI Grid showing the sequential financial formula flow */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
         <StatCard
-          label={anyPending ? "Gross (Live)" : "Total Gross"}
+          label={anyPending ? "Gross (Live)" : "Gross"}
           value={fmtGHS(totals.gross)}
           pending={anyPending}
           icon={<Wallet className="w-4 h-4" />}
           colorClass="text-blue-500 bg-blue-50 dark:bg-blue-950/30"
-          description={anyPending ? "Live compiled sales" : "Calculated sales volume"}
-        />
-        <StatCard
-          label={anyPending ? "Wins (Live)" : "Total Wins"}
-          value={fmtGHS(totals.wins)}
-          pending={anyPending}
-          icon={<Trophy className="w-4 h-4" />}
-          colorClass="text-purple-500 bg-purple-50 dark:bg-purple-950/30"
-          description={anyPending ? "Est. pending claims" : "Finalized payouts"}
+          description="Total gross sales compiled"
         />
         <StatCard
           label={anyPending ? "Commission ~" : "Commission"}
@@ -748,10 +740,10 @@ function DirectorDashboard() {
           pending={anyPending}
           icon={<Percent className="w-4 h-4" />}
           colorClass="text-amber-500 bg-amber-50 dark:bg-amber-950/30"
-          description="Total agent deductions"
+          description="Agent commissions deducted"
         />
         <StatCard
-          label={anyPending ? "Net Gross ~" : "Net Gross"}
+          label={anyPending ? "Net Before Deduction ~" : "Net Before Deduction"}
           value={fmtGHS(totals.net)}
           pending={anyPending}
           icon={<TrendingUp className="w-4 h-4" />}
@@ -759,21 +751,37 @@ function DirectorDashboard() {
           description="Gross minus commission"
         />
         <StatCard 
-          label="Reserve Fund" 
-          value={fmtGHS(accumulatedReserve)} 
-          accent 
+          label={anyPending ? "Reserve Fund ~" : "Reserve Fund"}
+          value={fmtGHS(totals.reserve)} 
+          pending={anyPending}
           icon={<Shield className="w-4 h-4" />}
           colorClass="text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
-          description="Aggregated safety pool"
+          description="Safety pool reserve deduction"
         />
         <StatCard
-          label={anyPending ? "Est. Balance" : "Operational Bal"}
+          label={anyPending ? "Net After Reserve ~" : "Net After Reserve"}
+          value={fmtGHS(totals.net - totals.reserve)}
+          pending={anyPending}
+          icon={<TrendingUp className="w-4 h-4" />}
+          colorClass="text-cyan-500 bg-cyan-50 dark:bg-cyan-950/30"
+          description="Net before minus reserve"
+        />
+        <StatCard
+          label={anyPending ? "Wins (Live)" : "Wins"}
+          value={fmtGHS(totals.wins)}
+          pending={anyPending}
+          icon={<Trophy className="w-4 h-4" />}
+          colorClass="text-purple-500 bg-purple-50 dark:bg-purple-950/30"
+          description="Wins claimed by writers"
+        />
+        <StatCard
+          label={anyPending ? "Profit/Deficit (Est.)" : "Profit/Deficit"}
           value={fmtGHS(totals.balance)}
           accent={totals.balance >= 0}
           pending={anyPending}
           icon={<DollarSign className="w-4 h-4" />}
           colorClass={totals.balance >= 0 ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : "text-rose-500 bg-rose-50 dark:bg-rose-950/30"}
-          description={anyPending ? "Estimated daily yield" : "Net calculated balance"}
+          description={totals.balance >= 0 ? "Net surplus yield" : "Net deficit loss"}
         />
       </div>
 
