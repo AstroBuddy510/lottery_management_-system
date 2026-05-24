@@ -115,7 +115,7 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
         {/* Brand */}
         <div className="flex-1 flex items-center gap-3">
           <div className="w-11 h-11 rounded-lg overflow-hidden bg-white flex items-center justify-center p-1.5 shadow-md flex-shrink-0">
-            <img src="/company-logo.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
+            <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="text-lg font-black text-white tracking-tight leading-none">VS2000</div>

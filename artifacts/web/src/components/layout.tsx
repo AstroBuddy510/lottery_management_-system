@@ -79,7 +79,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside className="w-56 flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border">
         <div className="px-4 py-4 border-b border-sidebar-border flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg overflow-hidden bg-white flex items-center justify-center p-1.5 shadow-sm border border-sidebar-border/50 flex-shrink-0">
-            <img src="/company-logo.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
+            <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
           </div>
           <div className="min-w-0">
             <div className="text-base font-bold text-sidebar-primary tracking-tight leading-none">VS2000</div>

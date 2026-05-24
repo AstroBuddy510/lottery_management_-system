@@ -101,7 +101,7 @@ function ReportLetterhead({ title, subtitle, dateFrom, dateTo }: { title: string
   return (
     <div className="flex items-center gap-4 bg-card border rounded-xl px-5 py-4 mb-1">
       <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center p-1.5 flex-shrink-0">
-        <img src="/company-logo.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
+        <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">VS2000 Smart Office</div>
@@ -970,7 +970,7 @@ export function Reports() {
     <div className="p-4 sm:p-6">
       <div className="mb-5 flex items-center gap-3.5">
         <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center p-1.5 flex-shrink-0">
-          <img src="/company-logo.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
+          <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
         </div>
         <div>
           <h1 className="text-xl font-bold">Reports</h1>

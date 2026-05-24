@@ -65,7 +65,7 @@ export function Login() {
           <div className="flex justify-center mb-3">
             <div className="w-28 h-28 rounded-full shadow-xl overflow-hidden flex items-center justify-center">
               <img
-                src="/company-logo.png"
+                src="/company-logo-v3.png"
                 alt="VS2000 Logo"
                 className="w-full h-full object-cover scale-[1.18]"
               />

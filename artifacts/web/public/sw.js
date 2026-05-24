@@ -1,11 +1,11 @@
-const CACHE_NAME = "vs2000-cache-v2";
+const CACHE_NAME = "vs2000-cache-v3";
 const PRECACHE_ASSETS = [
   "/manifest.json",
-  "/favicon.ico",
-  "/company-logo.png",
-  "/icon-192.png",
-  "/icon-512.png",
-  "/apple-touch-icon.png"
+  "/favicon-v3.ico",
+  "/company-logo-v3.png",
+  "/icon-192-v3.png",
+  "/icon-512-v3.png",
+  "/apple-touch-icon-v3.png"
 ];
 
 self.addEventListener("install", (event) => {
