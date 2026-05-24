@@ -144,26 +144,7 @@ function IconChevronRight() {
   );
 }
 
-// ── Stat Card ────────────────────────────────────────────────
-function StatCard({ label, value, sub, icon, iconColorClass }: {
-  label: string; value: React.ReactNode; sub: string;
-  icon: React.ReactNode; iconColorClass: string;
-}) {
-  return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-4 flex flex-col justify-between shadow-sm relative overflow-hidden">
-      <div className="flex items-start justify-between mb-2">
-        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{label}</span>
-        <div className={`p-1.5 rounded-lg ${iconColorClass}`}>
-          {icon}
-        </div>
-      </div>
-      <div>
-        <div className="text-2xl font-black text-gray-900 font-mono tracking-tight leading-none">{value}</div>
-        <div className="text-[11px] text-gray-400 mt-1.5 font-semibold">{sub}</div>
-      </div>
-    </div>
-  );
-}
+
 
 // ── Main Dashboard ───────────────────────────────────────────
 export function AgentDashboard() {
@@ -311,7 +292,8 @@ export function AgentDashboard() {
                         {isCompanyOwes ? "Company Owes You" : isAgentOwes ? "You owe Company" : "Clear Balance"}
                       </span>
                       <span className="text-lg font-black font-mono text-white tracking-tight">
-                        {fmtGHS(absVal)}
+                        <span className="font-normal opacity-70 text-sm mr-1">GH₵</span>
+                        {absVal.toFixed(2)}
                       </span>
                     </div>
                     <Link href="/online-payment">
@@ -333,36 +315,86 @@ export function AgentDashboard() {
 
       <div className="space-y-5">
 
-        {/* ── Stat cards 2×2 ── */}
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard
-            label="Sales Logged"
-            value={salesList.length}
-            sub={`${salesList.length === 1 ? "ticket" : "tickets"} today`}
-            icon={<IconSale />}
-            iconColorClass="text-blue-600 bg-blue-50"
-          />
-          <StatCard
-            label="Gross Today"
-            value={todayGross > 0 ? fmtGHS(todayGross) : "—"}
-            sub={`${grossList.length} entr${grossList.length === 1 ? "y" : "ies"}`}
-            icon={<IconGross />}
-            iconColorClass="text-emerald-600 bg-emerald-50"
-          />
-          <StatCard
-            label="Wins Today"
-            value={todayWins > 0 ? fmtGHS(todayWins) : "—"}
-            sub={`${winsList.length} entr${winsList.length === 1 ? "y" : "ies"}`}
-            icon={<IconWins />}
-            iconColorClass="text-amber-600 bg-amber-50"
-          />
-          <StatCard
-            label="Writers"
-            value={activeWriters}
-            sub={`of ${writerList.length} total`}
-            icon={<IconWriters />}
-            iconColorClass="text-violet-600 bg-violet-50"
-          />
+        {/* ── Today's Summary Card ── */}
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Today's Summary</div>
+          <div className="space-y-1">
+            
+            {/* Sales Logged Row */}
+            <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl text-blue-600 bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <IconSale />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-800">Sales Logged</div>
+                  <div className="text-[11px] text-gray-400">{salesList.length === 1 ? "1 ticket" : `${salesList.length} tickets`} today</div>
+                </div>
+              </div>
+              <div className="text-base font-bold text-gray-900 font-mono">{salesList.length}</div>
+            </div>
+
+            {/* Gross Today Row */}
+            <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl text-emerald-600 bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <IconGross />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-800">Gross Sales</div>
+                  <div className="text-[11px] text-gray-400">{grossList.length === 1 ? "1 entry" : `${grossList.length} entries`} today</div>
+                </div>
+              </div>
+              <div className="text-base font-black text-gray-900 font-mono">
+                {todayGross > 0 ? (
+                  <>
+                    <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
+                    {todayGross.toFixed(2)}
+                  </>
+                ) : (
+                  "—"
+                )}
+              </div>
+            </div>
+
+            {/* Wins Today Row */}
+            <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl text-amber-600 bg-amber-50 flex items-center justify-center flex-shrink-0">
+                  <IconWins />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-800">Wins Claimed</div>
+                  <div className="text-[11px] text-gray-400">{winsList.length === 1 ? "1 entry" : `${winsList.length} entries`} today</div>
+                </div>
+              </div>
+              <div className="text-base font-black text-gray-900 font-mono">
+                {todayWins > 0 ? (
+                  <>
+                    <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
+                    {todayWins.toFixed(2)}
+                  </>
+                ) : (
+                  "—"
+                )}
+              </div>
+            </div>
+
+            {/* Active Writers Row */}
+            <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl text-violet-600 bg-violet-50 flex items-center justify-center flex-shrink-0">
+                  <IconWriters />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-800">Active Writers</div>
+                  <div className="text-[11px] text-gray-400">{activeWriters} of {writerList.length} active</div>
+                </div>
+              </div>
+              <div className="text-base font-bold text-gray-900 font-mono">{activeWriters}</div>
+            </div>
+
+          </div>
         </div>
 
         {/* ── Quick actions ── */}
@@ -472,7 +504,10 @@ export function AgentDashboard() {
                       <div className="text-xs text-gray-400 mt-0.5">{relTime(item.time)}</div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-sm font-black font-mono tabular-nums text-gray-800">{fmtGHS(item.amount)}</span>
+                      <span className="text-sm font-black font-mono tabular-nums text-gray-800">
+                        <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
+                        {Number(item.amount).toFixed(2)}
+                      </span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg" style={{ background: s.badge.bg, color: s.badge.color }}>
                         {s.label}
                       </span>
