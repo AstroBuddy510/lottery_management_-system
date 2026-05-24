@@ -131,7 +131,7 @@ export function EntryChangeRequests() {
 
   return (
     <>
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="p-6 space-y-6">
         
         {/* Modern Header Banner */}
         <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 rounded-2xl p-6 md:p-8 text-white shadow-lg border border-slate-700/50">
