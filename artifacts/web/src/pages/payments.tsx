@@ -213,6 +213,9 @@ export function Payments() {
     setExpenseItems(prev => prev.map((item, i) => {
       if (i !== idx) return item;
       if (field === "expenseCategoryId") {
+        if (value === "custom") {
+          return { expenseCategoryId: "custom", name: "", amount: "" };
+        }
         const cat = expenseList.find(e => e.id === value);
         return { expenseCategoryId: value, name: cat?.name ?? "", amount: cat?.defaultAmount ?? "" };
       }
@@ -251,8 +254,8 @@ export function Payments() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.agentId || !form.grossAmount) return;
-    if (expenseItems.some(i => !i.expenseCategoryId || !i.amount)) {
-      toast({ title: "Fill in all expense fields or remove incomplete rows", variant: "destructive" }); return;
+    if (expenseItems.some(i => !i.expenseCategoryId || !i.amount || (i.expenseCategoryId === "custom" && !i.name.trim()))) {
+      toast({ title: "Fill in all expense fields (including name for custom expenses) or remove incomplete rows", variant: "destructive" }); return;
     }
     try {
       const result = await createMutation.mutateAsync({
@@ -764,29 +767,42 @@ export function Payments() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-medium">Expense Deductions</Label>
-                <Button type="button" size="sm" variant="outline" className="h-7 text-xs px-2" onClick={addExpenseItem} disabled={expenseList.length === 0}>
+                <Button type="button" size="sm" variant="outline" className="h-7 text-xs px-2" onClick={addExpenseItem}>
                   + Add Expense
                 </Button>
               </div>
               {expenseList.length === 0 && (
-                <p className="text-xs text-muted-foreground italic">No expense categories configured. Ask an administrator.</p>
+                <p className="text-xs text-muted-foreground italic">No expense categories configured. Use custom category or ask an administrator.</p>
               )}
               {expenseItems.length > 0 && (
-                <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
                   {expenseItems.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
-                      <Select value={item.expenseCategoryId || "_none"} onValueChange={v => updateExpenseItem(idx, "expenseCategoryId", v === "_none" ? "" : v)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select expense…" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">Select category…</SelectItem>
-                          {expenseList.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <div className="relative w-28">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">GH₵</span>
-                        <Input type="number" step="0.01" min="0" value={item.amount} onChange={e => updateExpenseItem(idx, "amount", e.target.value)} className="h-8 text-xs pl-8" placeholder="0.00" />
+                    <div key={idx} className="space-y-2 border-b last:border-b-0 pb-2 last:pb-0">
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                        <Select value={item.expenseCategoryId || "_none"} onValueChange={v => updateExpenseItem(idx, "expenseCategoryId", v === "_none" ? "" : v)}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select expense…" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">Select category…</SelectItem>
+                            {expenseList.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                            <SelectItem value="custom">Custom / Other Expense</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <div className="relative w-28">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">GH₵</span>
+                          <Input type="number" step="0.01" min="0" value={item.amount} onChange={e => updateExpenseItem(idx, "amount", e.target.value)} className="h-8 text-xs pl-8" placeholder="0.00" />
+                        </div>
+                        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => removeExpenseItem(idx)}>×</Button>
                       </div>
-                      <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => removeExpenseItem(idx)}>×</Button>
+                      {item.expenseCategoryId === "custom" && (
+                        <Input
+                          type="text"
+                          value={item.name}
+                          onChange={e => updateExpenseItem(idx, "name", e.target.value)}
+                          className="h-8 text-xs w-full"
+                          placeholder="Enter custom category name (e.g. Office Supplies)…"
+                          required
+                        />
+                      )}
                     </div>
                   ))}
                 </div>

@@ -756,21 +756,23 @@ function AgentLedgerTab({
   return (
     <div className="space-y-5">
       {/* Filters */}
-      <div className="flex gap-3 items-center flex-wrap">
+      <div className="flex gap-4 sm:gap-6 items-center flex-wrap bg-white p-4 rounded-xl border shadow-sm">
         <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-500 font-medium whitespace-nowrap">From</label>
-          <Input type="date" value={dateFrom} onChange={(e) => onDateFromChange(e.target.value)} className="h-8 text-sm w-36" />
+          <label className="text-xs text-slate-500 font-semibold whitespace-nowrap">From</label>
+          <Input type="date" value={dateFrom} onChange={(e) => onDateFromChange(e.target.value)} className="h-9 text-sm w-44 sm:w-48 rounded-lg border-slate-200" />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-500 font-medium whitespace-nowrap">To</label>
-          <Input type="date" value={dateTo} onChange={(e) => onDateToChange(e.target.value)} className="h-8 text-sm w-36" />
+          <label className="text-xs text-slate-500 font-semibold whitespace-nowrap">To</label>
+          <Input type="date" value={dateTo} onChange={(e) => onDateToChange(e.target.value)} className="h-9 text-sm w-44 sm:w-48 rounded-lg border-slate-200" />
         </div>
-        <Input
-          placeholder="Filter by agent…"
-          value={agentFilter}
-          onChange={(e) => setAgentFilter(e.target.value)}
-          className="h-8 text-sm w-52"
-        />
+        <div className="flex-1 min-w-[200px]">
+          <Input
+            placeholder="Filter by agent code or name…"
+            value={agentFilter}
+            onChange={(e) => setAgentFilter(e.target.value)}
+            className="h-9 text-sm w-full max-w-xs rounded-lg border-slate-200"
+          />
+        </div>
       </div>
 
       {/* Summary chips */}

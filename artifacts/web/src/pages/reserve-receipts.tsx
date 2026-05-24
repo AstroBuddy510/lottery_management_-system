@@ -169,24 +169,24 @@ export function ReserveReceipts() {
 
       <div className="px-6 py-6 space-y-5">
         {/* Filters */}
-        <div className="flex gap-3 items-center flex-wrap">
+        <div className="flex gap-4 sm:gap-6 items-center flex-wrap bg-white p-4 rounded-xl border shadow-sm">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-500 font-medium whitespace-nowrap">Date</label>
+            <label className="text-xs text-slate-500 font-semibold whitespace-nowrap">Date</label>
             <Input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="h-8 text-sm w-40"
+              className="h-9 text-sm w-44 sm:w-48 rounded-lg border-slate-200"
             />
           </div>
           <Input
-            placeholder="Filter agents…"
+            placeholder="Filter agents..."
             value={agentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
-            className="h-8 text-sm w-52"
+            className="h-9 text-sm w-56 rounded-lg border-slate-200"
           />
           {date !== todayStr() && (
-            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setDate(todayStr())}>
+            <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={() => setDate(todayStr())}>
               Back to today
             </Button>
           )}

@@ -82,6 +82,20 @@ export function Calculations() {
 
   const calcList = useMemo(() => Array.isArray(calculations) ? calculations : [], [calculations]);
 
+  const calculatedDates = useMemo(() => {
+    const dates = new Set<string>();
+    for (const c of calcList) {
+      if (c.calcDate) {
+        dates.add(c.calcDate.split("T")[0]);
+      }
+    }
+    return dates;
+  }, [calcList]);
+
+  const gamesYetToRun = useMemo(() => {
+    return gameList.filter(g => !calculatedDates.has(gameCloseDate(g)));
+  }, [gameList, calculatedDates]);
+
   const selectedRunGame = selectedRunGameId !== "_none" ? gameList.find(g => g.id === selectedRunGameId) : null;
   const selectedHistoryGame = historyGameId !== "_all" ? gameList.find(g => g.id === historyGameId) : null;
 
@@ -144,7 +158,7 @@ export function Calculations() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="_none">— No game selected (enter date manually) —</SelectItem>
-                      {gameList.map(g => (
+                      {gamesYetToRun.map(g => (
                         <SelectItem key={g.id} value={g.id}>
                           <span className="font-mono text-xs text-muted-foreground mr-1.5">{g.eventNumber}</span>
                           {g.name}
