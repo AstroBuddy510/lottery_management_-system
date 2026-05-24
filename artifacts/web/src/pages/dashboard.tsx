@@ -977,7 +977,7 @@ function DirectorDashboard() {
               type="date"
               value={viewDate}
               onChange={e => { setSelectedDate(e.target.value); setPage(1); }}
-              className="h-8.5 text-xs w-36 bg-background/60 border-border/50"
+              className="h-8.5 text-xs w-44 bg-background/60 border-border/50"
             />
             {selectedDate && (
               <Button size="sm" variant="ghost" className="h-8 text-xs px-2" onClick={() => { setSelectedDate(""); setPage(1); }}>

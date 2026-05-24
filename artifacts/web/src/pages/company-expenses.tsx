@@ -253,7 +253,7 @@ export function CompanyExpenses() {
                     type="date"
                     value={customStart}
                     onChange={e => setCustomStart(e.target.value)}
-                    className="h-8 text-xs py-1 w-36"
+                    className="h-8 text-xs py-1 w-44"
                   />
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -262,7 +262,7 @@ export function CompanyExpenses() {
                     type="date"
                     value={customEnd}
                     onChange={e => setCustomEnd(e.target.value)}
-                    className="h-8 text-xs py-1 w-36"
+                    className="h-8 text-xs py-1 w-44"
                   />
                 </div>
               </div>
