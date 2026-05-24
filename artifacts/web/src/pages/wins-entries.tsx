@@ -88,12 +88,25 @@ function AgentWinsView() {
   const [changeReqEntry, setChangeReqEntry] = useState<WinsEntry | null>(null);
   const [changeReqForm, setChangeReqForm] = useState({ requestedAmount: "", reason: "" });
 
-  // Exclude writers who already have a wins entry on the selected date
-  const usedWriterIds = useMemo(
-    () => new Set(entryList.filter(e => e.entryDate?.startsWith(form.entryDate)).map(e => e.writerId)),
-    [entryList, form.entryDate],
-  );
-  const availableWriters = writerList.filter(w => !usedWriterIds.has(w.id));
+  // Fetch all wins entries for the selected date to verify which writers have already been entered
+  const { data: dateEntries } = useListWinsEntries({
+    dateFrom: form.entryDate,
+    dateTo: form.entryDate,
+  }, {
+    query: {
+      queryKey: ["winsEntriesForDate", form.entryDate],
+      enabled: !!form.entryDate,
+    }
+  });
+
+  const usedWriterIds = useMemo(() => {
+    if (!dateEntries) return new Set<string>();
+    return new Set(dateEntries.map(e => e.writerId));
+  }, [dateEntries]);
+
+  const availableWriters = useMemo(() => {
+    return writerList.filter(w => !usedWriterIds.has(w.id));
+  }, [writerList, usedWriterIds]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWinsEntriesQueryKey({}) });
 
@@ -431,6 +444,26 @@ function AdminWinsView() {
   });
   const writerList = Array.isArray(writers) ? writers : [];
 
+  // Fetch all wins entries for the selected date to verify which writers have already been entered
+  const { data: dateEntries } = useListWinsEntries({
+    dateFrom: form.entryDate,
+    dateTo: form.entryDate,
+  }, {
+    query: {
+      queryKey: ["winsEntriesForDate", form.entryDate],
+      enabled: !!form.entryDate,
+    }
+  });
+
+  const usedWriterIds = useMemo(() => {
+    if (!dateEntries) return new Set<string>();
+    return new Set(dateEntries.map(e => e.writerId));
+  }, [dateEntries]);
+
+  const availableWriters = useMemo(() => {
+    return writerList.filter(w => !usedWriterIds.has(w.id));
+  }, [writerList, usedWriterIds]);
+
   const createMutation = useCreateWinsEntry();
   const updateMutation = useUpdateWinsEntry();
   const [createOpen, setCreateOpen] = useState(false);
@@ -572,9 +605,13 @@ function AdminWinsView() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Writer</Label>
-              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={!selectedAgent}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select writer..." /></SelectTrigger>
-                <SelectContent>{writerList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}</SelectContent>
+              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={!selectedAgent || availableWriters.length === 0}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder={!selectedAgent ? "Select agent..." : availableWriters.length === 0 ? "All writers entered for this date" : "Select writer..."} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
