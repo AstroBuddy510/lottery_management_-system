@@ -21,6 +21,10 @@ function parseTokenExpiry(token: string): number | null {
   }
 }
 
+// Register the auth token getter immediately so that any early query hooks
+// (which are executed synchronously during render) can access the token.
+setAuthTokenGetter(() => localStorage.getItem("accessToken"));
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<import("@workspace/api-client-react").User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -32,7 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logoutMutation = useLogout();
 
   const hasToken = !!localStorage.getItem("accessToken");
-  const { data: me, isLoading: isLoadingMe, isError } = useGetMe({
+  const { data: me, isLoading: isLoadingMe, isError, error } = useGetMe({
     query: { queryKey: getGetMeQueryKey(), enabled: hasToken, retry: false },
   });
 
@@ -137,7 +141,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /* ── global auth hooks ─────────────────────────────────────────────────── */
 
   useEffect(() => {
-    setAuthTokenGetter(() => localStorage.getItem("accessToken"));
     setUnauthorizedHandler(() => {
       if (!localStorage.getItem("accessToken")) return;
       // Try a silent refresh before giving up
@@ -152,12 +155,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (me) setUser(me);
     if (!isLoadingMe) setIsInitializing(false);
     if (isError) {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      setUser(null);
+      const isUnauthorized = error && typeof error === "object" && "status" in error && error.status === 401;
+      if (isUnauthorized || !localStorage.getItem("accessToken")) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        setUser(null);
+      }
       setIsInitializing(false);
     }
-  }, [me, isLoadingMe, isError]);
+  }, [me, isLoadingMe, isError, error]);
 
   /* ── start timers + activity listeners when authenticated ───────────────── */
 
