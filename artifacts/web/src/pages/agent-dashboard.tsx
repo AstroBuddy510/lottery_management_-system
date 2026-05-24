@@ -210,6 +210,12 @@ export function AgentDashboard() {
   return (
     <div className="px-4 max-w-xl mx-auto md:max-w-2xl mt-4 pb-6 space-y-5">
 
+      {/* Page Title Block */}
+      <div className="flex items-center gap-2 mb-1">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+        <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-700 px-2 py-0.5 rounded-md">Agent</span>
+      </div>
+
       {/* ── Hero greeting banner card ── */}
       <div
         className="rounded-3xl p-5 text-white shadow-xl"

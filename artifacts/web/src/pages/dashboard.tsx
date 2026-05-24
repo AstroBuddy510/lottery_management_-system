@@ -1597,6 +1597,10 @@ export function Dashboard() {
   const { user } = useAuth();
   const role = user?.role ?? "";
 
+  if (role === "agent") {
+    return <AgentDashboard />;
+  }
+
   return (
     <div className="p-6">
       <div className="flex items-center gap-3 mb-6">
@@ -1608,7 +1612,6 @@ export function Dashboard() {
       {role === "cashier" && <CashierDashboard />}
       {role === "gross_entry" && <EntryDashboard type="gross" />}
       {role === "wins_entry" && <EntryDashboard type="wins" />}
-      {role === "agent" && <AgentDashboard />}
     </div>
   );
 }
