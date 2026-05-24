@@ -193,7 +193,7 @@ router.post("/staff-payroll/payments", requireAuth, requireRole("cashier"), asyn
         amount: netAmount.toString(),
         balanceAfter: newBalance.toString(),
         referenceId: payment.id,
-        performedBy: (req.user as any).id,
+        performedBy: req.user!.userId,
         notes: `Salary payment for ${payment.staffType} staff`
       });
 
@@ -201,7 +201,7 @@ router.post("/staff-payroll/payments", requireAuth, requireRole("cashier"), asyn
         deductions: deductAmount.toString(),
         netAmount: netAmount.toString(),
         status: "paid",
-        paidBy: (req.user as any).id,
+        paidBy: req.user!.userId,
         paidAt: new Date(),
         notes: notes || payment.notes
       }).where(eq(salaryPaymentsTable.id, payment.id)).returning();
@@ -317,7 +317,7 @@ router.post("/staff-payroll/wallet/fund", requireAuth, requireRole("director", "
         type: "fund",
         amount: fundAmount.toString(),
         balanceAfter: newBalance.toString(),
-        performedBy: (req.user as any).id,
+        performedBy: req.user!.userId,
         notes: notes || "Wallet funded by management"
       });
 

@@ -22,6 +22,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   offline: { label: "Offline", className: "bg-secondary text-secondary-foreground" },
@@ -156,6 +158,27 @@ export function Games() {
   const [editGame, setEditGame] = useState<Game | null>(null);
   const [form, setForm] = useState<GameFormState>(EMPTY_FORM);
 
+  const [closedSearch, setClosedSearch] = useState("");
+  const [closedDate, setClosedDate] = useState("");
+  const [showAllClosed, setShowAllClosed] = useState(false);
+  const [closedPage, setClosedPage] = useState(1);
+  const itemsPerPage = 6;
+
+  const handleSearchChange = (val: string) => {
+    setClosedSearch(val);
+    setClosedPage(1);
+  };
+
+  const handleDateChange = (val: string) => {
+    setClosedDate(val);
+    setClosedPage(1);
+  };
+
+  const handleToggleShowAll = (val: boolean) => {
+    setShowAllClosed(val);
+    setClosedPage(1);
+  };
+
   const gameList = Array.isArray(games) ? games : [];
   const invalidate = () => qc.invalidateQueries({ queryKey: getListGamesQueryKey() });
 
@@ -247,6 +270,127 @@ export function Games() {
   const offlineCount = gameList.filter((g) => g.status === "offline").length;
   const closedCount  = gameList.filter((g) => g.status === "closed").length;
 
+  const liveGames = gameList.filter((g) => g.status === "live");
+  const offlineGames = gameList.filter((g) => g.status === "offline");
+
+  const filteredClosedGames = gameList.filter((g) => {
+    if (g.status !== "closed") return false;
+
+    // 1. Clutter-free by default (hide older than 3 days)
+    if (!showAllClosed) {
+      const closedTime = new Date(g.closeAt).getTime();
+      const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+      if (closedTime < threeDaysAgo) return false;
+    }
+
+    // 2. Search
+    if (closedSearch.trim()) {
+      const q = closedSearch.toLowerCase().trim();
+      const nameMatch = g.name.toLowerCase().includes(q);
+      const numMatch = g.eventNumber.toLowerCase().includes(q);
+      const descMatch = g.description?.toLowerCase().includes(q) ?? false;
+      if (!nameMatch && !numMatch && !descMatch) return false;
+    }
+
+    // 3. Date
+    if (closedDate) {
+      const closeDateStr = new Date(g.closeAt).toISOString().split("T")[0];
+      if (closeDateStr !== closedDate) return false;
+    }
+
+    return true;
+  });
+
+  const totalClosedItems = filteredClosedGames.length;
+  const totalPages = Math.ceil(totalClosedItems / itemsPerPage) || 1;
+  const currentPageSafe = Math.min(closedPage, totalPages) || 1;
+  const paginatedClosedGames = filteredClosedGames.slice(
+    (currentPageSafe - 1) * itemsPerPage,
+    currentPageSafe * itemsPerPage
+  );
+
+  const renderGameCard = (g: Game) => {
+    const cfg = STATUS_CONFIG[g.status] ?? STATUS_CONFIG.offline;
+    const isClosed = g.status === "closed";
+    return (
+      <div
+        key={g.id}
+        className="border rounded-xl bg-card p-5 flex flex-col gap-4 hover:shadow-md transition-shadow"
+      >
+        {/* Top row: indicator + badge + event number */}
+        <div className="flex items-center gap-2 justify-between">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                g.status === "live"
+                  ? "bg-green-500 ring-2 ring-green-300 animate-pulse"
+                  : g.status === "closed"
+                  ? "bg-destructive/60"
+                  : "bg-muted-foreground/40"
+              }`}
+            />
+            <Badge className={`text-[10px] px-2 py-0 h-5 font-semibold ${cfg.className}`}>
+              {cfg.label}
+            </Badge>
+          </div>
+          <span className="text-xs font-mono font-bold text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-900/80 bg-indigo-50/50 dark:bg-indigo-950/20 px-2 py-0.5 rounded-lg">
+            Event #{g.eventNumber}
+          </span>
+        </div>
+
+        {/* Name + description */}
+        <div className="flex-1">
+          <div className="font-semibold text-base leading-tight">{g.name}</div>
+          {g.description && (
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{g.description}</p>
+          )}
+        </div>
+
+        {/* Timestamps */}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-muted/50 rounded-lg px-3 py-2">
+            <div className="text-muted-foreground font-medium mb-0.5">Goes live</div>
+            <div className="font-mono font-semibold text-foreground/80">{formatDateTime(g.goLiveAt)}</div>
+          </div>
+          <div className="bg-muted/50 rounded-lg px-3 py-2">
+            <div className="text-muted-foreground font-medium mb-0.5">Closes at</div>
+            <div className="font-mono font-semibold text-foreground/80">{formatDateTime(g.closeAt)}</div>
+          </div>
+        </div>
+
+        {/* Footer: toggle + actions */}
+        <div className="flex items-center justify-between pt-1 border-t">
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={g.status === "live"}
+              onCheckedChange={() => handleToggleLive(g)}
+              disabled={isClosed || updateMutation.isPending}
+              aria-label={`Toggle ${g.name} live`}
+            />
+            <span className="text-xs text-muted-foreground">
+              {isClosed ? "Closed" : g.status === "live" ? "Live" : "Go Live"}
+            </span>
+          </div>
+          {!isClosed && (
+            <div className="flex gap-1">
+              <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(g)}>
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs px-2 text-destructive hover:text-destructive"
+                onClick={() => handleDelete(g)}
+              >
+                Delete
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -254,7 +398,7 @@ export function Games() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Games</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Each game gets a unique event number. Toggle a game live when you're ready — it auto-closes at the scheduled time.
+            Manage your lottery draw events. Separate game states using category tabs.
           </p>
         </div>
         <Button
@@ -273,99 +417,161 @@ export function Games() {
         <StatPill label="Closed"  count={closedCount}  dot="bg-destructive/60" />
       </div>
 
-      {/* Game grid */}
       {isLoading ? (
         <div className="text-center py-16 text-muted-foreground text-sm">Loading games…</div>
-      ) : gameList.length === 0 ? (
-        <div className="text-center py-16 border rounded-xl text-muted-foreground">
-          <div className="text-3xl mb-2">🎮</div>
-          <div className="font-medium text-sm">No games yet</div>
-          <div className="text-xs mt-1">Add your first game to get started</div>
-        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {gameList.map((g) => {
-            const cfg = STATUS_CONFIG[g.status] ?? STATUS_CONFIG.offline;
-            const isClosed = g.status === "closed";
-            return (
-              <div
-                key={g.id}
-                className="border rounded-xl bg-card p-5 flex flex-col gap-4 hover:shadow-md transition-shadow"
-              >
-                {/* Top row: indicator + badge + event number */}
-                <div className="flex items-center gap-2 justify-between">
+        <Tabs defaultValue="live" className="space-y-6">
+          <TabsList className="grid w-full max-w-md grid-cols-3">
+            <TabsTrigger value="live" className="relative">
+              Live
+              {liveCount > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-black rounded-full bg-green-500 text-white leading-none">
+                  {liveCount}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="offline">
+              Offline
+              {offlineCount > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-black rounded-full bg-slate-500 text-white leading-none">
+                  {offlineCount}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="closed">
+              Closed
+              {closedCount > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-black rounded-full bg-rose-500 text-white leading-none">
+                  {closedCount}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="live" className="space-y-4 outline-none">
+            {liveGames.length === 0 ? (
+              <div className="text-center py-16 border rounded-xl text-muted-foreground bg-card">
+                <div className="text-3xl mb-2">🟢</div>
+                <div className="font-medium text-sm">No live games</div>
+                <div className="text-xs mt-1">There are currently no active games accepting entries.</div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {liveGames.map(renderGameCard)}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="offline" className="space-y-4 outline-none">
+            {offlineGames.length === 0 ? (
+              <div className="text-center py-16 border rounded-xl text-muted-foreground bg-card">
+                <div className="text-3xl mb-2">⚙️</div>
+                <div className="font-medium text-sm">No offline games</div>
+                <div className="text-xs mt-1">No pending or offline games available.</div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {offlineGames.map(renderGameCard)}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="closed" className="space-y-4 outline-none">
+            {/* Filter Panel */}
+            <div className="bg-card border rounded-xl p-4 space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex-1 max-w-md relative">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search closed games..."
+                    value={closedSearch}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="pl-9 h-9 text-sm rounded-xl"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                        g.status === "live"
-                          ? "bg-green-500 ring-2 ring-green-300 animate-pulse"
-                          : g.status === "closed"
-                          ? "bg-destructive/60"
-                          : "bg-muted-foreground/40"
-                      }`}
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Closed Date:</Label>
+                    <Input
+                      type="date"
+                      value={closedDate}
+                      onChange={(e) => handleDateChange(e.target.value)}
+                      className="h-9 text-xs rounded-xl w-36"
                     />
-                    <Badge className={`text-[10px] px-2 py-0 h-5 font-semibold ${cfg.className}`}>
-                      {cfg.label}
-                    </Badge>
                   </div>
-                  <span className="text-[10px] font-mono text-muted-foreground border rounded px-1.5 py-0.5 bg-muted">
-                    {g.eventNumber}
-                  </span>
-                </div>
-
-                {/* Name + description */}
-                <div className="flex-1">
-                  <div className="font-semibold text-base leading-tight">{g.name}</div>
-                  {g.description && (
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{g.description}</p>
-                  )}
-                </div>
-
-                {/* Timestamps */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-muted/50 rounded-lg px-3 py-2">
-                    <div className="text-muted-foreground font-medium mb-0.5">Goes live</div>
-                    <div className="font-mono font-semibold text-foreground/80">{formatDateTime(g.goLiveAt)}</div>
-                  </div>
-                  <div className="bg-muted/50 rounded-lg px-3 py-2">
-                    <div className="text-muted-foreground font-medium mb-0.5">Closes at</div>
-                    <div className="font-mono font-semibold text-foreground/80">{formatDateTime(g.closeAt)}</div>
-                  </div>
-                </div>
-
-                {/* Footer: toggle + actions */}
-                <div className="flex items-center justify-between pt-1 border-t">
                   <div className="flex items-center gap-2">
                     <Switch
-                      checked={g.status === "live"}
-                      onCheckedChange={() => handleToggleLive(g)}
-                      disabled={isClosed || updateMutation.isPending}
-                      aria-label={`Toggle ${g.name} live`}
+                      id="show-all-closed"
+                      checked={showAllClosed}
+                      onCheckedChange={handleToggleShowAll}
                     />
-                    <span className="text-xs text-muted-foreground">
-                      {isClosed ? "Closed" : g.status === "live" ? "Live" : "Go Live"}
-                    </span>
+                    <Label htmlFor="show-all-closed" className="text-xs font-medium cursor-pointer">
+                      Show older completed games
+                    </Label>
                   </div>
-                  {!isClosed && (
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(g)}>
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-xs px-2 text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(g)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+
+            {paginatedClosedGames.length === 0 ? (
+              <div className="text-center py-16 border rounded-xl text-muted-foreground bg-card">
+                <div className="text-3xl mb-2">🔒</div>
+                <div className="font-medium text-sm">No closed games found</div>
+                <div className="text-xs mt-1">Adjust search terms, date filters, or toggle older games to find archived records.</div>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {paginatedClosedGames.map(renderGameCard)}
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-4 mt-6">
+                    <div className="text-xs text-muted-foreground">
+                      Showing {(currentPageSafe - 1) * itemsPerPage + 1} to{" "}
+                      {Math.min(currentPageSafe * itemsPerPage, totalClosedItems)} of{" "}
+                      {totalClosedItems} completed games
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl px-2.5"
+                        disabled={currentPageSafe === 1}
+                        onClick={() => setClosedPage(currentPageSafe - 1)}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                        <Button
+                          key={p}
+                          variant={p === currentPageSafe ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 w-8 rounded-xl p-0 font-medium"
+                          onClick={() => setClosedPage(p)}
+                        >
+                          {p}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl px-2.5"
+                        disabled={currentPageSafe === totalPages}
+                        onClick={() => setClosedPage(currentPageSafe + 1)}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* Create Dialog */}
