@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { 
   useListAgents, 
   useUpdateUser, 
@@ -332,6 +333,8 @@ function StatCard({
 /* ─── last payment badge ─────────────────────────────────────────────────── */
 
 function LastPaymentBadge({ payment }: { payment?: Payment }) {
+  const [, setLocation] = useLocation();
+
   if (!payment) {
     return (
       <span className="text-[11px] text-slate-400 italic flex items-center gap-1">
@@ -342,6 +345,12 @@ function LastPaymentBadge({ payment }: { payment?: Payment }) {
 
   const isPayIn = payment.transactionType === "pay_in";
   const amountVal = parseFloat(payment.amount);
+  const paymentDateOnly = payment.paymentDate?.split("T")[0] || "";
+
+  const handleAmountClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLocation(`/payments?agentId=${payment.agentId}&dateFrom=${paymentDateOnly}&dateTo=${paymentDateOnly}`);
+  };
   
   return (
     <div className="flex items-center gap-1.5 text-xs">
@@ -350,9 +359,13 @@ function LastPaymentBadge({ payment }: { payment?: Payment }) {
       ) : (
         <ArrowUpRight className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />
       )}
-      <span className="font-semibold text-slate-700 truncate max-w-[130px]">
-        {isPayIn ? "Pay-in" : "Pay-out"}: <strong className="font-mono">GHS {amountVal.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</strong>
-      </span>
+      <button
+        onClick={handleAmountClick}
+        className="font-semibold text-slate-700 hover:text-primary hover:underline text-left focus:outline-none transition-colors"
+        title="Click to view transaction on Payments page"
+      >
+        {isPayIn ? "Pay-in" : "Pay-out"}: <strong className="font-mono text-primary group-hover:text-primary-hover">GHS {amountVal.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</strong>
+      </button>
       <span className="text-[10px] text-slate-400 flex-shrink-0">
         • {new Date(payment.paymentDate).toLocaleDateString("en-GH", { day: "numeric", month: "short" })}
       </span>

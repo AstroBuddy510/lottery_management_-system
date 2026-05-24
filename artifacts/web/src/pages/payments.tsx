@@ -108,9 +108,27 @@ export function Payments() {
 
   /* ── data ── */
   const [boardDate, setBoardDate] = useState(today());
-  const [filterAgentId, setFilterAgentId] = useState("");
-  const [filterFrom, setFilterFrom]   = useState("");
-  const [filterTo, setFilterTo]       = useState("");
+  const [filterAgentId, setFilterAgentId] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("agentId") || "";
+    }
+    return "";
+  });
+  const [filterFrom, setFilterFrom] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("dateFrom") || "";
+    }
+    return "";
+  });
+  const [filterTo, setFilterTo] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("dateTo") || "";
+    }
+    return "";
+  });
 
   const { data: rawPayments, isLoading: loadingPayments } = useListPayments({
     agentId: filterAgentId || undefined,
