@@ -1,5 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { useListAgents, useUpdateUser, AgentWithUser, getListAgentsQueryKey } from "@workspace/api-client-react";
+import { 
+  useListAgents, 
+  useUpdateUser, 
+  AgentWithUser, 
+  getListAgentsQueryKey, 
+  useListPayments, 
+  Payment,
+  getListPaymentsQueryKey
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Map as PigeonMapBase, Overlay, type MapProps } from "pigeon-maps";
@@ -7,6 +15,29 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  List as ListIcon,
+  LayoutGrid,
+  Map as MapIcon,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  ArrowUpRight,
+  ArrowDownLeft,
+  TrendingUp,
+  Clock,
+  Coins,
+  AlertTriangle,
+  FileText,
+  RefreshCw,
+  SlidersHorizontal,
+  User,
+  MapPin,
+  Phone,
+  ArrowRight,
+  Calendar,
+  AlertCircle
+} from "lucide-react";
 
 type PigeonMapProps = MapProps & { height?: number; attribution?: boolean; children?: React.ReactNode };
 // Wrap to avoid TS confusing pigeon-maps Map with the global JS Map constructor
@@ -271,16 +302,60 @@ function InfoCell({ label, value, mono, full }: { label: string; value: string; 
 
 /* ─── stat card ───────────────────────────────────────────────────────────── */
 
-function StatCard({ label, count, color, icon }: { label: string; count: number; color: string; icon: React.ReactNode }) {
+function StatCard({
+  label,
+  value,
+  color,
+  icon,
+  detail,
+}: {
+  label: string;
+  value: React.ReactNode;
+  color: string;
+  icon: React.ReactNode;
+  detail?: string;
+}) {
   return (
-    <div className={`flex items-center gap-3 bg-white border rounded-xl p-4 shadow-sm`}>
-      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0`}>
+    <div className="bg-white border rounded-2xl p-4.5 shadow-sm hover:shadow-md transition-all flex items-start gap-4">
+      <div className={`w-11 h-11 rounded-2xl ${color} flex items-center justify-center flex-shrink-0 shadow-sm`}>
         {icon}
       </div>
-      <div>
-        <div className="text-2xl font-bold text-slate-800 leading-none">{count}</div>
-        <div className="text-xs text-slate-500 mt-0.5">{label}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 leading-none">{label}</div>
+        <div className="text-xl font-black text-slate-800 leading-snug">{value}</div>
+        {detail && <div className="text-[10px] text-slate-400 mt-1 leading-none font-medium">{detail}</div>}
       </div>
+    </div>
+  );
+}
+
+/* ─── last payment badge ─────────────────────────────────────────────────── */
+
+function LastPaymentBadge({ payment }: { payment?: Payment }) {
+  if (!payment) {
+    return (
+      <span className="text-[11px] text-slate-400 italic flex items-center gap-1">
+        <Clock className="w-3.5 h-3.5 opacity-60" /> No payments yet
+      </span>
+    );
+  }
+
+  const isPayIn = payment.transactionType === "pay_in";
+  const amountVal = parseFloat(payment.amount);
+  
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      {isPayIn ? (
+        <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+      ) : (
+        <ArrowUpRight className="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />
+      )}
+      <span className="font-semibold text-slate-700 truncate max-w-[130px]">
+        {isPayIn ? "Pay-in" : "Pay-out"}: <strong className="font-mono">GHS {amountVal.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</strong>
+      </span>
+      <span className="text-[10px] text-slate-400 flex-shrink-0">
+        • {new Date(payment.paymentDate).toLocaleDateString("en-GH", { day: "numeric", month: "short" })}
+      </span>
     </div>
   );
 }
@@ -289,121 +364,318 @@ function StatCard({ label, count, color, icon }: { label: string; count: number;
 
 function GridView({
   agents,
+  lastPaymentsMap,
   onSelect,
   onPhotoClick,
 }: {
   agents: AgentWithUser[];
+  lastPaymentsMap: Record<string, Payment>;
   onSelect: (a: AgentWithUser) => void;
   onPhotoClick: (a: AgentWithUser) => void;
 }) {
   if (agents.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-        <svg className="w-14 h-14 mb-4 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
+        <AlertCircle className="w-14 h-14 mb-4 opacity-30" />
         <p className="font-medium text-slate-500">No agencies match this filter</p>
       </div>
     );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
       {agents.map(a => {
         const status = getStatus(a);
         const cfg = STATUS_CFG[status];
         const debt = parseFloat(a.outstandingDebt);
         const photo = (a.user as { profilePicture?: string | null }).profilePicture;
+        const lastPayment = lastPaymentsMap[a.id];
         return (
           <div
             key={a.id}
             onClick={() => onSelect(a)}
-            className={`group bg-white border border-l-4 ${cfg.border} rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:-translate-y-0.5`}
+            className={`group bg-white border border-l-4 ${cfg.border} rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:-translate-y-0.5 flex flex-col justify-between`}
           >
-            {/* Header row — icon is a separate upload target, rest of card opens detail */}
-            <div className="flex items-start justify-between mb-4">
-              <button
-                type="button"
-                onClick={e => { e.stopPropagation(); onPhotoClick(a); }}
-                className="relative group/icon flex-shrink-0 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-                aria-label="Change agency profile photo"
-                title="Click to change photo"
-              >
-                {photo ? (
-                  <img
-                    src={photo}
-                    alt={a.agencyName ?? a.user.fullName}
-                    className="w-12 h-12 rounded-2xl object-cover shadow-md"
-                  />
-                ) : (
-                  <AgencyIcon status={status} size="md" />
-                )}
-                <span className="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/40 opacity-0 group-hover/icon:opacity-100 transition-opacity">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                    <circle cx="12" cy="13" r="4"/>
-                  </svg>
+            <div>
+              {/* Header row */}
+              <div className="flex items-start justify-between mb-3.5">
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); onPhotoClick(a); }}
+                  className="relative group/icon flex-shrink-0 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  aria-label="Change agency profile photo"
+                  title="Click to change photo"
+                >
+                  {photo ? (
+                    <img
+                      src={photo}
+                      alt={a.agencyName ?? a.user.fullName}
+                      className="w-12 h-12 rounded-2xl object-cover shadow-sm border border-slate-100"
+                    />
+                  ) : (
+                    <AgencyIcon status={status} size="md" />
+                  )}
+                  <span className="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/40 opacity-0 group-hover/icon:opacity-100 transition-opacity">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                      <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                  </span>
+                </button>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${cfg.badge}`}>
+                  {status === "active-clear" ? "Clear" : status === "active-debt" ? "Has Debt" : "Closed"}
                 </span>
-              </button>
-              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${cfg.badge}`}>
-                {status === "active-clear" ? "Clear" : status === "active-debt" ? "Has Debt" : "Closed"}
-              </span>
-            </div>
-
-            {/* Agency name */}
-            <h3 className="font-bold text-slate-800 text-base leading-tight mb-0.5 group-hover:text-slate-900 truncate">
-              {a.agencyName ?? a.user.fullName}
-            </h3>
-            <code className="text-xs text-slate-400 font-mono">{a.fullCode}</code>
-
-            {/* Location */}
-            {a.location && (
-              <div className="flex items-center gap-1 mt-2 text-xs text-slate-500 truncate">
-                <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                  <circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                </svg>
-                {a.location}
               </div>
-            )}
 
-            {/* Debt section */}
-            <div className={`mt-4 pt-3 border-t ${debt < 0 ? "border-amber-100" : "border-slate-100"}`}>
-              {debt < 0 ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Agent owes Company</span>
-                    <AgingBadge debtSince={a.debtSince} debt={a.outstandingDebt} />
-                  </div>
-                  <div className="text-lg font-bold text-amber-600 mt-0.5">
-                    GHS {Math.abs(debt).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
-                  </div>
-                </>
-              ) : debt > 0 ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">Company owes Agent</span>
-                  </div>
-                  <div className="text-lg font-bold text-emerald-600 mt-0.5">
-                    GHS {debt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold">
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>
-                  Clear Balance
+              {/* Agency name */}
+              <h3 className="font-bold text-slate-800 text-base leading-tight mb-0.5 group-hover:text-slate-900 truncate">
+                {a.agencyName ?? a.user.fullName}
+              </h3>
+              <code className="text-xs text-slate-400 font-mono">{a.fullCode}</code>
+
+              {/* Location */}
+              {a.location && (
+                <div className="flex items-center gap-1 mt-2 text-xs text-slate-500 truncate font-medium">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                  {a.location}
                 </div>
               )}
             </div>
 
-            {/* Agent info footer */}
-            <div className="mt-3 flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 flex-shrink-0">
-                {a.user.fullName.charAt(0)}
+            <div className="mt-4 space-y-3">
+              {/* Last Transaction Box */}
+              <div className="bg-slate-50/75 p-2.5 rounded-xl border border-slate-100/50">
+                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-1">
+                  Last Transaction
+                </div>
+                <LastPaymentBadge payment={lastPayment} />
               </div>
-              <span className="text-xs text-slate-500 truncate">{a.user.fullName}</span>
+
+              {/* Debt section */}
+              <div className={`pt-3 border-t ${debt < 0 ? "border-amber-100" : "border-slate-100"}`}>
+                {debt < 0 ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Agent owes Company</span>
+                      <AgingBadge debtSince={a.debtSince} debt={a.outstandingDebt} />
+                    </div>
+                    <div className="text-lg font-bold text-amber-600 mt-0.5 font-mono">
+                      GHS {Math.abs(debt).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                    </div>
+                  </>
+                ) : debt > 0 ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Company owes Agent</span>
+                    </div>
+                    <div className="text-lg font-bold text-emerald-600 mt-0.5 font-mono">
+                      GHS {debt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold">
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>
+                    Clear Balance
+                  </div>
+                )}
+              </div>
+
+              {/* Agent info footer */}
+              <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 flex-shrink-0">
+                  {a.user.fullName.charAt(0)}
+                </div>
+                <span className="text-xs text-slate-500 truncate font-semibold">{a.user.fullName}</span>
+              </div>
             </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* ─── list view ───────────────────────────────────────────────────────────── */
+
+function ListView({
+  agents,
+  lastPaymentsMap,
+  onSelect,
+  onPhotoClick,
+}: {
+  agents: AgentWithUser[];
+  lastPaymentsMap: Record<string, Payment>;
+  onSelect: (a: AgentWithUser) => void;
+  onPhotoClick: (a: AgentWithUser) => void;
+}) {
+  if (agents.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+        <AlertCircle className="w-14 h-14 mb-4 opacity-30" />
+        <p className="font-medium text-slate-500">No agencies match this filter</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white border rounded-2xl overflow-hidden shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left text-sm text-slate-600">
+          <thead className="bg-slate-50/75 border-b text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+            <tr>
+              <th className="px-6 py-4">Agency</th>
+              <th className="px-6 py-4">Agent Name & Phone</th>
+              <th className="px-6 py-4">Location</th>
+              <th className="px-6 py-4">Last Transaction</th>
+              <th className="px-6 py-4">Balance / Debt</th>
+              <th className="px-6 py-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {agents.map(a => {
+              const status = getStatus(a);
+              const cfg = STATUS_CFG[status];
+              const debt = parseFloat(a.outstandingDebt);
+              const photo = (a.user as { profilePicture?: string | null }).profilePicture;
+              const lastPayment = lastPaymentsMap[a.id];
+
+              return (
+                <tr
+                  key={a.id}
+                  onClick={() => onSelect(a)}
+                  className="hover:bg-slate-50/50 transition-colors cursor-pointer group"
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          onPhotoClick(a);
+                        }}
+                        className="relative group/icon flex-shrink-0 focus:outline-none rounded-xl"
+                        title="Click to change photo"
+                      >
+                        {photo ? (
+                          <img
+                            src={photo}
+                            alt={a.agencyName ?? a.user.fullName}
+                            className="w-10 h-10 rounded-xl object-cover shadow-sm border border-slate-100"
+                          />
+                        ) : (
+                          <div className={`w-10 h-10 rounded-xl ${cfg.iconBg} flex items-center justify-center text-white font-bold text-sm shadow-sm`}>
+                            <User className="w-5 h-5" />
+                          </div>
+                        )}
+                        <span className="absolute inset-0 rounded-xl flex items-center justify-center bg-black/40 opacity-0 group-hover/icon:opacity-100 transition-opacity">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                            <circle cx="12" cy="13" r="4"/>
+                          </svg>
+                        </span>
+                      </button>
+                      <div>
+                        <div className="font-bold text-slate-800 leading-snug group-hover:text-slate-900">
+                          {a.agencyName ?? a.user.fullName}
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono mt-0.5">{a.fullCode}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-slate-700 font-semibold">{a.user.fullName}</div>
+                    <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                      <Phone className="w-3 h-3" /> {a.user.phone ?? "—"}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {a.location ? (
+                      <div className="flex items-center gap-1 text-slate-600 font-medium">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                        <span className="truncate max-w-[150px]">{a.location}</span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 italic text-xs">No location</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <LastPaymentBadge payment={lastPayment} />
+                  </td>
+                  <td className="px-6 py-4">
+                    {debt < 0 ? (
+                      <div className="space-y-1">
+                        <div className="text-amber-600 font-bold font-mono">
+                          GHS {Math.abs(debt).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                        </div>
+                        <AgingBadge debtSince={a.debtSince} debt={a.outstandingDebt} />
+                      </div>
+                    ) : debt > 0 ? (
+                      <div className="text-emerald-600 font-bold font-mono">
+                        GHS {debt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Clear Balance
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect(a);
+                      }}
+                      className="h-8 text-xs font-semibold text-slate-500 hover:text-slate-900 rounded-lg"
+                    >
+                      Details <ArrowRight className="w-3 h-3 ml-1" />
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ─── pagination ──────────────────────────────────────────────────────────── */
+
+function Pagination({
+  page,
+  totalPages,
+  onPage,
+}: {
+  page: number;
+  totalPages: number;
+  onPage: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-2 mt-8">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page <= 1}
+        onClick={() => onPage(page - 1)}
+        className="h-9 px-3 gap-1 rounded-xl shadow-sm hover:bg-slate-50"
+      >
+        <ChevronLeft className="w-4 h-4" /> Previous
+      </Button>
+      <span className="text-xs text-slate-500 font-semibold px-2">
+        Page {page} of {totalPages}
+      </span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page >= totalPages}
+        onClick={() => onPage(page + 1)}
+        className="h-9 px-3 gap-1 rounded-xl shadow-sm hover:bg-slate-50"
+      >
+        Next <ChevronRight className="w-4 h-4" />
+      </Button>
     </div>
   );
 }
@@ -544,16 +816,24 @@ function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: 
 
 /* ─── main page ───────────────────────────────────────────────────────────── */
 
-type ViewMode = "grid" | "map";
+type ViewMode = "grid" | "list" | "map";
 type FilterMode = "all" | "active-clear" | "active-debt" | "closed";
+type SortMode = "name-asc" | "name-desc" | "debt-desc" | "surplus-desc" | "recent";
 
 export function AgencyDashboard() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data: agents, isLoading } = useListAgents(
+  
+  const { data: agents, isLoading: isAgentsLoading } = useListAgents(
     {},
     { query: { queryKey: getListAgentsQueryKey({}), refetchInterval: 60_000 } },
   );
+
+  const { data: payments, isLoading: isPaymentsLoading } = useListPayments(
+    {},
+    { query: { queryKey: getListPaymentsQueryKey({}), refetchInterval: 60_000 } }
+  );
+
   const updateUserMutation = useUpdateUser();
 
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -562,7 +842,12 @@ export function AgencyDashboard() {
   const [view, setView] = useState<ViewMode>("grid");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortMode>("name-asc");
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AgentWithUser | null>(null);
+
+  const pageSize = 12;
+  const isLoading = isAgentsLoading || isPaymentsLoading;
 
   const handlePhotoClick = (a: AgentWithUser) => {
     setPhotoAgent(a);
@@ -590,6 +875,17 @@ export function AgencyDashboard() {
 
   const agentList = Array.isArray(agents) ? agents : [];
 
+  const lastPaymentsMap = useMemo(() => {
+    const map: Record<string, Payment> = {};
+    if (!Array.isArray(payments)) return map;
+    for (const p of payments) {
+      if (!map[p.agentId] && p.status === "completed") {
+        map[p.agentId] = p;
+      }
+    }
+    return map;
+  }, [payments]);
+
   const stats = useMemo(() => ({
     total: agentList.length,
     clear: agentList.filter(a => getStatus(a) === "active-clear").length,
@@ -597,8 +893,36 @@ export function AgencyDashboard() {
     closed: agentList.filter(a => getStatus(a) === "closed").length,
   }), [agentList]);
 
-  const filtered = useMemo(() => {
-    let list = agentList;
+  const totals = useMemo(() => {
+    let companyOwes = 0;
+    let agenciesOwe = 0;
+    let oldDebtCount = 0;
+
+    agentList.forEach(a => {
+      const val = parseFloat(a.outstandingDebt || "0");
+      if (val > 0) {
+        companyOwes += val;
+      } else if (val < 0) {
+        agenciesOwe += Math.abs(val);
+        if (a.debtSince) {
+          const days = debtDays(a.debtSince) ?? 0;
+          if (days > 7) {
+            oldDebtCount++;
+          }
+        }
+      }
+    });
+
+    return {
+      companyOwes,
+      agenciesOwe,
+      netPosition: agenciesOwe - companyOwes,
+      oldDebtCount,
+    };
+  }, [agentList]);
+
+  const filteredAndSorted = useMemo(() => {
+    let list = [...agentList];
     if (filter !== "all") list = list.filter(a => getStatus(a) === filter);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -609,8 +933,46 @@ export function AgencyDashboard() {
         (a.location ?? "").toLowerCase().includes(q),
       );
     }
+
+    list.sort((a, b) => {
+      if (sortBy === "name-asc") {
+        const nameA = a.agencyName ?? a.user.fullName;
+        const nameB = b.agencyName ?? b.user.fullName;
+        return nameA.localeCompare(nameB);
+      }
+      if (sortBy === "name-desc") {
+        const nameA = a.agencyName ?? a.user.fullName;
+        const nameB = b.agencyName ?? b.user.fullName;
+        return nameB.localeCompare(nameA);
+      }
+      if (sortBy === "debt-desc") {
+        const valA = parseFloat(a.outstandingDebt || "0");
+        const valB = parseFloat(b.outstandingDebt || "0");
+        return valA - valB;
+      }
+      if (sortBy === "surplus-desc") {
+        const valA = parseFloat(a.outstandingDebt || "0");
+        const valB = parseFloat(b.outstandingDebt || "0");
+        return valB - valA;
+      }
+      if (sortBy === "recent") {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      return 0;
+    });
+
     return list;
-  }, [agentList, filter, search]);
+  }, [agentList, filter, search, sortBy]);
+
+  // Reset page when sorting/filtering changes
+  useEffect(() => {
+    setPage(1);
+  }, [filter, search, sortBy]);
+
+  const totalPages = Math.ceil(filteredAndSorted.length / pageSize);
+  const paginatedAgents = useMemo(() => {
+    return filteredAndSorted.slice((page - 1) * pageSize, page * pageSize);
+  }, [filteredAndSorted, page]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -631,51 +993,57 @@ export function AgencyDashboard() {
 
           {/* View toggle */}
           <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
-            {([["grid", "Grid"], ["map", "Map"]] as [ViewMode, string][]).map(([v, label]) => (
+            {([["grid", "Grid"], ["list", "List"], ["map", "Map"]] as [ViewMode, string][]).map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
                 className={[
-                  "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150",
+                  "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150",
                   view === v ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700",
                 ].join(" ")}
               >
-                {v === "grid" ? (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                ) : (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="11" r="3"/><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
-                )}
+                {v === "grid" && <LayoutGrid className="w-3.5 h-3.5" />}
+                {v === "list" && <ListIcon className="w-3.5 h-3.5" />}
+                {v === "map" && <MapIcon className="w-3.5 h-3.5" />}
                 {label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+        {/* Polished summary metrics bar */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
           <StatCard
-            label="Total Agencies"
-            count={stats.total}
-            color="bg-slate-700"
-            icon={<svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>}
+            label="Network Overview"
+            value={`${stats.total} Registered`}
+            color="bg-slate-800 text-white"
+            icon={<User className="w-5 h-5 text-white" />}
+            detail={`${stats.clear} Clear · ${stats.debt} In Debt · ${stats.closed} Closed`}
           />
           <StatCard
-            label="Active — Clear"
-            count={stats.clear}
-            color="bg-emerald-500"
-            icon={<svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>}
+            label="We Owe Agencies"
+            value={<span className="text-emerald-600 font-mono">GHS {totals.companyOwes.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>}
+            color="bg-emerald-50 text-emerald-600"
+            icon={<ArrowDownLeft className="w-5 h-5 text-emerald-600" />}
+            detail="Payable surplus agent balances"
           />
           <StatCard
-            label="Active — Has Debt"
-            count={stats.debt}
-            color="bg-amber-500"
-            icon={<svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>}
+            label="Agencies Owe Us"
+            value={<span className="text-amber-600 font-mono">GHS {totals.agenciesOwe.toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>}
+            color="bg-amber-50 text-amber-600"
+            icon={<ArrowUpRight className="w-5 h-5 text-amber-600" />}
+            detail={totals.oldDebtCount > 0 ? `${totals.oldDebtCount} agencies > 7d overdue` : "Receivable agent balances"}
           />
           <StatCard
-            label="Closed"
-            count={stats.closed}
-            color="bg-slate-400"
-            icon={<svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>}
+            label="Net Position"
+            value={
+              <span className={totals.netPosition >= 0 ? "text-emerald-600 font-mono" : "text-rose-600 font-mono"}>
+                GHS {Math.abs(totals.netPosition).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+              </span>
+            }
+            color={totals.netPosition >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}
+            icon={<Coins className={totals.netPosition >= 0 ? "w-5 h-5 text-emerald-600" : "w-5 h-5 text-rose-600"} />}
+            detail={totals.netPosition >= 0 ? "Net receivable surplus" : "Net payable deficit"}
           />
         </div>
       </div>
@@ -684,17 +1052,17 @@ export function AgencyDashboard() {
       <div className="px-6 py-4 bg-white border-b flex items-center gap-3 flex-wrap">
         {/* Search */}
         <div className="relative flex-1 min-w-48 max-w-xs">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search agencies…"
-            className="pl-8 h-9 text-sm bg-slate-50"
+            className="pl-8 h-9 text-sm bg-slate-50 rounded-xl"
           />
         </div>
 
         {/* Filter pills */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           {([
             ["all", "All", "bg-slate-800 text-white", "bg-white text-slate-500 border hover:bg-slate-50"],
             ["active-clear", "Clear", "bg-emerald-500 text-white", "bg-white text-slate-500 border hover:bg-emerald-50"],
@@ -711,21 +1079,39 @@ export function AgencyDashboard() {
           ))}
         </div>
 
+        {/* Sort selector dropdown */}
+        <div className="flex items-center gap-1.5 ml-0 sm:ml-3">
+          <span className="text-xs text-slate-400 font-bold uppercase flex items-center gap-1">
+            <SlidersHorizontal className="w-3.5 h-3.5" /> Sort:
+          </span>
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as SortMode)}
+            className="text-xs font-semibold h-9 px-2.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          >
+            <option value="name-asc">Name (A-Z)</option>
+            <option value="name-desc">Name (Z-A)</option>
+            <option value="debt-desc">Highest Debt</option>
+            <option value="surplus-desc">Highest Surplus</option>
+            <option value="recent">Recently Added</option>
+          </select>
+        </div>
+
         <button
           onClick={() => qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) })}
           className="ml-auto p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
           title="Refresh"
         >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          <RefreshCw className="w-4 h-4" />
         </button>
       </div>
 
       {/* Content */}
       <div className="px-6 py-6">
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="bg-white rounded-2xl border p-5 animate-pulse space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+              <div key={i} className="bg-white rounded-2xl border p-5 animate-pulse space-y-3 shadow-sm">
                 <div className="flex justify-between">
                   <div className="w-12 h-12 rounded-2xl bg-slate-200" />
                   <div className="w-16 h-6 rounded-full bg-slate-100" />
@@ -738,9 +1124,17 @@ export function AgencyDashboard() {
             ))}
           </div>
         ) : view === "grid" ? (
-          <GridView agents={filtered} onSelect={setSelected} onPhotoClick={handlePhotoClick} />
+          <>
+            <GridView agents={paginatedAgents} lastPaymentsMap={lastPaymentsMap} onSelect={setSelected} onPhotoClick={handlePhotoClick} />
+            <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+          </>
+        ) : view === "list" ? (
+          <>
+            <ListView agents={paginatedAgents} lastPaymentsMap={lastPaymentsMap} onSelect={setSelected} onPhotoClick={handlePhotoClick} />
+            <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+          </>
         ) : (
-          <MapView agents={filtered} onSelect={setSelected} />
+          <MapView agents={filteredAndSorted} onSelect={setSelected} />
         )}
       </div>
 
