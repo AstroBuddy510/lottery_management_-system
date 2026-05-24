@@ -267,6 +267,7 @@ function UsersTab() {
 
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: getListUsersQueryKey({}) });
+    qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) });
     qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
   };
 
@@ -588,6 +589,7 @@ type EditAgentForm = {
   city: CityName | ""; location: string;
   lat: string; lng: string;
   status: "active" | "closed"; outstandingDebt: string;
+  profilePhoto: string | null;
 };
 
 const CREATE_DEFAULTS: CreateAgentForm = {
@@ -602,18 +604,24 @@ function AgentsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({});
+  const { data: usersRaw } = useListUsers({});
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
   const createMutation = useCreateAgent();
   const updateMutation = useUpdateAgent();
+  const regenPinMutation = useRegeneratePin();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editAgent, setEditAgent] = useState<AgentWithUser | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState<CreateAgentForm>(CREATE_DEFAULTS);
   const [editForm, setEditForm] = useState<EditAgentForm>({
-    isActive: true, agencyName: "", city: "", location: "", lat: "", lng: "", status: "active", outstandingDebt: "",
+    isActive: true, agencyName: "", city: "", location: "", lat: "", lng: "", status: "active", outstandingDebt: "", profilePhoto: null,
   });
+
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [generatedPin, setGeneratedPin] = useState<string>("");
+  const [newPin, setNewPin] = useState<{ pin: string; name: string } | null>(null);
 
   const [agentSearch, setAgentSearch] = useState("");
   const [agentStatusFilter, setAgentStatusFilter] = useState<"all" | "active-clear" | "active-debt" | "closed">("all");
@@ -622,6 +630,12 @@ function AgentsTab() {
   const [locatingEdit,   setLocatingEdit]   = useState(false);
   const geocodeTimerCreate = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geocodeTimerEdit   = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const availableUsers = useMemo(() => {
+    if (!usersRaw || !agents) return [];
+    const agentUserIds = new Set(agents.map(a => a.userId));
+    return usersRaw.filter(u => !agentUserIds.has(u.id));
+  }, [usersRaw, agents]);
 
   const filteredAgents = useMemo(() => {
     let list = Array.isArray(agents) ? agents : [];
@@ -638,8 +652,11 @@ function AgentsTab() {
     return list;
   }, [agents, agentStatusFilter, agentSearch]);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) });
-
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: getListAgentsQueryKey({}) });
+    qc.invalidateQueries({ queryKey: getListUsersQueryKey({}) });
+    qc.invalidateQueries({ queryKey: getGetMeQueryKey() });
+  };
 
   const apiErrMsg = (err: unknown, fallback: string) =>
     (err as { data?: { error?: string } })?.data?.error ?? fallback;
@@ -693,23 +710,77 @@ function AgentsTab() {
     timerRef.current = setTimeout(() => geocodeLocation(text, setter, setLocating), 900);
   };
 
+  const handleUserSelectChange = async (val: string) => {
+    if (val === "new") {
+      setSelectedUserId(null);
+      setGeneratedPin("");
+      setCreateForm(prev => ({
+        ...prev,
+        fullName: "",
+        phone: "",
+        profilePhoto: null,
+      }));
+      return;
+    }
+
+    const u = availableUsers.find(user => user.id === val);
+    if (!u) return;
+
+    setSelectedUserId(val);
+    setCreateForm(prev => ({
+      ...prev,
+      fullName: u.fullName,
+      phone: u.phone ?? "",
+      profilePhoto: u.profilePicture ?? null,
+    }));
+
+    // Trigger PIN regeneration for this existing user
+    try {
+      const res = await regenPinMutation.mutateAsync({ id: val });
+      setGeneratedPin(res.pin);
+    } catch {
+      toast({ title: "Failed to generate new PIN for the selected user", variant: "destructive" });
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { id: newUserId, pin: generatedPin } = await createUserMutation.mutateAsync({
-        data: {
-          fullName: createForm.fullName.trim(),
-          phone: createForm.phone.trim(),
-          role: "agent",
-        },
-      });
-      if (createForm.profilePhoto) {
-        await updateUserMutation.mutateAsync({ id: newUserId, data: { profilePicture: createForm.profilePhoto } });
+      let finalUserId = selectedUserId;
+      let finalPin = generatedPin;
+
+      if (!finalUserId) {
+        // Create a new user
+        const { id: newUserId, pin: generatedPinVal } = await createUserMutation.mutateAsync({
+          data: {
+            fullName: createForm.fullName.trim(),
+            phone: createForm.phone.trim(),
+            role: "agent",
+          },
+        });
+        finalUserId = newUserId;
+        finalPin = generatedPinVal;
+
+        if (createForm.profilePhoto) {
+          await updateUserMutation.mutateAsync({ id: newUserId, data: { profilePicture: createForm.profilePhoto } });
+        }
+      } else {
+        // Link to an existing user: update role to "agent", sync name/phone/photo
+        await updateUserMutation.mutateAsync({
+          id: finalUserId,
+          data: {
+            fullName: createForm.fullName.trim(),
+            phone: createForm.phone.trim(),
+            role: "agent",
+            profilePicture: createForm.profilePhoto,
+          },
+        });
       }
+
       const debt = parseFloat(createForm.outstandingDebt || "0");
       await createMutation.mutateAsync({
         data: {
-          userId: newUserId,
+          userId: finalUserId,
           agentCode: createForm.agentCode.toUpperCase(),
           agencyName: createForm.agencyName || undefined,
           location: createForm.location || undefined,
@@ -719,10 +790,13 @@ function AgentsTab() {
           outstandingDebt: debt > 0 ? String(debt) : "0",
         },
       });
-      toast({ title: `Agent registered — PIN: ${generatedPin}`, description: "Save this PIN; it won't be shown again." });
+
+      // Display the PIN success dialog
+      setNewPin({ pin: finalPin, name: createForm.fullName.trim() });
       setCreateOpen(false);
       setCreateForm(CREATE_DEFAULTS);
-      qc.invalidateQueries({ queryKey: getListUsersQueryKey({}) });
+      setSelectedUserId(null);
+      setGeneratedPin("");
       invalidate();
     } catch (err: unknown) {
       toast({ title: apiErrMsg(err, "Failed to register agent"), variant: "destructive" });
@@ -744,6 +818,7 @@ function AgentsTab() {
       lng: a.lng ?? "",
       status: (a.status as "active" | "closed") ?? "active",
       outstandingDebt: parseFloat(a.outstandingDebt ?? "0") > 0 ? a.outstandingDebt : "",
+      profilePhoto: a.user?.profilePicture ?? null,
     });
   };
 
@@ -764,6 +839,13 @@ function AgentsTab() {
           outstandingDebt: String(debt > 0 ? debt : 0),
         },
       });
+      // Sync photo back to user profile
+      if (editAgent.user?.id) {
+        await updateUserMutation.mutateAsync({
+          id: editAgent.user.id,
+          data: { profilePicture: editForm.profilePhoto },
+        });
+      }
       toast({ title: "Agent updated" });
       setEditAgent(null);
       invalidate();
@@ -891,7 +973,25 @@ function AgentsTab() {
             {/* Agent user details */}
             <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Agent Login Details</p>
-              <div className="flex justify-center pb-1">
+              
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Link to Existing User <span className="text-muted-foreground">(Optional)</span></Label>
+                <Select value={selectedUserId || "new"} onValueChange={handleUserSelectChange}>
+                  <SelectTrigger className="h-9 text-sm bg-background">
+                    <SelectValue placeholder="Create New User" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">Create New User (Default)</SelectItem>
+                    {availableUsers.map(u => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.fullName} ({u.phone ?? "No phone"}) — {ROLE_LABELS[u.role] ?? u.role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex justify-center pb-1 pt-1">
                 <ProfilePhotoInput
                   value={createForm.profilePhoto}
                   onChange={v => setCreateForm(f => ({ ...f, profilePhoto: v }))}
@@ -899,6 +999,7 @@ function AgentsTab() {
                   size={72}
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5 col-span-2">
                   <Label className="text-xs">Full Name</Label>
@@ -907,8 +1008,22 @@ function AgentsTab() {
                 <div className="space-y-1.5 col-span-2">
                   <Label className="text-xs">Phone Number</Label>
                   <Input value={createForm.phone} onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))} required className="h-9 text-sm font-mono" placeholder="0244000001" />
-                  <p className="text-[11px] text-muted-foreground">A 4-digit PIN will be auto-generated and shown after registration.</p>
+                  {!selectedUserId && (
+                    <p className="text-[11px] text-muted-foreground">A 4-digit PIN will be auto-generated and shown after registration.</p>
+                  )}
                 </div>
+                {selectedUserId && (
+                  <div className="space-y-1.5 col-span-2">
+                    <Label className="text-xs font-medium text-amber-600">Auto-Generated PIN (Active Immediately)</Label>
+                    <div className="flex gap-2">
+                      <Input value={generatedPin || "Generating PIN..."} readOnly className="h-9 text-sm font-mono bg-amber-500/5 border-amber-300/40 text-amber-700 font-bold select-all" />
+                      {regenPinMutation.isPending && (
+                        <span className="flex items-center text-xs text-muted-foreground animate-pulse">Generating...</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">A new 4-digit PIN has been generated for this user. Copy and save it now.</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -985,8 +1100,8 @@ function AgentsTab() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => { setCreateOpen(false); setCreateForm(CREATE_DEFAULTS); }}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending || createUserMutation.isPending || !createForm.fullName.trim() || !createForm.phone.trim() || createForm.agentCode.length !== 2}>Register Agency</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => { setCreateOpen(false); setCreateForm(CREATE_DEFAULTS); setSelectedUserId(null); setGeneratedPin(""); }}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={createMutation.isPending || (!selectedUserId && createUserMutation.isPending) || (selectedUserId && regenPinMutation.isPending) || !createForm.fullName.trim() || !createForm.phone.trim() || createForm.agentCode.length !== 2}>Register Agency</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -1000,6 +1115,18 @@ function AgentsTab() {
             <div className="text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 space-y-0.5">
               <div>Agent: <span className="text-foreground font-medium">{editAgent?.user?.fullName}</span></div>
               <div className="font-mono text-xs">{editAgent?.user?.phone}</div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Profile Photo <span className="text-muted-foreground">(optional)</span></Label>
+              <div className="flex justify-center py-1">
+                <ProfilePhotoInput
+                  value={editForm.profilePhoto}
+                  onChange={v => setEditForm(f => ({ ...f, profilePhoto: v }))}
+                  name={editAgent?.user?.fullName ?? ""}
+                  size={80}
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1067,9 +1194,26 @@ function AgentsTab() {
 
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditAgent(null)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save Changes</Button>
+              <Button type="submit" size="sm" disabled={updateMutation.isPending || updateUserMutation.isPending}>Save Changes</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* PIN Display Dialog */}
+      <Dialog open={!!newPin} onOpenChange={open => !open && setNewPin(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>PIN Generated</DialogTitle></DialogHeader>
+          <div className="text-center py-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              The PIN for <span className="font-semibold text-foreground">{newPin?.name}</span> is:
+            </p>
+            <div className="text-5xl font-mono font-bold tracking-[0.3em] text-primary select-all">{newPin?.pin}</div>
+            <p className="text-xs text-destructive font-medium">Record this PIN now — it will not be shown again.</p>
+          </div>
+          <DialogFooter>
+            <Button className="w-full" onClick={() => setNewPin(null)}>I have recorded the PIN</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
