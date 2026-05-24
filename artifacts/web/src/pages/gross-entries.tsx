@@ -443,6 +443,9 @@ function AdminGrossView() {
   });
   const writerList = Array.isArray(writers) ? writers : [];
 
+  const today = new Date().toISOString().split("T")[0];
+  const [form, setForm] = useState({ writerId: "", entryDate: today, grossAmount: "" });
+
   // Fetch all gross entries for the selected date to verify which writers have already been entered
   const { data: dateEntries } = useListGrossEntries({
     dateFrom: form.entryDate,
@@ -467,8 +470,6 @@ function AdminGrossView() {
   const updateMutation = useUpdateGrossEntry();
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<GrossEntry | null>(null);
-  const today = new Date().toISOString().split("T")[0];
-  const [form, setForm] = useState({ writerId: "", entryDate: today, grossAmount: "" });
   const [editForm, setEditForm] = useState({ grossAmount: "" });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListGrossEntriesQueryKey({}) });

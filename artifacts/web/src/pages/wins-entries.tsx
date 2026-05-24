@@ -444,6 +444,9 @@ function AdminWinsView() {
   });
   const writerList = Array.isArray(writers) ? writers : [];
 
+  const today = new Date().toISOString().split("T")[0];
+  const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
+
   // Fetch all wins entries for the selected date to verify which writers have already been entered
   const { data: dateEntries } = useListWinsEntries({
     dateFrom: form.entryDate,
@@ -468,8 +471,6 @@ function AdminWinsView() {
   const updateMutation = useUpdateWinsEntry();
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<WinsEntry | null>(null);
-  const today = new Date().toISOString().split("T")[0];
-  const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
   const [editForm, setEditForm] = useState({ winsAmount: "" });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWinsEntriesQueryKey({}) });
