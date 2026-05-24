@@ -30,6 +30,7 @@ import { EntryChangeRequests } from "@/pages/entry-change-requests";
 import { OnlinePayment } from "@/pages/online-payment";
 import { AgencyStaffExpenses } from "@/pages/agency-staff-expenses";
 import { StaffsEmployees } from "@/pages/staffs-employees";
+import { CompanyExpenses } from "@/pages/company-expenses";
 
 import { Layout } from "@/components/layout";
 
@@ -85,6 +86,10 @@ function Router() {
 
       <Route path="/agency-staff-expenses">
         {() => <ProtectedRoute component={AgencyStaffExpenses} roles={['cashier', 'administrator', 'director']} />}
+      </Route>
+
+      <Route path="/company-expenses">
+        {() => <ProtectedRoute component={CompanyExpenses} roles={['cashier', 'administrator', 'director']} />}
       </Route>
 
       <Route path="/staffs-employees">

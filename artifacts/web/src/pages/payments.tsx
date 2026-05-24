@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import {
   useListPayments, useCreatePayment, useVoidPayment,
-  useListAgents, useListExpenseCategories, useListCalculations,
+  useListAgents, useListRecurringExpenses, useListCalculations,
   useListTimeWindows, useApprovePayment, useRejectPayment,
   getListPaymentsQueryKey, getListCalculationsQueryKey,
   getListTimeWindowsQueryKey,
@@ -122,7 +122,7 @@ export function Payments() {
   });
   const { data: allPaymentsRaw } = useListPayments({});
   const { data: agents }         = useListAgents({});
-  const { data: expenseCategories } = useListExpenseCategories();
+  const { data: expenseCategories } = useListRecurringExpenses();
   const { data: allCalcs }       = useListCalculations({}, { query: { queryKey: getListCalculationsQueryKey({}) } });
   const { data: timeWindows }    = useListTimeWindows({ query: { queryKey: getListTimeWindowsQueryKey() } });
   const { allWriters }           = useWriterLookup();

@@ -1174,9 +1174,9 @@ export const DirectorReviewEntryChangeRequestResponse = zod.object({
 
 
 /**
- * @summary List expense categories
+ * @summary List recurring expenses
  */
-export const ListExpenseCategoriesResponseItem = zod.object({
+export const ListRecurringExpensesResponseItem = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish(),
@@ -1185,13 +1185,13 @@ export const ListExpenseCategoriesResponseItem = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })
-export const ListExpenseCategoriesResponse = zod.array(ListExpenseCategoriesResponseItem)
+export const ListRecurringExpensesResponse = zod.array(ListRecurringExpensesResponseItem)
 
 
 /**
- * @summary Create an expense category
+ * @summary Create a recurring expense
  */
-export const CreateExpenseCategoryBody = zod.object({
+export const CreateRecurringExpenseBody = zod.object({
   "name": zod.string(),
   "description": zod.string().optional(),
   "defaultAmount": zod.string().optional(),
@@ -1200,20 +1200,20 @@ export const CreateExpenseCategoryBody = zod.object({
 
 
 /**
- * @summary Update an expense category
+ * @summary Update a recurring expense
  */
-export const UpdateExpenseCategoryParams = zod.object({
+export const UpdateRecurringExpenseParams = zod.object({
   "id": zod.coerce.string()
 })
 
-export const UpdateExpenseCategoryBody = zod.object({
+export const UpdateRecurringExpenseBody = zod.object({
   "name": zod.string().optional(),
   "description": zod.string().nullish(),
   "defaultAmount": zod.string().nullish(),
   "isActive": zod.boolean().optional()
 })
 
-export const UpdateExpenseCategoryResponse = zod.object({
+export const UpdateRecurringExpenseResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish(),
@@ -1225,10 +1225,48 @@ export const UpdateExpenseCategoryResponse = zod.object({
 
 
 /**
- * @summary Delete an expense category
+ * @summary Delete a recurring expense
  */
-export const DeleteExpenseCategoryParams = zod.object({
+export const DeleteRecurringExpenseParams = zod.object({
   "id": zod.coerce.string()
+})
+
+
+/**
+ * @summary List company expenses
+ */
+export const ListCompanyExpensesQueryParams = zod.object({
+  "startDate": zod.date().optional(),
+  "endDate": zod.date().optional()
+})
+
+export const ListCompanyExpensesResponseItem = zod.object({
+  "id": zod.string(),
+  "type": zod.enum(['recurring', 'non-recurring']),
+  "recurringExpenseId": zod.string().nullish(),
+  "description": zod.string(),
+  "amount": zod.string(),
+  "payeeName": zod.string(),
+  "authorizingOfficer": zod.string().nullish(),
+  "receiptImage": zod.string().nullish(),
+  "cashierId": zod.string(),
+  "cashierName": zod.string().optional(),
+  "createdAt": zod.string()
+})
+export const ListCompanyExpensesResponse = zod.array(ListCompanyExpensesResponseItem)
+
+
+/**
+ * @summary Create a company expense
+ */
+export const CreateCompanyExpenseBody = zod.object({
+  "type": zod.enum(['recurring', 'non-recurring']),
+  "recurringExpenseId": zod.string().nullish(),
+  "description": zod.string(),
+  "amount": zod.string(),
+  "payeeName": zod.string(),
+  "authorizingOfficer": zod.string().optional(),
+  "receiptImage": zod.string().optional()
 })
 
 

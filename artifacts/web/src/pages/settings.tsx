@@ -2,8 +2,8 @@ import { useState } from "react";
 import {
   useGetSettings, useCreateSettings,
   useListTimeWindows, useCreateTimeWindow, useUpdateTimeWindow, useDeleteTimeWindow,
-  useListExpenseCategories, useCreateExpenseCategory, useUpdateExpenseCategory, useDeleteExpenseCategory,
-  getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListExpenseCategoriesQueryKey,
+  useListRecurringExpenses, useCreateRecurringExpense, useUpdateRecurringExpense, useDeleteRecurringExpense,
+  getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListRecurringExpensesQueryKey,
   TimeWindow,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,7 +41,7 @@ const RATES: { key: RateKey; label: string; description: string; color: string }
 
 const EMPTY_EXPENSE = { name: "", description: "", defaultAmount: "", isActive: true };
 
-type ExpenseCategoryRow = {
+type RecurringExpenseRow = {
   id: string;
   name: string;
   description?: string | null;
@@ -58,16 +58,16 @@ export function Settings() {
   // ── Settings data ──
   const { data: settings, isLoading: loadingSettings } = useGetSettings();
   const { data: windows, isLoading: loadingWindows } = useListTimeWindows();
-  const { data: expenseCategories, isLoading: loadingExpenses } = useListExpenseCategories();
+  const { data: recurringExpenses, isLoading: loadingExpenses } = useListRecurringExpenses();
 
   // ── Mutations ──
   const createSettingsMutation = useCreateSettings();
   const createWindowMutation = useCreateTimeWindow();
   const updateWindowMutation = useUpdateTimeWindow();
   const deleteWindowMutation = useDeleteTimeWindow();
-  const createExpenseMutation = useCreateExpenseCategory();
-  const updateExpenseMutation = useUpdateExpenseCategory();
-  const deleteExpenseMutation = useDeleteExpenseCategory();
+  const createExpenseMutation = useCreateRecurringExpense();
+  const updateExpenseMutation = useUpdateRecurringExpense();
+  const deleteExpenseMutation = useDeleteRecurringExpense();
 
   // ── Rates state ──
   const [ratesOpen, setRatesOpen] = useState(false);
@@ -80,12 +80,12 @@ export function Settings() {
   const [editWindow, setEditWindow] = useState<TimeWindow | null>(null);
   const [windowForm, setWindowForm] = useState({ dayOfWeek: "", windowOpen: "", windowClose: "", isActive: true });
 
-  // ── Expense category state ──
+  // ── Recurring expense state ──
   const [expenseCreateOpen, setExpenseCreateOpen] = useState(false);
-  const [editExpense, setEditExpense] = useState<ExpenseCategoryRow | null>(null);
+  const [editExpense, setEditExpense] = useState<RecurringExpenseRow | null>(null);
   const [expenseForm, setExpenseForm] = useState(EMPTY_EXPENSE);
 
-  const expenseList = Array.isArray(expenseCategories) ? expenseCategories : [];
+  const expenseList = Array.isArray(recurringExpenses) ? recurringExpenses : [];
 
   // ─────────── Handlers ───────────
 
@@ -188,12 +188,12 @@ export function Settings() {
           isActive: expenseForm.isActive,
         },
       });
-      toast({ title: "Expense category created" });
+      toast({ title: "Recurring expense created" });
       setExpenseCreateOpen(false);
       setExpenseForm(EMPTY_EXPENSE);
-      qc.invalidateQueries({ queryKey: getListExpenseCategoriesQueryKey() });
+      qc.invalidateQueries({ queryKey: getListRecurringExpensesQueryKey() });
     } catch {
-      toast({ title: "Failed to create expense category", variant: "destructive" });
+      toast({ title: "Failed to create recurring expense", variant: "destructive" });
     }
   };
 
@@ -210,26 +210,26 @@ export function Settings() {
           isActive: expenseForm.isActive,
         },
       });
-      toast({ title: "Expense category updated" });
+      toast({ title: "Recurring expense updated" });
       setEditExpense(null);
-      qc.invalidateQueries({ queryKey: getListExpenseCategoriesQueryKey() });
+      qc.invalidateQueries({ queryKey: getListRecurringExpensesQueryKey() });
     } catch {
-      toast({ title: "Failed to update expense category", variant: "destructive" });
+      toast({ title: "Failed to update recurring expense", variant: "destructive" });
     }
   };
 
-  const handleDeleteExpense = async (exp: ExpenseCategoryRow) => {
+  const handleDeleteExpense = async (exp: RecurringExpenseRow) => {
     if (!confirm(`Delete "${exp.name}"? This cannot be undone.`)) return;
     try {
       await deleteExpenseMutation.mutateAsync({ id: exp.id });
-      toast({ title: "Expense category deleted" });
-      qc.invalidateQueries({ queryKey: getListExpenseCategoriesQueryKey() });
+      toast({ title: "Recurring expense deleted" });
+      qc.invalidateQueries({ queryKey: getListRecurringExpensesQueryKey() });
     } catch {
-      toast({ title: "Failed to delete expense category", variant: "destructive" });
+      toast({ title: "Failed to delete recurring expense", variant: "destructive" });
     }
   };
 
-  const openEditExpense = (exp: ExpenseCategoryRow) => {
+  const openEditExpense = (exp: RecurringExpenseRow) => {
     setEditExpense(exp);
     setExpenseForm({
       name: exp.name,
@@ -353,18 +353,18 @@ export function Settings() {
           </Card>
         </TabsContent>
 
-        {/* ── Expense Categories ── */}
+        {/* ── Recurring Expenses ── */}
         <TabsContent value="expenses">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base">Expense Categories</CardTitle>
+                  <CardTitle className="text-base">Recurring Expenses</CardTitle>
                   <CardDescription className="text-xs mt-1">
-                    Define expense types that cashiers can apply when recording payments. Active categories appear in the payment form.
+                    Define recurring operation costs that cashiers can select when recording company expenses.
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={() => { setExpenseForm(EMPTY_EXPENSE); setExpenseCreateOpen(true); }}>+ Add Category</Button>
+                <Button size="sm" onClick={() => { setExpenseForm(EMPTY_EXPENSE); setExpenseCreateOpen(true); }}>+ Add Expense</Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -383,7 +383,7 @@ export function Settings() {
                     {loadingExpenses ? (
                       <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell></TableRow>
                     ) : expenseList.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No expense categories yet. Add your first category.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No recurring expenses yet. Add your first expense.</TableCell></TableRow>
                     ) : expenseList.map(exp => (
                       <TableRow key={exp.id}>
                         <TableCell className="font-medium text-sm">{exp.name}</TableCell>
@@ -398,8 +398,8 @@ export function Settings() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditExpense(exp as ExpenseCategoryRow)}>Edit</Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteExpense(exp as ExpenseCategoryRow)}>Delete</Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditExpense(exp as RecurringExpenseRow)}>Edit</Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteExpense(exp as RecurringExpenseRow)}>Delete</Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -521,11 +521,11 @@ export function Settings() {
 
       <Dialog open={expenseCreateOpen} onOpenChange={setExpenseCreateOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Expense Category</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Add Recurring Expense</DialogTitle></DialogHeader>
           <form onSubmit={handleCreateExpense} className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Category Name</Label>
-              <Input value={expenseForm.name} onChange={e => setExpenseForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Transport, Administration Fee" />
+              <Label className="text-xs">Expense Name</Label>
+              <Input value={expenseForm.name} onChange={e => setExpenseForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Recurring Staff Travel, Office Stipend" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Description (optional)</Label>
@@ -549,11 +549,11 @@ export function Settings() {
 
       <Dialog open={!!editExpense} onOpenChange={open => !open && setEditExpense(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit Expense Category</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Edit Recurring Expense</DialogTitle></DialogHeader>
           <form onSubmit={handleEditExpense} className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Category Name</Label>
-              <Input value={expenseForm.name} onChange={e => setExpenseForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Transport, Administration Fee" />
+              <Label className="text-xs">Expense Name</Label>
+              <Input value={expenseForm.name} onChange={e => setExpenseForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Recurring Staff Travel, Office Stipend" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Description (optional)</Label>

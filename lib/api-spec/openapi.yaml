@@ -1347,11 +1347,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/EntryChangeRequest"
 
-  /expenses:
+  /recurring-expenses:
     get:
-      operationId: listExpenseCategories
+      operationId: listRecurringExpenses
       tags: [expenses]
-      summary: List expense categories
+      summary: List recurring expenses
       security:
         - bearerAuth: []
       responses:
@@ -1362,11 +1362,11 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/ExpenseCategory"
+                  $ref: "#/components/schemas/RecurringExpense"
     post:
-      operationId: createExpenseCategory
+      operationId: createRecurringExpense
       tags: [expenses]
-      summary: Create an expense category
+      summary: Create a recurring expense
       security:
         - bearerAuth: []
       requestBody:
@@ -1374,20 +1374,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateExpenseCategoryBody"
+              $ref: "#/components/schemas/CreateRecurringExpenseBody"
       responses:
         "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ExpenseCategory"
+                $ref: "#/components/schemas/RecurringExpense"
 
-  /expenses/{id}:
+  /recurring-expenses/{id}:
     patch:
-      operationId: updateExpenseCategory
+      operationId: updateRecurringExpense
       tags: [expenses]
-      summary: Update an expense category
+      summary: Update a recurring expense
       security:
         - bearerAuth: []
       parameters:
@@ -1401,18 +1401,18 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateExpenseCategoryBody"
+              $ref: "#/components/schemas/UpdateRecurringExpenseBody"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ExpenseCategory"
+                $ref: "#/components/schemas/RecurringExpense"
     delete:
-      operationId: deleteExpenseCategory
+      operationId: deleteRecurringExpense
       tags: [expenses]
-      summary: Delete an expense category
+      summary: Delete a recurring expense
       security:
         - bearerAuth: []
       parameters:
@@ -1424,6 +1424,55 @@ paths:
       responses:
         "204":
           description: No Content
+
+  /company-expenses:
+    get:
+      operationId: listCompanyExpenses
+      tags: [expenses]
+      summary: List company expenses
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: startDate
+          schema:
+            type: string
+            format: date
+          required: false
+        - in: query
+          name: endDate
+          schema:
+            type: string
+            format: date
+          required: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanyExpense"
+    post:
+      operationId: createCompanyExpense
+      tags: [expenses]
+      summary: Create a company expense
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCompanyExpenseBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyExpense"
 
   /payments:
     get:
@@ -2552,7 +2601,7 @@ components:
         amount:
           type: string
 
-    ExpenseCategory:
+    RecurringExpense:
       type: object
       required: [id, name, isActive, createdAt]
       properties:
@@ -2571,7 +2620,7 @@ components:
         updatedAt:
           type: string
 
-    CreateExpenseCategoryBody:
+    CreateRecurringExpenseBody:
       type: object
       required: [name]
       properties:
@@ -2584,7 +2633,7 @@ components:
         isActive:
           type: boolean
 
-    UpdateExpenseCategoryBody:
+    UpdateRecurringExpenseBody:
       type: object
       properties:
         name:
@@ -2595,6 +2644,54 @@ components:
           type: ["string", "null"]
         isActive:
           type: boolean
+
+    CompanyExpense:
+      type: object
+      required: [id, type, description, amount, payeeName, cashierId, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [recurring, non-recurring]
+        recurringExpenseId:
+          type: ["string", "null"]
+        description:
+          type: string
+        amount:
+          type: string
+        payeeName:
+          type: string
+        authorizingOfficer:
+          type: ["string", "null"]
+        receiptImage:
+          type: ["string", "null"]
+        cashierId:
+          type: string
+        cashierName:
+          type: string
+        createdAt:
+          type: string
+
+    CreateCompanyExpenseBody:
+      type: object
+      required: [type, description, amount, payeeName]
+      properties:
+        type:
+          type: string
+          enum: [recurring, non-recurring]
+        recurringExpenseId:
+          type: ["string", "null"]
+        description:
+          type: string
+        amount:
+          type: string
+        payeeName:
+          type: string
+        authorizingOfficer:
+          type: string
+        receiptImage:
+          type: string
 
     Payment:
       type: object

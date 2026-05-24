@@ -476,7 +476,7 @@ export interface ExpenseLineItem {
   amount: string;
 }
 
-export interface ExpenseCategory {
+export interface RecurringExpense {
   id: string;
   name: string;
   /** @nullable */
@@ -488,20 +488,64 @@ export interface ExpenseCategory {
   updatedAt?: string;
 }
 
-export interface CreateExpenseCategoryBody {
+export interface CreateRecurringExpenseBody {
   name: string;
   description?: string;
   defaultAmount?: string;
   isActive?: boolean;
 }
 
-export interface UpdateExpenseCategoryBody {
+export interface UpdateRecurringExpenseBody {
   name?: string;
   /** @nullable */
   description?: string | null;
   /** @nullable */
   defaultAmount?: string | null;
   isActive?: boolean;
+}
+
+export type CompanyExpenseType = typeof CompanyExpenseType[keyof typeof CompanyExpenseType];
+
+
+export const CompanyExpenseType = {
+  recurring: 'recurring',
+  'non-recurring': 'non-recurring',
+} as const;
+
+export interface CompanyExpense {
+  id: string;
+  type: CompanyExpenseType;
+  /** @nullable */
+  recurringExpenseId?: string | null;
+  description: string;
+  amount: string;
+  payeeName: string;
+  /** @nullable */
+  authorizingOfficer?: string | null;
+  /** @nullable */
+  receiptImage?: string | null;
+  cashierId: string;
+  cashierName?: string;
+  createdAt: string;
+}
+
+export type CreateCompanyExpenseBodyType = typeof CreateCompanyExpenseBodyType[keyof typeof CreateCompanyExpenseBodyType];
+
+
+export const CreateCompanyExpenseBodyType = {
+  recurring: 'recurring',
+  'non-recurring': 'non-recurring',
+} as const;
+
+export interface CreateCompanyExpenseBody {
+  type: CreateCompanyExpenseBodyType;
+  /** @nullable */
+  recurringExpenseId?: string | null;
+  description: string;
+  amount: string;
+  payeeName: string;
+  authorizingOfficer?: string;
+  receiptImage?: string;
 }
 
 export type PaymentTransactionType = typeof PaymentTransactionType[keyof typeof PaymentTransactionType];
@@ -1279,6 +1323,11 @@ dateTo?: string;
 
 export type ListEntryChangeRequestsParams = {
 status?: string;
+};
+
+export type ListCompanyExpensesParams = {
+startDate?: string;
+endDate?: string;
 };
 
 export type ListPaymentsParams = {
