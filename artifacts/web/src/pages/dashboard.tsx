@@ -11,6 +11,7 @@ import {
   getListPaymentsQueryKey, getGetReserveBalanceQueryKey,
   getListTimeWindowsQueryKey,
   useGetSettings, getGetSettingsQueryKey,
+  useListCompanyExpenses, getListCompanyExpensesQueryKey,
 } from "@workspace/api-client-react";
 import type { TimeWindow } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
@@ -20,6 +21,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGHS } from "@/lib/utils";
+
+// Lucide icons for premium styling
+import {
+  Wallet, Trophy, Percent, TrendingUp, Shield, DollarSign,
+  Search, LayoutGrid, List, ChevronRight, ArrowRight,
+  Clock, Activity, FileText, AlertCircle, RefreshCw,
+  ArrowUpRight, ArrowDownRight, Users, Sparkles, Building
+} from "lucide-react";
+
+// Recharts charting library for premium business analytics
+import {
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis,
+  CartesianGrid, Tooltip as ChartTooltip, Legend as ChartLegend
+} from "recharts";
+
 
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const PAGE_SIZE_GRID = 6;
@@ -56,21 +72,61 @@ function AgentAvatar({ name, picture, size = "lg" }: { name: string; picture?: s
   );
 }
 
-function StatCard({ label, value, accent, pending }: { label: string; value: string | number; accent?: boolean; pending?: boolean }) {
+function StatCard({
+  label,
+  value,
+  accent,
+  pending,
+  icon,
+  description,
+  colorClass = "text-primary"
+}: {
+  label: string;
+  value: string | number;
+  accent?: boolean;
+  pending?: boolean;
+  icon?: React.ReactNode;
+  description?: string;
+  colorClass?: string;
+}) {
   return (
-    <Card className={pending ? "border-amber-200 bg-amber-50/30" : ""}>
-      <CardHeader className="pb-1 pt-4 px-4">
-        <CardTitle className={`text-xs font-medium uppercase tracking-wide flex items-center gap-1.5 ${pending ? "text-amber-700/80" : "text-muted-foreground"}`}>
+    <Card
+      className={`relative overflow-hidden border backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:shadow-md ${
+        pending
+          ? "border-amber-200 bg-amber-50/45 dark:border-amber-900/30 dark:bg-amber-950/10"
+          : accent
+          ? "border-emerald-200 bg-emerald-50/20 dark:border-emerald-950/20 dark:bg-emerald-950/5"
+          : "border-border/60 bg-card/60"
+      }`}
+    >
+      {/* Background glow overlay */}
+      <div className="absolute -right-6 -top-6 w-20 h-20 bg-primary/5 rounded-full blur-xl pointer-events-none" />
+
+      <CardHeader className="pb-1.5 pt-4 px-4 flex flex-row items-center justify-between space-y-0">
+        <CardTitle className={`text-xs font-semibold uppercase tracking-wider ${
+          pending ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"
+        }`}>
           {label}
-          {pending && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block flex-shrink-0" />}
         </CardTitle>
+        {icon && <div className={`p-1.5 rounded-lg bg-muted/60 dark:bg-muted/20 ${colorClass}`}>{icon}</div>}
       </CardHeader>
-      <CardContent className="px-4 pb-4">
-        <div className={`text-xl font-bold ${accent ? "text-primary" : pending ? "text-amber-800" : ""}`}>{value}</div>
+      <CardContent className="px-4 pb-3">
+        <div className={`text-xl font-extrabold font-mono tracking-tight ${
+          accent ? "text-emerald-700 dark:text-emerald-400" : pending ? "text-amber-800 dark:text-amber-300" : "text-foreground"
+        }`}>
+          {value}
+        </div>
+        {description && (
+          <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 font-medium truncate">
+            {pending && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block flex-shrink-0" />}
+            {description}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
 }
+
 
 function GridIcon({ active }: { active: boolean }) {
   return (
@@ -103,16 +159,22 @@ type AgentStat = {
 function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void }) {
   const { agent, gross, commission, net, wins, reserve, balance, submittedWriters, totalWriters, hasPaid, isPending } = stat;
   const name = agent.user.fullName;
+  const submitPercentage = totalWriters > 0 ? (submittedWriters / totalWriters) * 100 : 0;
+
   return (
     <Card
-      className="cursor-pointer hover:shadow-lg hover:border-primary/40 transition-all duration-200 overflow-hidden"
+      className="cursor-pointer border border-border/60 hover:border-primary/35 hover:-translate-y-1.5 hover:shadow-lg transition-all duration-300 overflow-hidden bg-card/65 backdrop-blur-sm shadow-sm flex flex-col justify-between"
       onClick={onClick}
     >
-      <CardContent className="p-0">
-        {/* Header strip */}
-        <div className="bg-muted/40 border-b px-5 pt-5 pb-4 flex items-start gap-4">
+      <CardContent className="p-0 flex-1 flex flex-col justify-between">
+        {/* Header strip with Avatar */}
+        <div className="bg-muted/30 border-b border-border/40 px-5 pt-5 pb-4 flex items-start gap-4">
           <div className="relative">
-            <AgentAvatar name={name} picture={agent.user.profilePicture} size="lg" />
+            <div className={`rounded-full p-0.5 ${
+              agent.isActive ? "ring-2 ring-emerald-500/70" : "ring-2 ring-muted-foreground/30"
+            }`}>
+              <AgentAvatar name={name} picture={agent.user.profilePicture} size="lg" />
+            </div>
             {agent.user.profilePicture && (
               <div
                 style={{ display: "none" }}
@@ -122,20 +184,29 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
               </div>
             )}
           </div>
+          
           <div className="flex-1 min-w-0">
-            <div className="font-semibold text-base leading-tight truncate">{name}</div>
-            <div className="text-xs font-mono text-muted-foreground mt-0.5">{agent.fullCode}</div>
-            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-              <Badge variant={agent.isActive ? "default" : "secondary"} className="text-xs h-5">
+            <div className="font-bold text-base tracking-tight leading-tight truncate text-foreground">{name}</div>
+            <div className="text-xs font-mono text-muted-foreground font-medium mt-0.5">{agent.fullCode}</div>
+            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+              <Badge className={`text-[10px] h-5 font-bold border-none shadow-sm ${
+                agent.isActive 
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                  : "bg-muted text-muted-foreground"
+              }`}>
                 {agent.isActive ? "Active" : "Inactive"}
               </Badge>
-              <Badge variant={hasPaid ? "default" : "destructive"} className="text-xs h-5">
+              <Badge className={`text-[10px] h-5 font-bold border-none shadow-sm ${
+                hasPaid 
+                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" 
+                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+              }`}>
                 Reserve: {hasPaid ? "Paid" : "Not Paid"}
               </Badge>
               {isPending && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 px-1.5 py-0.5 rounded shadow-sm">
                   <span className="w-1 h-1 rounded-full bg-amber-500 inline-block animate-pulse" />
-                  Est. · Pending Calc
+                  PENDING CALC
                 </span>
               )}
             </div>
@@ -143,23 +214,25 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
         </div>
 
         {/* Financials grid */}
-        <div className={`px-5 py-4 grid grid-cols-2 gap-x-6 gap-y-2.5 ${isPending ? "bg-amber-50/30" : ""}`}>
+        <div className={`px-5 py-4.5 grid grid-cols-2 gap-x-6 gap-y-3.5 flex-1 ${isPending ? "bg-amber-50/15 dark:bg-amber-950/5" : ""}`}>
           {[
             ["Gross Sales", gross, false],
             ["Net Gross", net, false],
             ["Commission", commission, false],
-            ["Wins", wins, false],
-            ["Reserve", reserve, false],
-            ["Balance", balance, true],
+            ["Wins Claimed", wins, false],
+            ["Reserve Pool", reserve, false],
+            ["Current Balance", balance, true],
           ].map(([label, val, isBalance]) => (
             <div key={label as string} className="flex flex-col">
-              <span className={`text-[10px] uppercase tracking-wide font-medium ${isPending ? "text-amber-700/70" : "text-muted-foreground"}`}>
+              <span className={`text-[9px] uppercase tracking-wider font-bold ${
+                isPending ? "text-amber-700/80" : "text-muted-foreground/80"
+              }`}>
                 {label as string}{isPending ? " ~" : ""}
               </span>
-              <span className={`text-sm font-bold font-mono ${
+              <span className={`text-sm font-bold font-mono mt-0.5 ${
                 isBalance && Number(val) < 0 ? "text-destructive"
                 : isBalance ? "text-primary"
-                : isPending ? "text-amber-800" : ""
+                : isPending ? "text-amber-800 dark:text-amber-300" : "text-foreground"
               }`}>
                 {fmtGHS(val as number)}
               </span>
@@ -167,13 +240,31 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
           ))}
         </div>
 
+        {/* Writer Submissions Progress Bar */}
+        <div className="px-5 pb-4 space-y-1.5 bg-muted/5 border-t border-border/40 pt-3">
+          <div className="flex justify-between text-xs font-semibold text-muted-foreground">
+            <span>Writer Submissions</span>
+            <span className="font-mono text-foreground font-bold">{submittedWriters}/{totalWriters}</span>
+          </div>
+          <div className="w-full bg-muted/65 dark:bg-muted/20 h-1.5 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full transition-all duration-500 ${
+                submitPercentage === 100 ? "bg-emerald-500" : "bg-primary"
+              }`}
+              style={{ width: `${submitPercentage}%` }}
+            />
+          </div>
+        </div>
+
         {/* Footer */}
-        <div className="border-t px-5 py-3 flex items-center justify-between bg-muted/20">
-          <span className="text-xs text-muted-foreground">
-            Writers: <span className="font-semibold text-foreground">{submittedWriters}</span>
-            <span className="text-muted-foreground"> / {totalWriters} submitted</span>
+        <div className="border-t border-border/40 px-5 py-3 flex items-center justify-between bg-muted/20">
+          <span className="text-[11px] text-muted-foreground font-medium">
+            {submitPercentage === 100 ? "All writers submitted ✓" : "Submissions in progress..."}
           </span>
-          <span className="text-xs text-primary font-medium">View details →</span>
+          <span className="text-[11px] text-primary font-bold flex items-center gap-0.5">
+            View details 
+            <ChevronRight className="w-3 h-3" />
+          </span>
         </div>
       </CardContent>
     </Card>
@@ -183,44 +274,75 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
 function AgentListRow({ stat, onClick }: { stat: AgentStat; onClick: () => void }) {
   const { agent, gross, net, balance, submittedWriters, totalWriters, hasPaid, isPending } = stat;
   const name = agent.user.fullName;
+  const submitPercentage = totalWriters > 0 ? (submittedWriters / totalWriters) * 100 : 0;
+
   return (
     <tr
-      className={`border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors ${isPending ? "bg-amber-50/20" : ""}`}
+      className={`border-b border-border/40 last:border-0 hover:bg-muted/40 cursor-pointer transition-colors ${
+        isPending ? "bg-amber-50/10 dark:bg-amber-950/5" : ""
+      }`}
       onClick={onClick}
     >
-      <td className="py-3 pl-4 pr-2">
+      <td className="py-3.5 pl-4 pr-2">
         <div className="flex items-center gap-3">
-          <AgentAvatar name={name} picture={agent.user.profilePicture} size="sm" />
+          <div className={`rounded-full p-0.5 ${
+            agent.isActive ? "ring-2 ring-emerald-500/70" : "ring-2 ring-muted-foreground/30"
+          }`}>
+            <AgentAvatar name={name} picture={agent.user.profilePicture} size="sm" />
+          </div>
           <div>
-            <div className="font-medium text-sm leading-tight">{name}</div>
-            <div className="text-xs font-mono text-muted-foreground">{agent.fullCode}</div>
+            <div className="font-bold text-sm leading-tight text-foreground">{name}</div>
+            <div className="text-xs font-mono text-muted-foreground mt-0.5">{agent.fullCode}</div>
           </div>
         </div>
       </td>
-      <td className={`py-3 px-3 text-sm font-mono text-right ${isPending ? "text-amber-800" : ""}`}>
+      <td className={`py-3.5 px-3 text-sm font-mono text-right font-semibold ${isPending ? "text-amber-800 dark:text-amber-300" : "text-foreground"}`}>
         {fmtGHS(gross)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
       </td>
-      <td className={`py-3 px-3 text-sm font-mono text-right ${isPending ? "text-amber-800" : ""}`}>
+      <td className={`py-3.5 px-3 text-sm font-mono text-right font-semibold ${isPending ? "text-amber-800 dark:text-amber-300" : "text-foreground"}`}>
         {fmtGHS(net)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
       </td>
-      <td className={`py-3 px-3 text-sm font-mono font-bold text-right ${balance < 0 ? "text-destructive" : "text-primary"}`}>
+      <td className={`py-3.5 px-3 text-sm font-mono font-extrabold text-right ${balance < 0 ? "text-destructive" : "text-primary"}`}>
         {fmtGHS(balance)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
       </td>
-      <td className="py-3 px-3 text-center text-xs text-muted-foreground">
-        <span className="font-semibold text-foreground">{submittedWriters}</span>/{totalWriters}
+      <td className="py-3.5 px-3 text-center">
+        <div className="inline-flex flex-col items-center gap-1">
+          <span className="text-xs font-bold text-foreground">{submittedWriters}/{totalWriters}</span>
+          <div className="w-16 bg-muted/65 dark:bg-muted/20 h-1 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full ${submitPercentage === 100 ? "bg-emerald-500" : "bg-primary"}`}
+              style={{ width: `${submitPercentage}%` }}
+            />
+          </div>
+        </div>
       </td>
-      <td className="py-3 px-3">
-        <Badge variant={agent.isActive ? "default" : "secondary"} className="text-xs">{agent.isActive ? "Active" : "Inactive"}</Badge>
+      <td className="py-3.5 px-3">
+        <Badge className={`text-[10px] font-bold border-none shadow-sm ${
+          agent.isActive 
+            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+            : "bg-muted text-muted-foreground"
+        }`}>
+          {agent.isActive ? "Active" : "Inactive"}
+        </Badge>
       </td>
-      <td className="py-3 px-3 space-y-0.5">
-        <Badge variant={hasPaid ? "default" : "destructive"} className="text-xs">
+      <td className="py-3.5 px-3 space-y-0.5">
+        <Badge className={`text-[10px] font-bold border-none shadow-sm ${
+          hasPaid 
+            ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" 
+            : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+        }`}>
           {hasPaid ? "Paid" : "Not Paid"}
         </Badge>
         {isPending && (
-          <div className="text-[10px] text-amber-600 font-medium">Est. pending calc</div>
+          <div className="text-[9px] text-amber-600 font-bold uppercase tracking-wide">Est. pending</div>
         )}
       </td>
-      <td className="py-3 pl-2 pr-4 text-xs text-primary font-medium text-right">View →</td>
+      <td className="py-3.5 pl-2 pr-4 text-xs text-primary font-bold text-right">
+        <div className="flex items-center justify-end gap-0.5">
+          View 
+          <ChevronRight className="w-3.5 h-3.5" />
+        </div>
+      </td>
     </tr>
   );
 }
@@ -259,6 +381,7 @@ function DirectorDashboard() {
   const [page, setPage] = useState(1);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedGameId, setSelectedGameId] = useState("");
+  const [search, setSearch] = useState("");
 
   const { data: allCalcs, isLoading: loadingCalcs } = useListCalculations(
     {},
@@ -278,10 +401,17 @@ function DirectorDashboard() {
     { query: { queryKey: getListWinsEntriesQueryKey({}), refetchInterval: 30_000 } }
   );
   const { data: settings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
+  
+  // Fetch company expenses for overview widget
+  const { data: rawExpenses, isLoading: loadingExpenses } = useListCompanyExpenses(
+    {},
+    { query: { queryKey: getListCompanyExpensesQueryKey({}), refetchInterval: 60_000 } }
+  );
 
   const calcList = Array.isArray(allCalcs) ? allCalcs : [];
   const paymentList = Array.isArray(payments) ? payments : [];
   const gameList = Array.isArray(games) ? games : [];
+  const expensesList = Array.isArray(rawExpenses) ? rawExpenses : [];
 
   const mostRecentDate = useMemo(() => {
     if (!calcList.length) return today;
@@ -410,10 +540,53 @@ function DirectorDashboard() {
     [calcList, today]
   );
 
+  // Operations & Expenses calculations for the selected viewDate
+  const dateExpenses = useMemo(() => {
+    return expensesList.filter(e => e.createdAt?.startsWith(viewDate));
+  }, [expensesList, viewDate]);
+
+  const totalExpensesAmount = useMemo(() => {
+    return dateExpenses.reduce((s, e) => s + Number(e.amount), 0);
+  }, [dateExpenses]);
+
+  // Aggregate calculations by date for the Recharts AreaChart
+  const chartData = useMemo(() => {
+    const grouped: Record<string, { date: string; gross: number; wins: number; net: number; balance: number }> = {};
+    calcList.forEach(c => {
+      const dateStr = c.calcDate?.split("T")[0] ?? "";
+      if (!dateStr) return;
+      if (!grouped[dateStr]) {
+        grouped[dateStr] = {
+          date: dateStr,
+          gross: 0,
+          wins: 0,
+          net: 0,
+          balance: 0
+        };
+      }
+      grouped[dateStr].gross += Number(c.grossSales ?? 0);
+      grouped[dateStr].wins += Number(c.winsAmount ?? 0);
+      grouped[dateStr].net += Number(c.netGross ?? 0);
+      grouped[dateStr].balance += Number(c.writerBalance ?? 0);
+    });
+    const sorted = Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
+    return sorted.slice(-7);
+  }, [calcList]);
+
+  // Filter agents by search query (name or agent code)
+  const filteredAgentStats = useMemo(() => {
+    if (!search) return agentStats;
+    const q = search.toLowerCase().trim();
+    return agentStats.filter(s =>
+      s.agent.user.fullName.toLowerCase().includes(q) ||
+      s.agent.fullCode.toLowerCase().includes(q)
+    );
+  }, [agentStats, search]);
+
   const pageSize = viewMode === "grid" ? PAGE_SIZE_GRID : PAGE_SIZE_LIST;
-  const totalPages = Math.max(1, Math.ceil(agentStats.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filteredAgentStats.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pagedStats = agentStats.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pagedStats = filteredAgentStats.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const handlePage = (p: number) => setPage(p);
   const handleViewMode = (mode: "grid" | "list") => { setViewMode(mode); setPage(1); };
@@ -421,35 +594,52 @@ function DirectorDashboard() {
   return (
     <div className="space-y-6">
       {/* Game banner — interactive game selector */}
-      <div className={`rounded-xl px-5 py-3 flex items-center gap-3 flex-wrap ${displayGame ? "bg-primary/10 border border-primary/25" : "bg-muted/60 border border-border"}`}>
-        <span className="text-lg shrink-0">🎮</span>
+      <div className={`relative overflow-hidden rounded-xl px-5 py-3.5 flex items-center gap-4 flex-wrap border shadow-sm transition-all duration-300 ${
+        displayGame 
+          ? "bg-slate-900 border-primary/30 text-white" 
+          : "bg-muted/60 border-border"
+      }`}>
+        {/* Decorative corner glows */}
+        {displayGame && (
+          <div className="absolute right-0 top-0 w-24 h-24 bg-primary/10 rounded-full blur-xl pointer-events-none" />
+        )}
+        
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+          displayGame ? "bg-primary/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+        }`}>
+          🎮
+        </div>
+        
         <div className="flex-1 min-w-0">
           {displayGame ? (
             <>
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
-                {(!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") ? "Current Game" : "Viewing Game"}
+              <div className="text-[10px] text-primary-foreground/75 font-bold uppercase tracking-wider">
+                {(!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") ? "Active Game Event" : "Viewing Game Event"}
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-mono font-bold text-primary/70">{displayGame.eventNumber}</span>
-                <span className="text-base font-bold text-primary leading-tight">{displayGame.name}</span>
+              <div className="flex items-center gap-2.5 flex-wrap mt-0.5">
+                <span className="text-sm font-mono font-bold text-accent px-1.5 py-0.5 rounded bg-white/10">{displayGame.eventNumber}</span>
+                <span className="text-base font-extrabold tracking-tight leading-tight">{displayGame.name}</span>
                 {displayGame.status === "live" && (
-                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] px-1.5 py-0">LIVE</Badge>
+                  <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold border-none text-[10px] px-2 py-0.5 shadow-sm shadow-emerald-500/20">LIVE</Badge>
                 )}
                 {displayGame.status === "closed" && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Closed</Badge>
+                  <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-white/15 text-white border-none">Closed</Badge>
                 )}
               </div>
             </>
           ) : (
-            <span className="text-sm text-muted-foreground">No active game for {DAY_NAMES[todayDow]}</span>
+            <span className="text-sm text-muted-foreground font-medium">No active game for {DAY_NAMES[todayDow]}</span>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        
+        <div className="flex items-center gap-2.5 shrink-0">
           <Select
             value={selectedGameId || "_live"}
             onValueChange={handleGameSelect}
           >
-            <SelectTrigger className="h-8 text-xs w-52 bg-background/80">
+            <SelectTrigger className={`h-9 text-xs w-52 border ${
+              displayGame ? "bg-white/10 text-white border-white/20 focus:ring-white/30" : "bg-background/80"
+            }`}>
               <SelectValue placeholder="Select game…" />
             </SelectTrigger>
             <SelectContent align="end">
@@ -468,27 +658,35 @@ function DirectorDashboard() {
             </SelectContent>
           </Select>
           {selectedGameId && selectedGameId !== "_live" && selectedGameId !== "_none" && (
-            <Button size="sm" variant="ghost" className="h-8 text-xs px-2" onClick={() => handleGameSelect("_live")}>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              className={`h-9 text-xs px-3 ${displayGame ? "text-blue-300 hover:text-white hover:bg-white/10" : ""}`}
+              onClick={() => handleGameSelect("_live")}
+            >
               Back to live
             </Button>
           )}
         </div>
       </div>
 
-      {/* Live Entry Status — real-time, polled every 30s */}
-      <div className="rounded-xl border bg-card px-5 py-3 flex items-center gap-5 flex-wrap">
-        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex-shrink-0">
-          Live Entries Today
+      {/* Live Entry Status — real-time glassmorphic status block */}
+      <div className="rounded-xl border border-border/60 bg-card/45 backdrop-blur-md px-5 py-3.5 flex items-center gap-5 flex-wrap shadow-sm">
+        <div className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5 flex-shrink-0">
+          <Activity className="w-3.5 h-3.5 text-primary animate-pulse" />
+          Realtime entries today
         </div>
 
+        <div className="h-4 w-px bg-border flex-shrink-0 hidden md:block" />
+
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-          <span className="text-xs text-muted-foreground">Gross:</span>
-          <span className="text-sm font-bold">{grossToday.length}</span>
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30 flex-shrink-0" />
+          <span className="text-xs text-muted-foreground font-semibold">Gross:</span>
+          <span className="text-sm font-extrabold">{grossToday.length}</span>
           <span className="text-xs text-muted-foreground">
             {grossToday.length === 1 ? "entry" : "entries"}
           </span>
-          <span className="text-xs font-mono font-semibold text-emerald-700">
+          <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded">
             {fmtGHS(grossTodayAmount)}
           </span>
         </div>
@@ -496,106 +694,350 @@ function DirectorDashboard() {
         <div className="w-px h-4 bg-border flex-shrink-0" />
 
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0" />
-          <span className="text-xs text-muted-foreground">Wins:</span>
-          <span className="text-sm font-bold">{winsToday.length}</span>
+          <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30 flex-shrink-0" />
+          <span className="text-xs text-muted-foreground font-semibold">Wins:</span>
+          <span className="text-sm font-extrabold">{winsToday.length}</span>
           <span className="text-xs text-muted-foreground">
             {winsToday.length === 1 ? "entry" : "entries"}
           </span>
-          <span className="text-xs font-mono font-semibold text-violet-700">
+          <span className="text-xs font-mono font-bold text-purple-600 bg-purple-50 dark:bg-purple-950/20 px-1.5 py-0.5 rounded">
             {fmtGHS(winsTodayAmount)}
           </span>
         </div>
 
         <div className="ml-auto flex-shrink-0">
           {hasCalcToday ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full font-semibold">
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full font-bold shadow-sm shadow-emerald-500/5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-              Calculation run for today
+              Calculated for today
             </span>
           ) : (grossToday.length > 0 || winsToday.length > 0) ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full font-semibold">
+            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full font-bold shadow-sm shadow-amber-500/5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
               Entries pending calculation
             </span>
           ) : (
-            <span className="text-xs text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-full">
-              No entries yet today
+            <span className="text-xs text-muted-foreground bg-muted/60 px-3 py-1 rounded-full font-medium">
+              No entries logged today
             </span>
           )}
         </div>
       </div>
 
-      {/* Summary cards — live or calculated */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+      {/* Redesigned Summary cards — 6 KPI Grid with custom accent colors & icons */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <StatCard
-          label={anyPending ? "Gross (Live ~)" : "Total Gross"}
+          label={anyPending ? "Gross (Live)" : "Total Gross"}
           value={fmtGHS(totals.gross)}
           pending={anyPending}
+          icon={<Wallet className="w-4 h-4" />}
+          colorClass="text-blue-500 bg-blue-50 dark:bg-blue-950/30"
+          description={anyPending ? "Live compiled sales" : "Calculated sales volume"}
         />
         <StatCard
-          label={anyPending ? "Wins (Live ~)" : "Total Wins"}
+          label={anyPending ? "Wins (Live)" : "Total Wins"}
           value={fmtGHS(totals.wins)}
           pending={anyPending}
+          icon={<Trophy className="w-4 h-4" />}
+          colorClass="text-purple-500 bg-purple-50 dark:bg-purple-950/30"
+          description={anyPending ? "Est. pending claims" : "Finalized payouts"}
         />
         <StatCard
           label={anyPending ? "Commission ~" : "Commission"}
           value={fmtGHS(totals.commission)}
           pending={anyPending}
+          icon={<Percent className="w-4 h-4" />}
+          colorClass="text-amber-500 bg-amber-50 dark:bg-amber-950/30"
+          description="Total agent deductions"
         />
         <StatCard
           label={anyPending ? "Net Gross ~" : "Net Gross"}
           value={fmtGHS(totals.net)}
           pending={anyPending}
+          icon={<TrendingUp className="w-4 h-4" />}
+          colorClass="text-teal-500 bg-teal-50 dark:bg-teal-950/30"
+          description="Gross minus commission"
         />
-        <StatCard label="Reserve Fund" value={fmtGHS(accumulatedReserve)} accent />
+        <StatCard 
+          label="Reserve Fund" 
+          value={fmtGHS(accumulatedReserve)} 
+          accent 
+          icon={<Shield className="w-4 h-4" />}
+          colorClass="text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
+          description="Aggregated safety pool"
+        />
         <StatCard
-          label={anyPending ? "Est. Balance ~" : "Overall Balance"}
+          label={anyPending ? "Est. Balance" : "Operational Bal"}
           value={fmtGHS(totals.balance)}
           accent={totals.balance >= 0}
           pending={anyPending}
+          icon={<DollarSign className="w-4 h-4" />}
+          colorClass={totals.balance >= 0 ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : "text-rose-500 bg-rose-50 dark:bg-rose-950/30"}
+          description={anyPending ? "Estimated daily yield" : "Net calculated balance"}
         />
       </div>
 
-      {/* Controls row */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">Date:</span>
-          <Input
-            type="date"
-            value={viewDate}
-            onChange={e => { setSelectedDate(e.target.value); setPage(1); }}
-            className="h-8 text-sm w-40"
-          />
-          {selectedDate && (
-            <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => { setSelectedDate(""); setPage(1); }}>
-              Reset
+      {/* Analytics & Company Expenses Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Chart Column (2/3 span) */}
+        <Card className="lg:col-span-2 border border-border/60 bg-card/50 backdrop-blur-md">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  Sales & Profitability Trends
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Visualizing performance for the last 7 calculation days
+                </p>
+              </div>
+              <Sparkles className="w-4 h-4 text-accent animate-pulse" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {chartData.length === 0 ? (
+              <div className="h-64 flex flex-col items-center justify-center text-muted-foreground text-xs border border-dashed rounded-lg">
+                <FileText className="w-8 h-8 mb-2 opacity-50" />
+                No historical calculations found to plot.
+              </div>
+            ) : (
+              <div className="w-full h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorWins" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#7c3aed" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickLine={false} 
+                      axisLine={false} 
+                      className="text-[10px] fill-muted-foreground font-medium" 
+                    />
+                    <YAxis 
+                      tickLine={false} 
+                      axisLine={false} 
+                      className="text-[10px] fill-muted-foreground font-medium" 
+                      tickFormatter={(val) => `GH₵${val}`}
+                    />
+                    <ChartTooltip 
+                      contentStyle={{ 
+                        background: "rgba(255, 255, 255, 0.95)",
+                        border: "1px solid rgba(0, 0, 0, 0.1)",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                        fontSize: "11px"
+                      }}
+                      formatter={(value: any) => [fmtGHS(Number(value)), ""]}
+                    />
+                    <ChartLegend verticalAlign="top" height={36} className="text-xs" />
+                    <Area 
+                      name="Gross Sales" 
+                      type="monotone" 
+                      dataKey="gross" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorGross)" 
+                    />
+                    <Area 
+                      name="Wins Claimed" 
+                      type="monotone" 
+                      dataKey="wins" 
+                      stroke="#7c3aed" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorWins)" 
+                    />
+                    <Area 
+                      name="Net Yield" 
+                      type="monotone" 
+                      dataKey="balance" 
+                      stroke="#10b981" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorNet)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Expenses Widget (1/3 span) */}
+        <Card className="border border-border/60 bg-card/50 backdrop-blur-md flex flex-col">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-bold flex items-center gap-2">
+              <Building className="w-4 h-4 text-accent" />
+              Company Expense Hub
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Financial health for {viewDate}
+            </p>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col space-y-4 justify-between">
+            {/* Expense details summary */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border-b pb-2">
+                <span className="text-xs text-muted-foreground">Reserve Cash Pool</span>
+                <span className="text-sm font-bold font-mono text-primary">{fmtGHS(accumulatedReserve)}</span>
+              </div>
+              <div className="flex items-center justify-between border-b pb-2">
+                <span className="text-xs text-muted-foreground">Outlays recorded today</span>
+                <span className="text-sm font-bold font-mono text-destructive">{fmtGHS(totalExpensesAmount)}</span>
+              </div>
+              
+              {/* Calculated Cash Position */}
+              <div className="rounded-lg bg-muted/40 p-2.5 flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Net Cashflow Position
+                  </div>
+                  <div className="text-[9px] text-muted-foreground mt-0.5">
+                    Operational Balance - Expenses
+                  </div>
+                </div>
+                <div className={`text-base font-extrabold font-mono ${
+                  (totals.balance - totalExpensesAmount) >= 0 ? "text-emerald-600" : "text-destructive"
+                }`}>
+                  {fmtGHS(totals.balance - totalExpensesAmount)}
+                </div>
+              </div>
+            </div>
+
+            {/* List of recent expenses */}
+            <div className="space-y-2 flex-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mt-1">
+                Recent Outlays
+              </div>
+              {dateExpenses.length === 0 ? (
+                <div className="py-6 text-center text-xs text-muted-foreground border border-dashed rounded-lg">
+                  No company expenses recorded on this date.
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {dateExpenses.slice(0, 3).map(exp => (
+                    <div key={exp.id} className="flex items-center justify-between bg-muted/20 hover:bg-muted/40 p-2 rounded text-xs transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold truncate text-foreground">{exp.description}</div>
+                        <div className="text-[10px] text-muted-foreground truncate">
+                          Payee: {exp.payeeName}
+                        </div>
+                      </div>
+                      <div className="text-right pl-2">
+                        <div className="font-bold font-mono text-destructive">-{fmtGHS(Number(exp.amount))}</div>
+                        <div className="text-[9px] text-muted-foreground uppercase">{exp.type}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {dateExpenses.length > 3 && (
+                    <div className="text-[10px] text-center text-primary font-medium">
+                      + {dateExpenses.length - 3} more items
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Manage Expenses link button */}
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="w-full text-xs font-semibold mt-2 h-9 flex items-center justify-center gap-1.5"
+              onClick={() => navigate("/company-expenses")}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Manage Company Expenses
+              <ArrowRight className="w-3 h-3 ml-0.5" />
             </Button>
-          )}
-        </div>
-        {loadingCalcs && <span className="text-xs text-muted-foreground">Loading…</span>}
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* View toggle */}
-        <div className="ml-auto flex items-center gap-1 border rounded-md p-0.5 bg-muted/30">
-          <button
-            onClick={() => handleViewMode("grid")}
-            className={`p-1.5 rounded transition-colors ${viewMode === "grid" ? "bg-background shadow-sm" : "hover:bg-background/60"}`}
-            title="Grid view"
-          >
-            <GridIcon active={viewMode === "grid"} />
-          </button>
-          <button
-            onClick={() => handleViewMode("list")}
-            className={`p-1.5 rounded transition-colors ${viewMode === "list" ? "bg-background shadow-sm" : "hover:bg-background/60"}`}
-            title="List view"
-          >
-            <ListIcon active={viewMode === "list"} />
-          </button>
+      {/* Redesigned Controls & Search Toolbar */}
+      <div className="border border-border/60 bg-card/45 backdrop-blur-md px-4 py-2.5 rounded-xl flex items-center justify-between gap-4 flex-wrap shadow-sm">
+        <div className="flex items-center gap-3 flex-wrap flex-1">
+          {/* Date Picker */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Period:</span>
+            <Input
+              type="date"
+              value={viewDate}
+              onChange={e => { setSelectedDate(e.target.value); setPage(1); }}
+              className="h-8.5 text-xs w-36 bg-background/60 border-border/50"
+            />
+            {selectedDate && (
+              <Button size="sm" variant="ghost" className="h-8 text-xs px-2" onClick={() => { setSelectedDate(""); setPage(1); }}>
+                Reset
+              </Button>
+            )}
+          </div>
+          
+          <div className="h-4 w-px bg-border/65 hidden sm:block" />
+
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-xs min-w-[200px]">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/75" />
+            <Input
+              type="search"
+              placeholder="Search agent name or code..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              className="h-8.5 pl-8 text-xs bg-background/60 border-border/50 placeholder:text-muted-foreground/60 focus:bg-background transition-all"
+            />
+          </div>
+          
+          {loadingCalcs && <span className="text-xs text-muted-foreground/70 animate-pulse">Syncing...</span>}
         </div>
 
-        <span className="text-xs text-muted-foreground">
-          {agentStats.length} agent{agentStats.length !== 1 ? "s" : ""}
-        </span>
+        {/* View toggle & counts */}
+        <div className="flex items-center gap-3 shrink-0 ml-auto sm:ml-0">
+          <span className="text-xs text-muted-foreground/80 font-medium">
+            {filteredAgentStats.length === agentStats.length ? (
+              <>Showing {agentStats.length} agent{agentStats.length !== 1 ? "s" : ""}</>
+            ) : (
+              <>Found {filteredAgentStats.length} of {agentStats.length} agent{agentStats.length !== 1 ? "s" : ""}</>
+            )}
+          </span>
+
+          <div className="flex items-center gap-1 border border-border/50 rounded-lg p-0.5 bg-muted/40">
+            <button
+              onClick={() => handleViewMode("grid")}
+              className={`p-1.5 rounded-md transition-all duration-200 ${
+                viewMode === "grid" 
+                  ? "bg-background text-primary shadow-sm" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+              }`}
+              title="Grid view"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => handleViewMode("list")}
+              className={`p-1.5 rounded-md transition-all duration-200 ${
+                viewMode === "list" 
+                  ? "bg-background text-primary shadow-sm" 
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+              }`}
+              title="List view"
+            >
+              <List className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Agents — Grid */}
