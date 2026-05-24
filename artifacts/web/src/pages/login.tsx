@@ -46,7 +46,7 @@ export function Login() {
 
   return (
     <div
-      className="flex items-end justify-center px-4 pb-14"
+      className="flex items-center justify-center px-4 py-12"
       style={{
         minHeight: "100dvh",
         backgroundImage: "url(/login-bg-v5.png)",
