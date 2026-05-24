@@ -489,23 +489,23 @@ export function Games() {
                     className="pl-9 h-9 text-sm rounded-xl"
                   />
                 </div>
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+                  <div className="flex items-center gap-2 shrink-0">
                     <Label className="text-xs text-muted-foreground whitespace-nowrap">Closed Date:</Label>
                     <Input
                       type="date"
                       value={closedDate}
                       onChange={(e) => handleDateChange(e.target.value)}
-                      className="h-9 text-xs rounded-xl w-36"
+                      className="h-9 text-xs rounded-xl w-[155px]"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <Switch
                       id="show-all-closed"
                       checked={showAllClosed}
                       onCheckedChange={handleToggleShowAll}
                     />
-                    <Label htmlFor="show-all-closed" className="text-xs font-medium cursor-pointer">
+                    <Label htmlFor="show-all-closed" className="text-xs font-medium cursor-pointer whitespace-nowrap">
                       Show older completed games
                     </Label>
                   </div>

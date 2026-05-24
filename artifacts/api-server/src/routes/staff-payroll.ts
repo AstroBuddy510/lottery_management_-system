@@ -154,7 +154,7 @@ router.get("/staff-payroll/payments", requireAuth, requireRole("director", "admi
 });
 
 // POST /staff-payroll/payments
-router.post("/staff-payroll/payments", requireAuth, requireRole("cashier"), async (req, res) => {
+router.post("/staff-payroll/payments", requireAuth, requireRole("cashier", "administrator", "director"), async (req, res) => {
   try {
     const bodyResult = CreateSalaryPaymentBody.safeParse(req.body);
     if (!bodyResult.success) {
