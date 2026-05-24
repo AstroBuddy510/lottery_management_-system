@@ -49,7 +49,7 @@ export function Login() {
       className="flex items-end justify-center px-4 pb-14"
       style={{
         minHeight: "100dvh",
-        backgroundImage: "url(/login-bg.png)",
+        backgroundImage: "url(/login-bg-v4.png)",
         backgroundSize: "cover",
         backgroundPosition: "center center",
         backgroundRepeat: "no-repeat",
