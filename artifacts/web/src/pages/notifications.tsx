@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import {
-  useListNotifications, useGetUnreadCount, useSendNotification, useMarkNotificationRead,
+  useListNotifications, useGetUnreadCount, useSendNotification, useMarkNotificationRead, useDeleteReadNotifications,
   getListNotificationsQueryKey, getGetUnreadCountQueryKey,
   NotificationWithReceipt, NotificationInputTargetType, NotificationInputMessageType,
 } from "@workspace/api-client-react";
@@ -493,6 +493,7 @@ export function Notifications() {
     query: { queryKey: getGetUnreadCountQueryKey(), refetchInterval: 30_000 },
   });
   const markReadMutation = useMarkNotificationRead();
+  const deleteReadMutation = useDeleteReadNotifications();
 
   const [tab, setTab] = useState<FilterTab>("all");
   const [composeOpen, setComposeOpen] = useState(false);
@@ -567,6 +568,22 @@ export function Notifications() {
     invalidate();
   };
 
+  const handleDeleteRead = async () => {
+    const readItemsCount = notifList.filter(n => isRead(n)).length;
+    if (readItemsCount === 0) {
+      toast.error("No read notifications to delete");
+      return;
+    }
+    if (!confirm(`Are you sure you want to permanently delete all ${readItemsCount} read notifications?`)) return;
+    try {
+      await deleteReadMutation.mutateAsync();
+      toast.success("Read notifications deleted successfully");
+      invalidate();
+    } catch {
+      toast.error("Failed to delete read notifications");
+    }
+  };
+
   const TABS: { id: FilterTab; label: string; icon: string }[] = [
     { id: "all", label: "All", icon: "📬" },
     { id: "announcement", label: "Announcements", icon: "📢" },
@@ -611,8 +628,25 @@ export function Notifications() {
           <div className="flex items-center gap-2 mt-1">
             {unreadCount > 0 && (
               <Button size="sm" variant="outline" className="text-xs h-8 gap-1.5" onClick={markAllRead}>
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>
                 Mark all read
+              </Button>
+            )}
+            {notifList.some(n => isRead(n)) && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs h-8 gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={handleDeleteRead}
+                disabled={deleteReadMutation.isPending}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <line x1="10" y1="11" x2="10" y2="17" />
+                  <line x1="14" y1="11" x2="14" y2="17" />
+                </svg>
+                Delete Read
               </Button>
             )}
             {canCompose && (

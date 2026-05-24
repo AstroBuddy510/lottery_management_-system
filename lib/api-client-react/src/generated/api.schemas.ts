@@ -1374,3 +1374,8 @@ dateFrom?: string;
 dateTo?: string;
 };
 
+export type DeleteReadNotifications200 = {
+  success?: boolean;
+  deletedCount?: number;
+};
+

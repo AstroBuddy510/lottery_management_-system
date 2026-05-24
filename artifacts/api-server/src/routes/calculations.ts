@@ -310,6 +310,42 @@ router.post(
       verifyLedgerAndEscalate(agentId, req.user!.userId).catch(console.error);
     }
 
+    // Dispatch balance reminders to all active agents
+    try {
+      const activeAgents = await db
+        .select({
+          id: agentsTable.id,
+          userId: agentsTable.userId,
+          outstandingDebt: agentsTable.outstandingDebt,
+        })
+        .from(agentsTable)
+        .where(eq(agentsTable.status, "active"));
+
+      for (const agentRow of activeAgents) {
+        const val = parseFloat(agentRow.outstandingDebt || "0");
+        let bodyText = "";
+        if (val < 0) {
+          bodyText = `Your outstanding balance to be paid to the company is GH₵ ${Math.abs(val).toFixed(2)}.`;
+        } else if (val > 0) {
+          bodyText = `Your account balance is clear. You have a surplus of GH₵ ${val.toFixed(2)}.`;
+        } else {
+          bodyText = `Your account balance is clear.`;
+        }
+
+        await dispatchSystemNotification({
+          sentBy: req.user!.userId,
+          messageType: "reminder",
+          title: `Balance Reminder — ${calcDate}`,
+          body: bodyText,
+          targetType: "agent",
+          targetId: agentRow.id,
+          recipientUserIds: [agentRow.userId],
+        });
+      }
+    } catch (e) {
+      console.error("Failed to send balance reminders to agents:", e);
+    }
+
     res.json({
       calculated: results.length,
       calcDate,

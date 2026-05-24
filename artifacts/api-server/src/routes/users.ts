@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, agentsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import {
   CreateUserBody,
@@ -185,23 +185,43 @@ router.patch(
 router.delete(
   "/users/:id",
   requireAuth,
-  requireRole("director"),
+  requireRole("director", "administrator"),
   async (req, res) => {
     const parse = DeactivateUserParams.safeParse(req.params);
     if (!parse.success) {
       res.status(400).json({ error: "Invalid params" });
       return;
     }
-    const [user] = await db
-      .update(usersTable)
-      .set({ isActive: false })
-      .where(eq(usersTable.id, parse.data.id))
-      .returning({ id: usersTable.id });
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
+    const userId = parse.data.id;
+    try {
+      // First, try deleting the agent associated with this user if they are an agent
+      await db.delete(agentsTable).where(eq(agentsTable.userId, userId));
+
+      // Then try physically deleting the user
+      const [deletedUser] = await db
+        .delete(usersTable)
+        .where(eq(usersTable.id, userId))
+        .returning({ id: usersTable.id });
+
+      if (!deletedUser) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      res.json({ success: true, id: deletedUser.id, deleted: true });
+    } catch (err) {
+      // Catch foreign key constraint violation and fall back to deactivation
+      const [user] = await db
+        .update(usersTable)
+        .set({ isActive: false })
+        .where(eq(usersTable.id, userId))
+        .returning({ id: usersTable.id });
+
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      res.json({ success: true, id: user.id, deactivated: true });
     }
-    res.json({ success: true, id: user.id });
   },
 );
 

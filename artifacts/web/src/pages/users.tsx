@@ -313,6 +313,28 @@ function UsersTab() {
     }
   };
 
+  const handleDelete = async (u: User) => {
+    if (!confirm(`Are you sure you want to permanently delete user ${u.fullName}? This action cannot be undone. If they have active transaction history, they will be deactivated instead.`)) return;
+    try {
+      const res = await deactivateMutation.mutateAsync({ id: u.id });
+      const isDeleted = (res as any)?.deleted;
+      if (isDeleted) {
+        toast({
+          title: "User deleted",
+          description: `Successfully deleted user ${u.fullName} and their agent profile.`,
+        });
+      } else {
+        toast({
+          title: "User deactivated",
+          description: `User ${u.fullName} has active transaction history and was deactivated instead.`,
+        });
+      }
+      invalidateAll();
+    } catch {
+      toast({ title: "Failed to delete user", variant: "destructive" });
+    }
+  };
+
   const handleRegeneratePin = async (u: User) => {
     if (!confirm(`Regenerate PIN for ${u.fullName}? Their current PIN will stop working immediately.`)) return;
     try {
@@ -430,6 +452,7 @@ function UsersTab() {
                     <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(u)}>Edit</Button>
                     <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-amber-600" onClick={() => handleRegeneratePin(u)}>Reset PIN</Button>
                     {u.isActive && <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeactivate(u)}>Deactivate</Button>}
+                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(u)}>Delete</Button>
                   </div>
                 </TableCell>
               </TableRow>

@@ -48,6 +48,7 @@ import type {
   DailyCalculation,
   DeleteAgencyStaff200,
   DeleteCompanyStaff200,
+  DeleteReadNotifications200,
   DirectorReviewEntryChangeRequestBody,
   EntryChangeRequest,
   ErrorResponse,
@@ -6742,6 +6743,76 @@ export const useMarkNotificationRead = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getMarkNotificationReadMutationOptions(options));
+    }
+
+export const getDeleteReadNotificationsUrl = () => {
+
+
+
+
+  return `/api/notifications/read`
+}
+
+/**
+ * @summary Delete all read notifications for current user
+ */
+export const deleteReadNotifications = async ( options?: RequestInit): Promise<DeleteReadNotifications200> => {
+
+  return customFetch<DeleteReadNotifications200>(getDeleteReadNotificationsUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteReadNotificationsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReadNotifications>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteReadNotifications>>, TError,void, TContext> => {
+
+const mutationKey = ['deleteReadNotifications'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteReadNotifications>>, void> = () => {
+
+
+          return  deleteReadNotifications(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteReadNotificationsMutationResult = NonNullable<Awaited<ReturnType<typeof deleteReadNotifications>>>
+
+    export type DeleteReadNotificationsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete all read notifications for current user
+ */
+export const useDeleteReadNotifications = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReadNotifications>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteReadNotifications>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDeleteReadNotificationsMutationOptions(options));
     }
 
 export const getGetUnreadCountUrl = () => {

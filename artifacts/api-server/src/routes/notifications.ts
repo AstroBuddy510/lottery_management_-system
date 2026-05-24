@@ -6,7 +6,7 @@ import {
   usersTable,
   agentsTable,
 } from "@workspace/db";
-import { eq, and, isNull, desc, count } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, desc, count } from "drizzle-orm";
 import { SendNotificationBody, MarkNotificationReadParams } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 
@@ -130,6 +130,24 @@ router.patch(
       return;
     }
     res.json({ success: true, readAt: receipt.readAt });
+  },
+);
+
+router.delete(
+  "/notifications/read",
+  requireAuth,
+  async (req, res) => {
+    const userId = req.user!.userId;
+    const deleted = await db
+      .delete(notificationReceiptsTable)
+      .where(
+        and(
+          eq(notificationReceiptsTable.userId, userId),
+          isNotNull(notificationReceiptsTable.readAt),
+        ),
+      )
+      .returning();
+    res.json({ success: true, deletedCount: deleted.length });
   },
 );
 

@@ -145,23 +145,22 @@ function IconChevronRight() {
 }
 
 // ── Stat Card ────────────────────────────────────────────────
-function StatCard({ label, value, sub, gradient, icon }: {
+function StatCard({ label, value, sub, icon, iconColorClass }: {
   label: string; value: React.ReactNode; sub: string;
-  gradient: [string, string]; icon: React.ReactNode;
+  icon: React.ReactNode; iconColorClass: string;
 }) {
   return (
-    <div className="rounded-2xl p-4 relative overflow-hidden" style={{
-      background: `linear-gradient(135deg, ${gradient[0]} 0%, ${gradient[1]} 100%)`,
-      boxShadow: `0 4px 16px ${gradient[0]}40`,
-    }}>
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-[11px] font-semibold text-white/80 uppercase tracking-wide leading-tight">{label}</span>
-        <span className="text-white/60">{icon}</span>
+    <div className="bg-white border border-gray-100 rounded-2xl p-4 flex flex-col justify-between shadow-sm relative overflow-hidden">
+      <div className="flex items-start justify-between mb-2">
+        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{label}</span>
+        <div className={`p-1.5 rounded-lg ${iconColorClass}`}>
+          {icon}
+        </div>
       </div>
-      <div className="text-2xl font-black text-white tabular-nums leading-none">{value}</div>
-      <div className="text-xs text-white/65 mt-1.5 font-medium">{sub}</div>
-      {/* Decorative circle */}
-      <div className="absolute -bottom-4 -right-4 w-20 h-20 rounded-full bg-white/10 pointer-events-none" />
+      <div>
+        <div className="text-2xl font-black text-gray-900 font-mono tracking-tight leading-none">{value}</div>
+        <div className="text-[11px] text-gray-400 mt-1.5 font-semibold">{sub}</div>
+      </div>
     </div>
   );
 }
@@ -228,12 +227,15 @@ export function AgentDashboard() {
   };
 
   return (
-    <div className="pb-6">
+    <div className="px-4 max-w-xl mx-auto md:max-w-2xl mt-4 pb-6 space-y-5">
 
-      {/* ── Hero greeting banner ── */}
+      {/* ── Hero greeting banner card ── */}
       <div
-        className="px-5 pt-5 pb-6"
-        style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 100%)" }}
+        className="rounded-3xl p-5 text-white shadow-xl"
+        style={{
+          background: "linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 100%)",
+          boxShadow: "0 8px 30px rgba(29, 78, 216, 0.15)",
+        }}
       >
         <div className="flex items-center gap-4">
           {/* Avatar */}
@@ -329,7 +331,7 @@ export function AgentDashboard() {
         </div>
       </div>
 
-      <div className="px-3 space-y-5 mt-5">
+      <div className="space-y-5">
 
         {/* ── Stat cards 2×2 ── */}
         <div className="grid grid-cols-2 gap-3">
@@ -337,73 +339,60 @@ export function AgentDashboard() {
             label="Sales Logged"
             value={salesList.length}
             sub={`${salesList.length === 1 ? "ticket" : "tickets"} today`}
-            gradient={["#1d4ed8", "#3b82f6"]}
             icon={<IconSale />}
+            iconColorClass="text-blue-600 bg-blue-50"
           />
           <StatCard
             label="Gross Today"
             value={todayGross > 0 ? fmtGHS(todayGross) : "—"}
             sub={`${grossList.length} entr${grossList.length === 1 ? "y" : "ies"}`}
-            gradient={["#059669", "#10b981"]}
             icon={<IconGross />}
+            iconColorClass="text-emerald-600 bg-emerald-50"
           />
           <StatCard
             label="Wins Today"
             value={todayWins > 0 ? fmtGHS(todayWins) : "—"}
             sub={`${winsList.length} entr${winsList.length === 1 ? "y" : "ies"}`}
-            gradient={["#d97706", "#f59e0b"]}
             icon={<IconWins />}
+            iconColorClass="text-amber-600 bg-amber-50"
           />
           <StatCard
             label="Writers"
             value={activeWriters}
             sub={`of ${writerList.length} total`}
-            gradient={["#7c3aed", "#a78bfa"]}
             icon={<IconWriters />}
+            iconColorClass="text-violet-600 bg-violet-50"
           />
         </div>
 
         {/* ── Quick actions ── */}
-        <div>
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Quick Actions</div>
-          {/* Primary CTA */}
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Quick Actions</div>
           <Link href="/sales">
-            <button className="w-full flex items-center gap-4 rounded-2xl px-5 py-4 mb-3 active:scale-[0.98] transition-transform"
-              style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)", boxShadow: "0 6px 20px #1d4ed840" }}>
-              <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-                <IconPlus size={22} />
+            <button className="w-full flex items-center justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-3.5 mb-4 font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98]">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0 text-white">
+                  <IconSale />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-sm text-white">Log a Sale</div>
+                  <div className="text-[10px] text-blue-100 font-medium">Record a new ticket sale</div>
+                </div>
               </div>
-              <div className="flex-1 text-left">
-                <div className="text-white font-bold text-base leading-tight">Log a Sale</div>
-                <div className="text-blue-100/80 text-xs mt-0.5">Record new ticket sale</div>
-              </div>
-              <div className="text-white/60"><IconChevronRight /></div>
+              <div className="text-white/70"><IconChevronRight /></div>
             </button>
           </Link>
-          {/* Secondary CTAs */}
           <div className="grid grid-cols-2 gap-3">
-            <Link href="/entries/gross">
-              <button className="w-full flex flex-col gap-2.5 rounded-2xl px-4 py-4 active:scale-[0.97] transition-transform"
-                style={{ background: "linear-gradient(135deg, #059669 0%, #10b981 100%)", boxShadow: "0 4px 16px #05966940" }}>
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                  <IconGross />
-                </div>
-                <div>
-                  <div className="text-white font-bold text-sm leading-tight">Gross Entry</div>
-                  <div className="text-emerald-100/80 text-[11px] mt-0.5">Enter gross sales</div>
-                </div>
+            <Link href="/entries/gross" className="w-full">
+              <button className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-3 font-semibold text-xs transition-colors active:scale-[0.98]">
+                <span className="text-emerald-600"><IconGross /></span>
+                Gross Entry
               </button>
             </Link>
-            <Link href="/entries/wins">
-              <button className="w-full flex flex-col gap-2.5 rounded-2xl px-4 py-4 active:scale-[0.97] transition-transform"
-                style={{ background: "linear-gradient(135deg, #d97706 0%, #f59e0b 100%)", boxShadow: "0 4px 16px #d9770640" }}>
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                  <IconWins />
-                </div>
-                <div>
-                  <div className="text-white font-bold text-sm leading-tight">Wins Entry</div>
-                  <div className="text-amber-100/80 text-[11px] mt-0.5">Enter wins data</div>
-                </div>
+            <Link href="/entries/wins" className="w-full">
+              <button className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-3 font-semibold text-xs transition-colors active:scale-[0.98]">
+                <span className="text-amber-600"><IconWins /></span>
+                Wins Entry
               </button>
             </Link>
           </div>

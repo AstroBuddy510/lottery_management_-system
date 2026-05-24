@@ -1912,6 +1912,15 @@ export const MarkNotificationReadResponse = zod.object({
 
 
 /**
+ * @summary Delete all read notifications for current user
+ */
+export const DeleteReadNotificationsResponse = zod.object({
+  "success": zod.boolean().optional(),
+  "deletedCount": zod.number().optional()
+})
+
+
+/**
  * @summary Get count of unread notifications
  */
 export const GetUnreadCountResponse = zod.object({
