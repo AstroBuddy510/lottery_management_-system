@@ -31,6 +31,7 @@ router.post(
       return;
     }
     const calcDate = parse.data.date;
+    const gameId = parse.data.gameId;
 
     const [settings] = await db
       .select()
@@ -45,15 +46,22 @@ router.post(
     const commissionPct = parseFloat(settings.commissionPct);
     const reservePct = parseFloat(settings.reservePct);
 
+    const grossConditions = [eq(grossEntriesTable.entryDate, calcDate)];
+    const winsConditions = [eq(winsEntriesTable.entryDate, calcDate)];
+    if (gameId && gameId !== "undefined" && gameId !== "null") {
+      grossConditions.push(eq(grossEntriesTable.gameId, gameId));
+      winsConditions.push(eq(winsEntriesTable.gameId, gameId));
+    }
+
     const grossEntries = await db
       .select()
       .from(grossEntriesTable)
-      .where(eq(grossEntriesTable.entryDate, calcDate));
+      .where(and(...grossConditions));
 
     const winsEntries = await db
       .select()
       .from(winsEntriesTable)
-      .where(eq(winsEntriesTable.entryDate, calcDate));
+      .where(and(...winsConditions));
 
     const grossMap = new Map(
       grossEntries.map((e) => [e.writerId, parseFloat(e.grossAmount)]),
@@ -111,6 +119,7 @@ router.post(
           and(
             eq(dailyCalculationsTable.writerId, writerId),
             eq(dailyCalculationsTable.calcDate, calcDate),
+            gameId && gameId !== "undefined" && gameId !== "null" ? eq(dailyCalculationsTable.gameId, gameId) : undefined,
           ),
         );
 
@@ -119,6 +128,7 @@ router.post(
         .values({
           writerId,
           calcDate,
+          gameId: (gameId && gameId !== "undefined" && gameId !== "null") ? gameId : null,
           grossSales: String(calc.grossSales),
           commissionPct: String(calc.commissionPct),
           commissionAmount: String(calc.commissionAmount),
@@ -139,6 +149,7 @@ router.post(
           and(
             eq(grossEntriesTable.writerId, writerId),
             eq(grossEntriesTable.entryDate, calcDate),
+            gameId && gameId !== "undefined" && gameId !== "null" ? eq(grossEntriesTable.gameId, gameId) : undefined,
           ),
         );
       await db
@@ -148,6 +159,7 @@ router.post(
           and(
             eq(winsEntriesTable.writerId, writerId),
             eq(winsEntriesTable.entryDate, calcDate),
+            gameId && gameId !== "undefined" && gameId !== "null" ? eq(winsEntriesTable.gameId, gameId) : undefined,
           ),
         );
     }
@@ -361,13 +373,15 @@ router.get(
   requireAuth,
   requireRole("director", "administrator"),
   async (req, res) => {
-    const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
+    const { writerId, dateFrom, dateTo, gameId } = req.query as Record<string, string>;
     const conditions = [];
     if (writerId)
       conditions.push(eq(dailyCalculationsTable.writerId, writerId));
     if (dateFrom)
       conditions.push(gte(dailyCalculationsTable.calcDate, dateFrom));
     if (dateTo) conditions.push(lte(dailyCalculationsTable.calcDate, dateTo));
+    if (gameId && gameId !== "undefined" && gameId !== "null")
+      conditions.push(eq(dailyCalculationsTable.gameId, gameId));
 
     const calculations = await db
       .select()

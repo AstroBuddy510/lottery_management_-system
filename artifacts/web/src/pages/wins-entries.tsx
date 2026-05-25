@@ -95,13 +95,14 @@ function AgentWinsView() {
     return gameList.filter(g => g.status === "live");
   }, [gameList]);
 
-  // Fetch all wins entries for the selected date to verify which writers have already been entered
+  // Fetch all wins entries for the selected date and game to verify which writers have already been entered
   const { data: dateEntries } = useListWinsEntries({
     dateFrom: form.entryDate,
     dateTo: form.entryDate,
+    gameId: form.gameId || undefined,
   }, {
     query: {
-      queryKey: ["winsEntriesForDate", form.entryDate],
+      queryKey: ["winsEntriesForDate", form.entryDate, form.gameId],
       enabled: !!form.entryDate,
     }
   });
@@ -124,7 +125,14 @@ function AgentWinsView() {
       return;
     }
     try {
-      await createMutation.mutateAsync({ data: { writerId: form.writerId, entryDate: form.entryDate, winsAmount: form.winsAmount } });
+      await createMutation.mutateAsync({
+        data: {
+          writerId: form.writerId,
+          entryDate: form.entryDate,
+          winsAmount: form.winsAmount,
+          gameId: form.gameId || undefined,
+        }
+      });
       toast.success("Wins entry created");
       setCreateOpen(false);
       setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" });

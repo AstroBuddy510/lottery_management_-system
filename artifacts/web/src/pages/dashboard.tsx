@@ -414,16 +414,6 @@ function DirectorDashboard() {
   const gameList = Array.isArray(games) ? games : [];
   const expensesList = Array.isArray(rawExpenses) ? rawExpenses : [];
 
-  const mostRecentDate = useMemo(() => {
-    if (!calcList.length) return today;
-    return calcList.reduce((m, c) => {
-      const d = c.calcDate?.split("T")[0] ?? "";
-      return d > m ? d : m;
-    }, "");
-  }, [calcList, today]);
-
-  const viewDate = selectedDate || mostRecentDate;
-
   const liveGames = useMemo(() => {
     return gameList.filter(g => g.status === "live");
   }, [gameList]);
@@ -436,6 +426,11 @@ function DirectorDashboard() {
     return liveGames[0] ?? null;
   }, [liveGames]);
 
+  const displayGame = useMemo(() => {
+    if (!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") return currentGame;
+    return gameList.find(g => g.id === selectedGameId) ?? currentGame;
+  }, [selectedGameId, gameList, currentGame]);
+
   const handleGameSelect = (id: string) => {
     setSelectedGameId(id);
     setPage(1);
@@ -447,14 +442,19 @@ function DirectorDashboard() {
     }
   };
 
-  const displayGame = useMemo(() => {
-    if (!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") return currentGame;
-    return gameList.find(g => g.id === selectedGameId) ?? currentGame;
-  }, [selectedGameId, gameList, currentGame]);
+  const mostRecentDate = useMemo(() => {
+    if (!calcList.length) return today;
+    return calcList.reduce((m, c) => {
+      const d = c.calcDate?.split("T")[0] ?? "";
+      return d > m ? d : m;
+    }, "");
+  }, [calcList, today]);
+
+  const viewDate = selectedDate || (displayGame ? new Date(displayGame.closeAt).toISOString().split("T")[0] : mostRecentDate);
 
   const dateCalcs = useMemo(() =>
-    calcList.filter(c => c.calcDate?.startsWith(viewDate)),
-    [calcList, viewDate]
+    calcList.filter(c => c.calcDate?.startsWith(viewDate) && (!displayGame || c.gameId === displayGame.id)),
+    [calcList, viewDate, displayGame]
   );
 
   const commPct = Number(settings?.commissionPct ?? 0);
@@ -488,8 +488,8 @@ function DirectorDashboard() {
         };
       }
 
-      const liveGrossEntries = liveGrossList.filter(e => writerIds.has(e.writerId) && e.entryDate?.startsWith(viewDate));
-      const liveWinsEntries  = liveWinsList.filter( e => writerIds.has(e.writerId) && e.entryDate?.startsWith(viewDate));
+      const liveGrossEntries = liveGrossList.filter(e => writerIds.has(e.writerId) && e.entryDate?.startsWith(viewDate) && (!displayGame || e.gameId === displayGame.id));
+      const liveWinsEntries  = liveWinsList.filter( e => writerIds.has(e.writerId) && e.entryDate?.startsWith(viewDate) && (!displayGame || e.gameId === displayGame.id));
       const gross      = liveGrossEntries.reduce((s, e) => s + Number(e.grossAmount), 0);
       const wins       = liveWinsEntries.reduce( (s, e) => s + Number(e.winsAmount),  0);
       const commission = gross * commPct;
@@ -509,7 +509,7 @@ function DirectorDashboard() {
         totalWriters, hasPaid, isPending,
       };
     }),
-    [agentList, allWriters, dateCalcs, paymentList, viewDate, liveGrossList, liveWinsList, commPct, resvPct]
+    [agentList, allWriters, dateCalcs, paymentList, viewDate, liveGrossList, liveWinsList, commPct, resvPct, displayGame]
   );
 
   const totals = useMemo(() => agentStats.reduce(
@@ -529,12 +529,12 @@ function DirectorDashboard() {
   const accumulatedReserve = Number(reserve?.balance ?? 0);
 
   const grossToday = useMemo(
-    () => (Array.isArray(liveGross) ? liveGross : []).filter(e => e.entryDate?.startsWith(today)),
-    [liveGross, today]
+    () => (Array.isArray(liveGross) ? liveGross : []).filter(e => e.entryDate?.startsWith(viewDate) && (!displayGame || e.gameId === displayGame.id)),
+    [liveGross, viewDate, displayGame]
   );
   const winsToday = useMemo(
-    () => (Array.isArray(liveWins) ? liveWins : []).filter(e => e.entryDate?.startsWith(today)),
-    [liveWins, today]
+    () => (Array.isArray(liveWins) ? liveWins : []).filter(e => e.entryDate?.startsWith(viewDate) && (!displayGame || e.gameId === displayGame.id)),
+    [liveWins, viewDate, displayGame]
   );
   const grossTodayAmount = useMemo(
     () => grossToday.reduce((s, e) => s + Number(e.grossAmount), 0),
@@ -545,8 +545,8 @@ function DirectorDashboard() {
     [winsToday]
   );
   const hasCalcToday = useMemo(
-    () => calcList.some(c => c.calcDate?.startsWith(today)),
-    [calcList, today]
+    () => calcList.some(c => c.calcDate?.startsWith(viewDate) && (!displayGame || c.gameId === displayGame.id)),
+    [calcList, viewDate, displayGame]
   );
 
   // Operations & Expenses calculations for the selected viewDate
@@ -626,7 +626,7 @@ function DirectorDashboard() {
                 {(!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") ? "Active Game Event" : "Viewing Game Event"}
               </div>
               <div className="flex items-center gap-2.5 flex-wrap mt-0.5">
-                <span className="text-sm font-mono font-bold text-accent px-1.5 py-0.5 rounded bg-white/10">{displayGame.eventNumber}</span>
+                <span className="text-sm font-mono font-bold text-blue-300 px-1.5 py-0.5 rounded bg-white/10">{displayGame.eventNumber}</span>
                 <span className="text-base font-extrabold tracking-tight leading-tight">{displayGame.name}</span>
                 {displayGame.status === "live" && (
                   <div className="flex items-center gap-2 shrink-0">
@@ -655,7 +655,7 @@ function DirectorDashboard() {
                     onClick={() => handleGameSelect(g.id)}
                     className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-all shrink-0 whitespace-nowrap ${
                       isSelected
-                        ? "bg-accent text-white shadow-sm ring-1 ring-white/25"
+                        ? "bg-blue-500/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30 backdrop-blur-md hover:bg-blue-500/30"
                         : "bg-white/10 text-white/90 hover:bg-white/25"
                     }`}
                   >

@@ -36,11 +36,12 @@ router.get(
   requireAuth,
   requireRole("director", "administrator", "gross_entry", "agent"),
   async (req, res) => {
-    const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
+    const { writerId, dateFrom, dateTo, gameId } = req.query as Record<string, string>;
     const conditions = [];
     if (writerId) conditions.push(eq(grossEntriesTable.writerId, writerId));
     if (dateFrom) conditions.push(gte(grossEntriesTable.entryDate, dateFrom));
     if (dateTo) conditions.push(lte(grossEntriesTable.entryDate, dateTo));
+    if (gameId && gameId !== "undefined" && gameId !== "null") conditions.push(eq(grossEntriesTable.gameId, gameId));
 
     const entries = await db
       .select()
@@ -135,11 +136,12 @@ router.get(
   requireAuth,
   requireRole("director", "administrator", "wins_entry", "agent"),
   async (req, res) => {
-    const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
+    const { writerId, dateFrom, dateTo, gameId } = req.query as Record<string, string>;
     const conditions = [];
     if (writerId) conditions.push(eq(winsEntriesTable.writerId, writerId));
     if (dateFrom) conditions.push(gte(winsEntriesTable.entryDate, dateFrom));
     if (dateTo) conditions.push(lte(winsEntriesTable.entryDate, dateTo));
+    if (gameId && gameId !== "undefined" && gameId !== "null") conditions.push(eq(winsEntriesTable.gameId, gameId));
 
     const entries = await db
       .select()

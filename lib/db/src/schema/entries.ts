@@ -3,10 +3,12 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
 import { usersTable } from "./users";
+import { gamesTable } from "./games";
 
 export const grossEntriesTable = pgTable("gross_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
+  gameId: uuid("game_id").references(() => gamesTable.id),
   entryDate: date("entry_date").notNull(),
   grossAmount: decimal("gross_amount", { precision: 12, scale: 2 }).notNull(),
   enteredBy: uuid("entered_by").notNull().references(() => usersTable.id),
@@ -21,6 +23,7 @@ export const grossEntriesTable = pgTable("gross_entries", {
 export const winsEntriesTable = pgTable("wins_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
+  gameId: uuid("game_id").references(() => gamesTable.id),
   entryDate: date("entry_date").notNull(),
   winsAmount: decimal("wins_amount", { precision: 12, scale: 2 }).notNull(),
   enteredBy: uuid("entered_by").notNull().references(() => usersTable.id),

@@ -431,6 +431,7 @@ export interface SalesLogInput {
 export interface GrossEntry {
   id: string;
   writerId: string;
+  gameId?: string;
   entryDate: string;
   grossAmount: string;
   enteredBy: string;
@@ -443,6 +444,7 @@ export interface GrossEntryInput {
   writerId: string;
   entryDate: string;
   grossAmount: string;
+  gameId?: string;
 }
 
 export interface GrossEntryUpdate {
@@ -452,6 +454,7 @@ export interface GrossEntryUpdate {
 export interface WinsEntry {
   id: string;
   writerId: string;
+  gameId?: string;
   entryDate: string;
   winsAmount: string;
   enteredBy: string;
@@ -464,6 +467,7 @@ export interface WinsEntryInput {
   writerId: string;
   entryDate: string;
   winsAmount: string;
+  gameId?: string;
 }
 
 export interface WinsEntryUpdate {
@@ -630,6 +634,7 @@ export interface VoidInput {
 export interface DailyCalculation {
   id: string;
   writerId: string;
+  gameId?: string;
   calcDate: string;
   grossSales: string;
   commissionPct: string;
@@ -644,6 +649,7 @@ export interface DailyCalculation {
 
 export interface CalcRunInput {
   date: string;
+  gameId?: string;
 }
 
 export interface CalcRunResult {
@@ -1361,12 +1367,14 @@ export type ListGrossEntriesParams = {
 writerId?: string;
 dateFrom?: string;
 dateTo?: string;
+gameId?: string;
 };
 
 export type ListWinsEntriesParams = {
 writerId?: string;
 dateFrom?: string;
 dateTo?: string;
+gameId?: string;
 };
 
 export type ListEntryChangeRequestsParams = {
@@ -1389,6 +1397,7 @@ export type ListCalculationsParams = {
 writerId?: string;
 dateFrom?: string;
 dateTo?: string;
+gameId?: string;
 };
 
 export type GetWriterReportParams = {

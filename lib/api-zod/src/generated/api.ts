@@ -1022,12 +1022,14 @@ export const CreateSaleBody = zod.object({
 export const ListGrossEntriesQueryParams = zod.object({
   "writerId": zod.coerce.string().optional(),
   "dateFrom": zod.coerce.string().optional(),
-  "dateTo": zod.coerce.string().optional()
+  "dateTo": zod.coerce.string().optional(),
+  "gameId": zod.coerce.string().optional()
 })
 
 export const ListGrossEntriesResponseItem = zod.object({
   "id": zod.string(),
   "writerId": zod.string(),
+  "gameId": zod.string().optional(),
   "entryDate": zod.string(),
   "grossAmount": zod.string(),
   "enteredBy": zod.string(),
@@ -1044,7 +1046,8 @@ export const ListGrossEntriesResponse = zod.array(ListGrossEntriesResponseItem)
 export const CreateGrossEntryBody = zod.object({
   "writerId": zod.string(),
   "entryDate": zod.string(),
-  "grossAmount": zod.string()
+  "grossAmount": zod.string(),
+  "gameId": zod.string().optional()
 })
 
 
@@ -1062,6 +1065,7 @@ export const UpdateGrossEntryBody = zod.object({
 export const UpdateGrossEntryResponse = zod.object({
   "id": zod.string(),
   "writerId": zod.string(),
+  "gameId": zod.string().optional(),
   "entryDate": zod.string(),
   "grossAmount": zod.string(),
   "enteredBy": zod.string(),
@@ -1077,12 +1081,14 @@ export const UpdateGrossEntryResponse = zod.object({
 export const ListWinsEntriesQueryParams = zod.object({
   "writerId": zod.coerce.string().optional(),
   "dateFrom": zod.coerce.string().optional(),
-  "dateTo": zod.coerce.string().optional()
+  "dateTo": zod.coerce.string().optional(),
+  "gameId": zod.coerce.string().optional()
 })
 
 export const ListWinsEntriesResponseItem = zod.object({
   "id": zod.string(),
   "writerId": zod.string(),
+  "gameId": zod.string().optional(),
   "entryDate": zod.string(),
   "winsAmount": zod.string(),
   "enteredBy": zod.string(),
@@ -1099,7 +1105,8 @@ export const ListWinsEntriesResponse = zod.array(ListWinsEntriesResponseItem)
 export const CreateWinsEntryBody = zod.object({
   "writerId": zod.string(),
   "entryDate": zod.string(),
-  "winsAmount": zod.string()
+  "winsAmount": zod.string(),
+  "gameId": zod.string().optional()
 })
 
 
@@ -1117,6 +1124,7 @@ export const UpdateWinsEntryBody = zod.object({
 export const UpdateWinsEntryResponse = zod.object({
   "id": zod.string(),
   "writerId": zod.string(),
+  "gameId": zod.string().optional(),
   "entryDate": zod.string(),
   "winsAmount": zod.string(),
   "enteredBy": zod.string(),
@@ -1520,7 +1528,8 @@ export const VoidPaymentResponse = zod.object({
  * @summary Trigger daily calculation for a given date
  */
 export const RunCalculationsBody = zod.object({
-  "date": zod.string()
+  "date": zod.string(),
+  "gameId": zod.string().optional()
 })
 
 export const RunCalculationsResponse = zod.object({
@@ -1529,6 +1538,7 @@ export const RunCalculationsResponse = zod.object({
   "calculations": zod.array(zod.object({
   "id": zod.string(),
   "writerId": zod.string(),
+  "gameId": zod.string().optional(),
   "calcDate": zod.string(),
   "grossSales": zod.string(),
   "commissionPct": zod.string(),
@@ -1549,12 +1559,14 @@ export const RunCalculationsResponse = zod.object({
 export const ListCalculationsQueryParams = zod.object({
   "writerId": zod.coerce.string().optional(),
   "dateFrom": zod.coerce.string().optional(),
-  "dateTo": zod.coerce.string().optional()
+  "dateTo": zod.coerce.string().optional(),
+  "gameId": zod.coerce.string().optional()
 })
 
 export const ListCalculationsResponseItem = zod.object({
   "id": zod.string(),
   "writerId": zod.string(),
+  "gameId": zod.string().optional(),
   "calcDate": zod.string(),
   "grossSales": zod.string(),
   "commissionPct": zod.string(),

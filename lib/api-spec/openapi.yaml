@@ -1192,6 +1192,10 @@ paths:
           name: dateTo
           schema:
             type: string
+        - in: query
+          name: gameId
+          schema:
+            type: string
       responses:
         "200":
           description: OK
@@ -1272,6 +1276,10 @@ paths:
             type: string
         - in: query
           name: dateTo
+          schema:
+            type: string
+        - in: query
+          name: gameId
           schema:
             type: string
       responses:
@@ -1740,6 +1748,10 @@ paths:
             type: string
         - in: query
           name: dateTo
+          schema:
+            type: string
+        - in: query
+          name: gameId
           schema:
             type: string
       responses:
@@ -2618,6 +2630,8 @@ components:
           type: string
         writerId:
           type: string
+        gameId:
+          type: string
         entryDate:
           type: string
         grossAmount:
@@ -2641,6 +2655,8 @@ components:
           type: string
         grossAmount:
           type: string
+        gameId:
+          type: string
 
     GrossEntryUpdate:
       type: object
@@ -2656,6 +2672,8 @@ components:
         id:
           type: string
         writerId:
+          type: string
+        gameId:
           type: string
         entryDate:
           type: string
@@ -2679,6 +2697,8 @@ components:
         entryDate:
           type: string
         winsAmount:
+          type: string
+        gameId:
           type: string
 
     WinsEntryUpdate:
@@ -2881,6 +2901,8 @@ components:
           type: string
         writerId:
           type: string
+        gameId:
+          type: string
         calcDate:
           type: string
         grossSales:
@@ -2907,6 +2929,8 @@ components:
       required: [date]
       properties:
         date:
+          type: string
+        gameId:
           type: string
 
     CalcRunResult:

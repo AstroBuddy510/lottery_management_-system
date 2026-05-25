@@ -95,13 +95,14 @@ function AgentGrossView() {
     return gameList.filter(g => g.status === "live");
   }, [gameList]);
 
-  // Fetch all gross entries for the selected date to verify which writers have already been entered
+  // Fetch all gross entries for the selected date and game to verify which writers have already been entered
   const { data: dateEntries } = useListGrossEntries({
     dateFrom: form.entryDate,
     dateTo: form.entryDate,
+    gameId: form.gameId || undefined,
   }, {
     query: {
-      queryKey: ["grossEntriesForDate", form.entryDate],
+      queryKey: ["grossEntriesForDate", form.entryDate, form.gameId],
       enabled: !!form.entryDate,
     }
   });
@@ -124,7 +125,14 @@ function AgentGrossView() {
       return;
     }
     try {
-      await createMutation.mutateAsync({ data: { writerId: form.writerId, entryDate: form.entryDate, grossAmount: form.grossAmount } });
+      await createMutation.mutateAsync({
+        data: {
+          writerId: form.writerId,
+          entryDate: form.entryDate,
+          grossAmount: form.grossAmount,
+          gameId: form.gameId || undefined,
+        }
+      });
       toast.success("Gross entry created");
       setCreateOpen(false);
       setForm({ writerId: "", entryDate: today, grossAmount: "", gameId: "" });

@@ -2,10 +2,12 @@ import { pgTable, uuid, date, decimal, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
+import { gamesTable } from "./games";
 
 export const dailyCalculationsTable = pgTable("daily_calculations", {
   id: uuid("id").primaryKey().defaultRandom(),
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
+  gameId: uuid("game_id").references(() => gamesTable.id),
   calcDate: date("calc_date").notNull(),
   grossSales: decimal("gross_sales", { precision: 12, scale: 2 }).notNull(),
   commissionPct: decimal("commission_pct", { precision: 5, scale: 4 }).notNull(),
