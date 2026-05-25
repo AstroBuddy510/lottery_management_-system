@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 import {
   useGetMyAgent, getGetMyAgentQueryKey,
   useListWriters, getListWritersQueryKey,
-  useListSales, useGetUnreadCount,
+  useListSales, useGetUnreadCount, useListGames,
   useListGrossEntries, useListWinsEntries,
   getGetUnreadCountQueryKey, getGetMeQueryKey,
   useUpdateMyPhoto,
@@ -180,6 +180,12 @@ export function AgentDashboard() {
   const { data: grossEntries } = useListGrossEntries({ dateFrom: today, dateTo: today });
   const { data: winsEntries } = useListWinsEntries({ dateFrom: today, dateTo: today });
   const { data: unread } = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
+  const { data: games } = useListGames();
+
+  const gameList = Array.isArray(games) ? games : [];
+  const liveGame = useMemo(() => {
+    return gameList.find(g => g.status === "live") ?? null;
+  }, [gameList]);
 
   const writerList = Array.isArray(writers) ? writers : [];
   const salesList = Array.isArray(sales) ? sales : [];
@@ -282,6 +288,40 @@ export function AgentDashboard() {
             </svg>
             <span className="text-white/80 text-xs font-medium">{todayLabel}</span>
           </div>
+
+          {/* Active Game Event Card */}
+          {liveGame ? (
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1">
+              {liveGame.logoUrl ? (
+                <img src={liveGame.logoUrl} alt={liveGame.name} className="w-10 h-10 object-contain rounded bg-white p-1 shadow-sm flex-shrink-0" />
+              ) : (
+                <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 shadow-inner">
+                  🎮
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <span className="text-[9px] font-bold text-white/70 uppercase tracking-wider block">
+                  Active Game Event
+                </span>
+                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                  <span className="text-xs font-mono font-bold text-yellow-300 px-1.5 py-0.5 bg-white/10 rounded">
+                    {liveGame.eventNumber}
+                  </span>
+                  <span className="text-sm font-black tracking-tight leading-tight text-white">
+                    {liveGame.name}
+                  </span>
+                  <span className="text-[9px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                    LIVE
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1 text-white/60 text-xs font-semibold">
+              <span className="text-white/40 text-lg">🎮</span>
+              No active game event at the moment
+            </div>
+          )}
 
           {/* Balance card */}
           {agent && (
