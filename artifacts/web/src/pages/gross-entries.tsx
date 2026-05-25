@@ -125,7 +125,10 @@ function AgentGrossView() {
     return writerList.filter(w => !usedWriterIds.has(w.id));
   }, [writerList, usedWriterIds]);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListGrossEntriesQueryKey({}) });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["/api/entries/gross"] });
+    qc.invalidateQueries({ queryKey: ["grossEntriesForDate"] });
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

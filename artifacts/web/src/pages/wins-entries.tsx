@@ -125,7 +125,10 @@ function AgentWinsView() {
     return writerList.filter(w => !usedWriterIds.has(w.id));
   }, [writerList, usedWriterIds]);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListWinsEntriesQueryKey({}) });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["/api/entries/wins"] });
+    qc.invalidateQueries({ queryKey: ["winsEntriesForDate"] });
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
