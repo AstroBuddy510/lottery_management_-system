@@ -16,6 +16,7 @@ export const ListGamesResponseItem = zod.object({
   "eventNumber": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "logoUrl": zod.string().nullish(),
   "goLiveAt": zod.string(),
   "closeAt": zod.string(),
   "status": zod.enum(['offline', 'live', 'closed']),
@@ -31,6 +32,7 @@ export const ListGamesResponse = zod.array(ListGamesResponseItem)
 export const CreateGameBody = zod.object({
   "name": zod.string(),
   "description": zod.string().optional(),
+  "logoUrl": zod.string().optional(),
   "goLiveAt": zod.string(),
   "closeAt": zod.string()
 })
@@ -46,6 +48,7 @@ export const UpdateGameParams = zod.object({
 export const UpdateGameBody = zod.object({
   "name": zod.string().optional(),
   "description": zod.string().nullish(),
+  "logoUrl": zod.string().nullish(),
   "goLiveAt": zod.string().optional(),
   "closeAt": zod.string().optional(),
   "status": zod.enum(['offline', 'live']).optional()
@@ -56,6 +59,7 @@ export const UpdateGameResponse = zod.object({
   "eventNumber": zod.string(),
   "name": zod.string(),
   "description": zod.string().nullish(),
+  "logoUrl": zod.string().nullish(),
   "goLiveAt": zod.string(),
   "closeAt": zod.string(),
   "status": zod.enum(['offline', 'live', 'closed']),
@@ -68,6 +72,89 @@ export const UpdateGameResponse = zod.object({
  * @summary Delete a game
  */
 export const DeleteGameParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+/**
+ * @summary List all game templates
+ */
+export const listGameTemplatesResponseDayOfWeekMin = 0;
+export const listGameTemplatesResponseDayOfWeekMax = 6;
+
+
+
+export const ListGameTemplatesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "dayOfWeek": zod.number().min(listGameTemplatesResponseDayOfWeekMin).max(listGameTemplatesResponseDayOfWeekMax),
+  "logoUrl": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional()
+})
+export const ListGameTemplatesResponse = zod.array(ListGameTemplatesResponseItem)
+
+
+/**
+ * @summary Create a game template
+ */
+export const createGameTemplateBodyDayOfWeekMin = 0;
+export const createGameTemplateBodyDayOfWeekMax = 6;
+
+
+
+export const CreateGameTemplateBody = zod.object({
+  "name": zod.string(),
+  "dayOfWeek": zod.number().min(createGameTemplateBodyDayOfWeekMin).max(createGameTemplateBodyDayOfWeekMax),
+  "logoUrl": zod.string().optional(),
+  "description": zod.string().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+
+/**
+ * @summary Update a game template
+ */
+export const UpdateGameTemplateParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const updateGameTemplateBodyDayOfWeekMin = 0;
+export const updateGameTemplateBodyDayOfWeekMax = 6;
+
+
+
+export const UpdateGameTemplateBody = zod.object({
+  "name": zod.string().optional(),
+  "dayOfWeek": zod.number().min(updateGameTemplateBodyDayOfWeekMin).max(updateGameTemplateBodyDayOfWeekMax).optional(),
+  "logoUrl": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "isActive": zod.boolean().optional()
+})
+
+export const updateGameTemplateResponseDayOfWeekMin = 0;
+export const updateGameTemplateResponseDayOfWeekMax = 6;
+
+
+
+export const UpdateGameTemplateResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "dayOfWeek": zod.number().min(updateGameTemplateResponseDayOfWeekMin).max(updateGameTemplateResponseDayOfWeekMax),
+  "logoUrl": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete a game template
+ */
+export const DeleteGameTemplateParams = zod.object({
   "id": zod.coerce.string()
 })
 

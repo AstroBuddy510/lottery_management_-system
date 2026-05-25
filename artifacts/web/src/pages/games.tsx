@@ -4,9 +4,10 @@ import {
   useCreateGame,
   useUpdateGame,
   useDeleteGame,
+  useListGameTemplates,
   getListGamesQueryKey,
 } from "@workspace/api-client-react";
-import type { Game } from "@workspace/api-client-react";
+import type { Game, GameTemplate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,14 +50,17 @@ function toLocalDatetimeInput(iso: string | undefined) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 interface GameFormState {
   name: string;
   description: string;
   goLiveAt: string;
   closeAt: string;
+  logoUrl: string;
 }
 
-const EMPTY_FORM: GameFormState = { name: "", description: "", goLiveAt: "", closeAt: "" };
+const EMPTY_FORM: GameFormState = { name: "", description: "", goLiveAt: "", closeAt: "", logoUrl: "" };
 
 /* ─── GameForm extracted outside Games to prevent remount-on-every-keystroke ── */
 
@@ -67,31 +71,46 @@ interface GameFormProps {
   isPending: boolean;
   submitLabel: string;
   onCancel: () => void;
+  isEdit?: boolean;
 }
 
-function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel }: GameFormProps) {
+function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel, isEdit = false }: GameFormProps) {
+  const { data: templates } = useListGameTemplates();
+  const templateList = Array.isArray(templates) ? templates : [];
+
+  const getSelectedDayOfWeek = () => {
+    if (!form.goLiveAt) return null;
+    const d = new Date(form.goLiveAt);
+    if (isNaN(d.getTime())) return null;
+    return d.getDay();
+  };
+
+  const dayOfWeek = getSelectedDayOfWeek();
+  const filteredTemplates = templateList.filter(
+    (t) => t.isActive && (dayOfWeek === null || t.dayOfWeek === dayOfWeek)
+  );
+
+  const handleSelectTemplate = (templateId: string) => {
+    const selectedTmpl = filteredTemplates.find(t => t.id === templateId);
+    if (selectedTmpl) {
+      setForm(f => ({
+        ...f,
+        name: selectedTmpl.name,
+        description: selectedTmpl.description || "",
+        logoUrl: selectedTmpl.logoUrl || "",
+      }));
+    } else {
+      setForm(f => ({
+        ...f,
+        name: "",
+        description: "",
+        logoUrl: "",
+      }));
+    }
+  };
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Game Name *</Label>
-        <Input
-          value={form.name}
-          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          required
-          placeholder="e.g. Evening Draw, Midday Special"
-          className="h-9 text-sm"
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Description</Label>
-        <Textarea
-          value={form.description}
-          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          placeholder="Optional notes about this game"
-          className="text-sm resize-none"
-          rows={2}
-        />
-      </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label className="text-xs font-medium">Goes Live *</Label>
@@ -114,6 +133,65 @@ function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel }:
           />
         </div>
       </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Game Name *</Label>
+        {isEdit ? (
+          <Input
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            required
+            placeholder="e.g. Evening Draw, Midday Special"
+            className="h-9 text-sm"
+          />
+        ) : (
+          <div>
+            {!form.goLiveAt ? (
+              <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/60 rounded px-3 py-2 font-medium">
+                Please select a "Goes Live" date first to view the templates scheduled for that day.
+              </div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/60 rounded px-3 py-2 font-medium">
+                No templates configured for {dayOfWeek !== null ? DAY_NAMES[dayOfWeek] : "this day"}. Please configure templates in Settings.
+              </div>
+            ) : (
+              <select
+                value={filteredTemplates.find(t => t.name === form.name)?.id || ""}
+                onChange={(e) => handleSelectTemplate(e.target.value)}
+                required
+                className="w-full h-9 rounded border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">-- Choose Template --</option>
+                {filteredTemplates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
+      </div>
+
+      {form.logoUrl && (
+        <div className="flex items-center gap-3 bg-muted/30 p-2.5 rounded-lg border">
+          <img src={form.logoUrl} alt="Logo" className="w-10 h-10 object-contain rounded bg-muted p-1" />
+          <div className="text-xs">
+            <span className="font-semibold text-muted-foreground block">Associated Logo</span>
+            <span className="text-foreground">Will be saved with this game.</span>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium">Description</Label>
+        <Textarea
+          value={form.description}
+          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          placeholder="Optional notes about this game"
+          className="text-sm resize-none"
+          rows={2}
+        />
+      </div>
+
       <p className="text-xs text-muted-foreground">
         The game will stay <strong>offline</strong> until you manually toggle it live. It will auto-close when the close time is reached.
       </p>
@@ -121,7 +199,7 @@ function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel }:
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={isPending}>
+        <Button type="submit" size="sm" disabled={isPending || (!isEdit && !form.name)}>
           {isPending ? "Saving…" : submitLabel}
         </Button>
       </DialogFooter>
@@ -193,6 +271,7 @@ export function Games() {
         data: {
           name: form.name,
           description: form.description || undefined,
+          logoUrl: form.logoUrl || undefined,
           goLiveAt: new Date(form.goLiveAt).toISOString(),
           closeAt: new Date(form.closeAt).toISOString(),
         },
@@ -215,6 +294,7 @@ export function Games() {
         data: {
           name: form.name,
           description: form.description || null,
+          logoUrl: form.logoUrl || null,
           goLiveAt: form.goLiveAt ? new Date(form.goLiveAt).toISOString() : undefined,
           closeAt: form.closeAt ? new Date(form.closeAt).toISOString() : undefined,
         },
@@ -263,6 +343,7 @@ export function Games() {
       description: g.description ?? "",
       goLiveAt: toLocalDatetimeInput(g.goLiveAt),
       closeAt: toLocalDatetimeInput(g.closeAt),
+      logoUrl: g.logoUrl ?? "",
     });
   };
 
@@ -338,12 +419,19 @@ export function Games() {
           </span>
         </div>
 
-        {/* Name + description */}
-        <div className="flex-1">
-          <div className="font-semibold text-base leading-tight">{g.name}</div>
-          {g.description && (
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{g.description}</p>
+        {/* Name + description with logo */}
+        <div className="flex gap-3 flex-1 items-start">
+          {g.logoUrl ? (
+            <img src={g.logoUrl} alt={g.name} className="w-12 h-12 object-contain rounded bg-muted p-1 border shrink-0" />
+          ) : (
+            <div className="w-12 h-12 rounded bg-muted border shrink-0 flex items-center justify-center text-[10px] text-muted-foreground">No Logo</div>
           )}
+          <div className="flex-1">
+            <div className="font-semibold text-base leading-tight">{g.name}</div>
+            {g.description && (
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{g.description}</p>
+            )}
+          </div>
         </div>
 
         {/* Timestamps */}
@@ -611,6 +699,7 @@ export function Games() {
             isPending={updateMutation.isPending}
             submitLabel="Save Changes"
             onCancel={() => setEditGame(null)}
+            isEdit={true}
           />
         </DialogContent>
       </Dialog>

@@ -924,6 +924,8 @@ export interface Game {
   name: string;
   /** @nullable */
   description?: string | null;
+  /** @nullable */
+  logoUrl?: string | null;
   goLiveAt: string;
   closeAt: string;
   status: GameStatus;
@@ -934,6 +936,7 @@ export interface Game {
 export interface CreateGameBody {
   name: string;
   description?: string;
+  logoUrl?: string;
   goLiveAt: string;
   closeAt: string;
 }
@@ -950,9 +953,54 @@ export interface UpdateGameBody {
   name?: string;
   /** @nullable */
   description?: string | null;
+  /** @nullable */
+  logoUrl?: string | null;
   goLiveAt?: string;
   closeAt?: string;
   status?: UpdateGameBodyStatus;
+}
+
+export interface GameTemplate {
+  id: string;
+  name: string;
+  /**
+     * @minimum 0
+     * @maximum 6
+     */
+  dayOfWeek: number;
+  /** @nullable */
+  logoUrl?: string | null;
+  /** @nullable */
+  description?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateGameTemplateBody {
+  name: string;
+  /**
+     * @minimum 0
+     * @maximum 6
+     */
+  dayOfWeek: number;
+  logoUrl?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateGameTemplateBody {
+  name?: string;
+  /**
+     * @minimum 0
+     * @maximum 6
+     */
+  dayOfWeek?: number;
+  /** @nullable */
+  logoUrl?: string | null;
+  /** @nullable */
+  description?: string | null;
+  isActive?: boolean;
 }
 
 export interface WinsDebtAgingBucket {

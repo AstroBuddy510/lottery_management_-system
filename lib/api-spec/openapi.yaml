@@ -114,6 +114,84 @@ paths:
         "204":
           description: Deleted
 
+  /game-templates:
+    get:
+      operationId: listGameTemplates
+      tags: [settings]
+      summary: List all game templates
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GameTemplate"
+    post:
+      operationId: createGameTemplate
+      tags: [settings]
+      summary: Create a game template
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGameTemplateBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameTemplate"
+
+  /game-templates/{id}:
+    put:
+      operationId: updateGameTemplate
+      tags: [settings]
+      summary: Update a game template
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGameTemplateBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameTemplate"
+    delete:
+      operationId: deleteGameTemplate
+      tags: [settings]
+      summary: Delete a game template
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
   /healthz:
     get:
       operationId: healthCheck
@@ -3188,6 +3266,8 @@ components:
           type: string
         description:
           type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
         goLiveAt:
           type: string
         closeAt:
@@ -3208,6 +3288,8 @@ components:
           type: string
         description:
           type: string
+        logoUrl:
+          type: string
         goLiveAt:
           type: string
         closeAt:
@@ -3220,6 +3302,8 @@ components:
           type: string
         description:
           type: ["string", "null"]
+        logoUrl:
+          type: ["string", "null"]
         goLiveAt:
           type: string
         closeAt:
@@ -3227,6 +3311,62 @@ components:
         status:
           type: string
           enum: [offline, live]
+
+    GameTemplate:
+      type: object
+      required: [id, name, dayOfWeek, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+        logoUrl:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    CreateGameTemplateBody:
+      type: object
+      required: [name, dayOfWeek]
+      properties:
+        name:
+          type: string
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+        logoUrl:
+          type: string
+        description:
+          type: string
+        isActive:
+          type: boolean
+
+    UpdateGameTemplateBody:
+      type: object
+      properties:
+        name:
+          type: string
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+        logoUrl:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
 
     WinsDebtAgingBucket:
       type: object

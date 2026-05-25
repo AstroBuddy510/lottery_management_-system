@@ -3,9 +3,29 @@ import {
   useGetSettings, useCreateSettings,
   useListTimeWindows, useCreateTimeWindow, useUpdateTimeWindow, useDeleteTimeWindow,
   useListRecurringExpenses, useCreateRecurringExpense, useUpdateRecurringExpense, useDeleteRecurringExpense,
-  getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListRecurringExpensesQueryKey,
-  TimeWindow,
+  useListGameTemplates, useCreateGameTemplate, useUpdateGameTemplate, useDeleteGameTemplate,
+  getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListRecurringExpensesQueryKey, getListGameTemplatesQueryKey,
+  TimeWindow, GameTemplate,
 } from "@workspace/api-client-react";
+
+function resizeImageToDataUrl(file: File, maxPx: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function pctDisplay(raw: string | undefined) {
   if (!raw) return "—";
@@ -86,6 +107,29 @@ export function Settings() {
   const [expenseForm, setExpenseForm] = useState(EMPTY_EXPENSE);
 
   const expenseList = Array.isArray(recurringExpenses) ? recurringExpenses : [];
+
+  // ── Game template state & queries ──
+  const { data: templates, isLoading: loadingTemplates } = useListGameTemplates();
+  const createTemplateMutation = useCreateGameTemplate();
+  const updateTemplateMutation = useUpdateGameTemplate();
+  const deleteTemplateMutation = useDeleteGameTemplate();
+
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [editTemplate, setEditTemplate] = useState<GameTemplate | null>(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: "", dayOfWeek: "1", logoUrl: "", description: "", isActive: true
+  });
+
+  const templateList = Array.isArray(templates) ? templates : [];
+
+  const handleLogoUpload = async (file: File) => {
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 200);
+      setTemplateForm(f => ({ ...f, logoUrl: dataUrl }));
+    } catch {
+      toast({ title: "Failed to process image file", variant: "destructive" });
+    }
+  };
 
   // ─────────── Handlers ───────────
 
@@ -239,6 +283,72 @@ export function Settings() {
     });
   };
 
+  // ── Game template handlers ──
+  const handleCreateTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createTemplateMutation.mutateAsync({
+        data: {
+          name: templateForm.name,
+          dayOfWeek: Number(templateForm.dayOfWeek),
+          logoUrl: templateForm.logoUrl || undefined,
+          description: templateForm.description || undefined,
+          isActive: templateForm.isActive,
+        },
+      });
+      toast({ title: "Game template created" });
+      setTemplateOpen(false);
+      setTemplateForm({ name: "", dayOfWeek: "1", logoUrl: "", description: "", isActive: true });
+      qc.invalidateQueries({ queryKey: getListGameTemplatesQueryKey() });
+    } catch (err: any) {
+      toast({ title: err?.data?.error ?? "Failed to create template", variant: "destructive" });
+    }
+  };
+
+  const handleEditTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTemplate) return;
+    try {
+      await updateTemplateMutation.mutateAsync({
+        id: editTemplate.id,
+        data: {
+          name: templateForm.name,
+          dayOfWeek: Number(templateForm.dayOfWeek),
+          logoUrl: templateForm.logoUrl || null,
+          description: templateForm.description || null,
+          isActive: templateForm.isActive,
+        },
+      });
+      toast({ title: "Game template updated" });
+      setEditTemplate(null);
+      qc.invalidateQueries({ queryKey: getListGameTemplatesQueryKey() });
+    } catch (err: any) {
+      toast({ title: err?.data?.error ?? "Failed to update template", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteTemplate = async (tmpl: GameTemplate) => {
+    if (!confirm(`Delete "${tmpl.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteTemplateMutation.mutateAsync({ id: tmpl.id });
+      toast({ title: "Game template deleted" });
+      qc.invalidateQueries({ queryKey: getListGameTemplatesQueryKey() });
+    } catch {
+      toast({ title: "Failed to delete template", variant: "destructive" });
+    }
+  };
+
+  const openEditTemplate = (tmpl: GameTemplate) => {
+    setEditTemplate(tmpl);
+    setTemplateForm({
+      name: tmpl.name,
+      dayOfWeek: String(tmpl.dayOfWeek),
+      logoUrl: tmpl.logoUrl ?? "",
+      description: tmpl.description ?? "",
+      isActive: tmpl.isActive,
+    });
+  };
+
   // ─────────── Sub-forms ───────────
 
   // ─────────── Render ───────────
@@ -257,6 +367,7 @@ export function Settings() {
           <TabsTrigger value="rates">Commission Rates</TabsTrigger>
           <TabsTrigger value="hours">Cashier Hours</TabsTrigger>
           <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
+          <TabsTrigger value="templates">Game Templates</TabsTrigger>
         </TabsList>
 
         {/* ── Commission Rates ── */}
@@ -400,6 +511,72 @@ export function Settings() {
                           <div className="flex gap-1">
                             <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditExpense(exp as RecurringExpenseRow)}>Edit</Button>
                             <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteExpense(exp as RecurringExpenseRow)}>Delete</Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Game Templates ── */}
+        <TabsContent value="templates">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Game Templates</CardTitle>
+                  <CardDescription className="text-xs mt-1">
+                    Configure recurring games played on specific days of the week.
+                  </CardDescription>
+                </div>
+                <Button size="sm" onClick={() => { setTemplateForm({ name: "", dayOfWeek: "1", logoUrl: "", description: "", isActive: true }); setTemplateOpen(true); }}>
+                  + Add Template
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Logo</TableHead>
+                      <TableHead>Game Name</TableHead>
+                      <TableHead>Day of Week</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-28">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingTemplates ? (
+                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell></TableRow>
+                    ) : templateList.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No game templates yet. Add your first template.</TableCell></TableRow>
+                    ) : templateList.map(tmpl => (
+                      <TableRow key={tmpl.id}>
+                        <TableCell className="w-16">
+                          {tmpl.logoUrl ? (
+                            <img src={tmpl.logoUrl} alt={tmpl.name} className="w-10 h-10 object-contain rounded bg-muted p-1" />
+                          ) : (
+                            <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">No Logo</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium text-sm">{tmpl.name}</TableCell>
+                        <TableCell className="text-sm">{DAY_NAMES[tmpl.dayOfWeek]}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{tmpl.description ?? <span className="italic">—</span>}</TableCell>
+                        <TableCell>
+                          <Badge variant={tmpl.isActive ? "default" : "secondary"} className="text-xs">
+                            {tmpl.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditTemplate(tmpl)}>Edit</Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteTemplate(tmpl)}>Delete</Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -570,6 +747,89 @@ export function Settings() {
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditExpense(null)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={updateExpenseMutation.isPending}>{updateExpenseMutation.isPending ? "Saving…" : "Save"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Game Template Dialog */}
+      <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Game Template</DialogTitle></DialogHeader>
+          <form onSubmit={handleCreateTemplate} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Game Name</Label>
+              <Input value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Monday Special, Lucky Tuesday" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Day of Week</Label>
+              <select value={templateForm.dayOfWeek} onChange={e => setTemplateForm(f => ({ ...f, dayOfWeek: e.target.value }))} className="w-full h-9 rounded border border-input bg-background px-3 text-sm">
+                {DAY_NAMES.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Description (optional)</Label>
+              <Input value={templateForm.description} onChange={e => setTemplateForm(f => ({ ...f, description: e.target.value }))} className="h-9 text-sm" placeholder="Brief description of this game" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Logo Image (optional)</Label>
+              <div className="flex items-center gap-4">
+                {templateForm.logoUrl && (
+                  <img src={templateForm.logoUrl} alt="Preview" className="w-12 h-12 object-contain rounded border bg-muted p-1" />
+                )}
+                <Input type="file" accept="image/*" onChange={e => e.target.files?.[0] && handleLogoUpload(e.target.files[0])} className="h-9 text-sm file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={templateForm.isActive} onCheckedChange={v => setTemplateForm(f => ({ ...f, isActive: v }))} />
+              <Label className="text-xs">Active (visible when scheduling games)</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setTemplateOpen(false)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={createTemplateMutation.isPending}>{createTemplateMutation.isPending ? "Saving…" : "Save"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Game Template Dialog */}
+      <Dialog open={!!editTemplate} onOpenChange={open => !open && setEditTemplate(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Game Template</DialogTitle></DialogHeader>
+          <form onSubmit={handleEditTemplate} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Game Name</Label>
+              <Input value={templateForm.name} onChange={e => setTemplateForm(f => ({ ...f, name: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Monday Special, Lucky Tuesday" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Day of Week</Label>
+              <select value={templateForm.dayOfWeek} onChange={e => setTemplateForm(f => ({ ...f, dayOfWeek: e.target.value }))} className="w-full h-9 rounded border border-input bg-background px-3 text-sm">
+                {DAY_NAMES.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Description (optional)</Label>
+              <Input value={templateForm.description} onChange={e => setTemplateForm(f => ({ ...f, description: e.target.value }))} className="h-9 text-sm" placeholder="Brief description of this game" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Logo Image (optional)</Label>
+              <div className="flex items-center gap-4">
+                {templateForm.logoUrl ? (
+                  <div className="relative">
+                    <img src={templateForm.logoUrl} alt="Preview" className="w-12 h-12 object-contain rounded border bg-muted p-1" />
+                    <button type="button" onClick={() => setTemplateForm(f => ({ ...f, logoUrl: "" }))} className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center text-[10px]">×</button>
+                  </div>
+                ) : null}
+                <Input type="file" accept="image/*" onChange={e => e.target.files?.[0] && handleLogoUpload(e.target.files[0])} className="h-9 text-sm file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={templateForm.isActive} onCheckedChange={v => setTemplateForm(f => ({ ...f, isActive: v }))} />
+              <Label className="text-xs">Active (visible when scheduling games)</Label>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditTemplate(null)}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={updateTemplateMutation.isPending}>{updateTemplateMutation.isPending ? "Saving…" : "Save"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

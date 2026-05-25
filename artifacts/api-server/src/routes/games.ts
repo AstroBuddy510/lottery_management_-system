@@ -36,9 +36,10 @@ router.post(
   requireAuth,
   requireRole("director", "administrator"),
   async (req, res) => {
-    const { name, description, goLiveAt, closeAt } = req.body as {
+    const { name, description, logoUrl, goLiveAt, closeAt } = req.body as {
       name: string;
       description?: string;
+      logoUrl?: string;
       goLiveAt: string;
       closeAt: string;
     };
@@ -68,6 +69,7 @@ router.post(
         eventNumber,
         name,
         description: description ?? null,
+        logoUrl: logoUrl ?? null,
         goLiveAt: goLiveDate,
         closeAt: closeDate,
         status: "offline",
@@ -85,9 +87,10 @@ router.put(
   requireRole("director", "administrator"),
   async (req, res) => {
     const id = req.params["id"] as string;
-    const { name, description, goLiveAt, closeAt, status } = req.body as {
+    const { name, description, logoUrl, goLiveAt, closeAt, status } = req.body as {
       name?: string;
       description?: string | null;
+      logoUrl?: string | null;
       goLiveAt?: string;
       closeAt?: string;
       status?: "offline" | "live";
@@ -112,6 +115,7 @@ router.put(
 
     if (name !== undefined) updates.name = name;
     if (description !== undefined) updates.description = description;
+    if (logoUrl !== undefined) updates.logoUrl = logoUrl;
     if (goLiveAt !== undefined) updates.goLiveAt = new Date(goLiveAt);
     if (closeAt !== undefined) updates.closeAt = new Date(closeAt);
 
