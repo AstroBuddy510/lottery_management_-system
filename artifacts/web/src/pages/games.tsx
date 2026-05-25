@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Play, Square, Archive, Clock, Calendar, AlertCircle } from "lucide-react";
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   offline: { label: "Offline", className: "bg-secondary text-secondary-foreground" },
@@ -48,6 +48,16 @@ function toLocalDatetimeInput(iso: string | undefined) {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function getGameGradient(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue1 = Math.abs(hash % 360);
+  const hue2 = (hue1 + 45) % 360;
+  return `linear-gradient(135deg, hsl(${hue1}, 70%, 55%), hsl(${hue2}, 75%, 45%))`;
 }
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -209,13 +219,15 @@ function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel, i
 
 /* ─── stat card ────────────────────────────────────────────────────────────── */
 
-function StatPill({ label, count, dot }: { label: string; count: number; dot: string }) {
+function StatPill({ label, count, activeColor, bgClass, icon }: { label: string; count: number; activeColor: string; bgClass: string; icon: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 bg-card border rounded-xl px-5 py-4 flex-1">
-      <span className={`w-3 h-3 rounded-full flex-shrink-0 ${dot}`} />
-      <div>
-        <div className="text-2xl font-bold leading-none">{count}</div>
-        <div className="text-xs text-muted-foreground mt-0.5">{label}</div>
+    <div className={`flex items-center justify-between border rounded-xl px-5 py-4 flex-1 bg-card/65 backdrop-blur-sm shadow-sm hover:shadow transition-all duration-300 relative overflow-hidden group ${bgClass}`}>
+      <div className="space-y-1">
+        <div className="text-2xl font-bold font-mono tracking-tight text-foreground">{count}</div>
+        <div className="text-xs text-muted-foreground/80 font-semibold tracking-wider uppercase">{label}</div>
+      </div>
+      <div className={`p-2 rounded-xl bg-background border border-border/40 ${activeColor} shadow-xs`}>
+        {icon}
       </div>
     </div>
   );
@@ -393,81 +405,119 @@ export function Games() {
   const renderGameCard = (g: Game) => {
     const cfg = STATUS_CONFIG[g.status] ?? STATUS_CONFIG.offline;
     const isClosed = g.status === "closed";
+
+    const renderCountdown = () => {
+      if (g.status !== "live") return null;
+      const now = Date.now();
+      const closeTime = new Date(g.closeAt).getTime();
+      const timeLeft = closeTime - now;
+      if (timeLeft <= 0) return null;
+
+      const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+      const mins = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (hours < 24) {
+        return (
+          <span className="flex items-center gap-1.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50/75 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40 px-2 py-0.5 rounded-lg animate-pulse">
+            <Clock className="w-3 h-3" />
+            {hours}h {mins}m left
+          </span>
+        );
+      }
+      return null;
+    };
+
     return (
       <div
         key={g.id}
-        className="border rounded-xl bg-card p-5 flex flex-col gap-4 hover:shadow-md transition-shadow"
+        className="border border-border/40 rounded-2xl bg-card/75 backdrop-blur-sm p-5 flex flex-col gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group"
       >
+        {/* Hover subtle glow effect */}
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500/20 via-primary/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+
         {/* Top row: indicator + badge + event number */}
         <div className="flex items-center gap-2 justify-between">
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                 g.status === "live"
-                  ? "bg-green-500 ring-2 ring-green-300 animate-pulse"
+                  ? "bg-green-500 ring-4 ring-green-500/20 animate-pulse"
                   : g.status === "closed"
-                  ? "bg-destructive/60"
-                  : "bg-muted-foreground/40"
+                  ? "bg-rose-500/60"
+                  : "bg-muted-foreground/30"
               }`}
             />
-            <Badge className={`text-[10px] px-2 py-0 h-5 font-semibold ${cfg.className}`}>
+            <Badge className={`text-[9px] uppercase tracking-wider px-2 py-0 h-5 font-bold ${cfg.className}`}>
               {cfg.label}
             </Badge>
+            {renderCountdown()}
           </div>
-          <span className="text-xs font-mono font-bold text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-900/80 bg-indigo-50/50 dark:bg-indigo-950/20 px-2 py-0.5 rounded-lg">
+          <span className="text-[10px] font-mono font-bold text-indigo-700 dark:text-indigo-400 border border-indigo-100/60 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 px-2.5 py-0.5 rounded-lg">
             Event #{g.eventNumber}
           </span>
         </div>
 
         {/* Name + description with logo */}
-        <div className="flex gap-3 flex-1 items-start">
+        <div className="flex gap-3.5 flex-1 items-start">
           {g.logoUrl ? (
-            <img src={g.logoUrl} alt={g.name} className="w-12 h-12 object-contain rounded bg-muted p-1 border shrink-0" />
+            <img src={g.logoUrl} alt={g.name} className="w-12 h-12 object-contain rounded-xl bg-background p-1 border border-border/30 shrink-0 shadow-xs" />
           ) : (
-            <div className="w-12 h-12 rounded bg-muted border shrink-0 flex items-center justify-center text-[10px] text-muted-foreground">No Logo</div>
+            <div
+              className="w-12 h-12 rounded-xl text-white flex items-center justify-center font-extrabold text-sm shadow shrink-0"
+              style={{ background: getGameGradient(g.name) }}
+            >
+              {g.name.slice(0, 2).toUpperCase()}
+            </div>
           )}
-          <div className="flex-1">
-            <div className="font-semibold text-base leading-tight">{g.name}</div>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-sm tracking-tight text-foreground leading-snug">{g.name}</div>
             {g.description && (
-              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{g.description}</p>
+              <p className="text-[11px] text-muted-foreground/90 mt-1 line-clamp-2 leading-relaxed">{g.description}</p>
             )}
           </div>
         </div>
 
         {/* Timestamps */}
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <div className="text-muted-foreground font-medium mb-0.5">Goes live</div>
-            <div className="font-mono font-semibold text-foreground/80">{formatDateTime(g.goLiveAt)}</div>
+          <div className="bg-muted/30 dark:bg-muted/10 border border-border/30 rounded-xl px-3 py-2 space-y-1">
+            <div className="text-muted-foreground/80 font-medium flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500/70" />
+              <span>Goes Live</span>
+            </div>
+            <div className="font-mono font-bold text-foreground/90 text-[10px] leading-tight">{formatDateTime(g.goLiveAt)}</div>
           </div>
-          <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <div className="text-muted-foreground font-medium mb-0.5">Closes at</div>
-            <div className="font-mono font-semibold text-foreground/80">{formatDateTime(g.closeAt)}</div>
+          <div className="bg-muted/30 dark:bg-muted/10 border border-border/30 rounded-xl px-3 py-2 space-y-1">
+            <div className="text-muted-foreground/80 font-medium flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-rose-500/70" />
+              <span>Closes At</span>
+            </div>
+            <div className="font-mono font-bold text-foreground/90 text-[10px] leading-tight">{formatDateTime(g.closeAt)}</div>
           </div>
         </div>
 
         {/* Footer: toggle + actions */}
-        <div className="flex items-center justify-between pt-1 border-t">
+        <div className="flex items-center justify-between pt-1 border-t border-border/40">
           <div className="flex items-center gap-2">
             <Switch
               checked={g.status === "live"}
               onCheckedChange={() => handleToggleLive(g)}
               disabled={isClosed || updateMutation.isPending}
               aria-label={`Toggle ${g.name} live`}
+              className="data-[state=checked]:bg-green-600"
             />
-            <span className="text-xs text-muted-foreground">
-              {isClosed ? "Closed" : g.status === "live" ? "Live" : "Go Live"}
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              {isClosed ? "Closed" : g.status === "live" ? "Live" : "Offline"}
             </span>
           </div>
           {!isClosed && (
             <div className="flex gap-1">
-              <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(g)}>
+              <Button size="sm" variant="ghost" className="h-7 text-xs px-2 rounded-lg hover:bg-muted/50" onClick={() => openEdit(g)}>
                 Edit
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 text-xs px-2 text-destructive hover:text-destructive"
+                className="h-7 text-xs px-2 text-destructive hover:text-destructive rounded-lg hover:bg-destructive/5"
                 onClick={() => handleDelete(g)}
               >
                 Delete
@@ -499,10 +549,28 @@ export function Games() {
       </div>
 
       {/* Stats strip */}
-      <div className="flex gap-3">
-        <StatPill label="Live"    count={liveCount}    dot="bg-green-500 ring-2 ring-green-300 animate-pulse" />
-        <StatPill label="Offline" count={offlineCount} dot="bg-muted-foreground/40" />
-        <StatPill label="Closed"  count={closedCount}  dot="bg-destructive/60" />
+      <div className="flex gap-4">
+        <StatPill
+          label="Live"
+          count={liveCount}
+          activeColor="text-emerald-600 dark:text-emerald-400"
+          bgClass="bg-emerald-50/10 dark:bg-emerald-950/5 border-emerald-100/50 dark:border-emerald-900/20"
+          icon={<Play className="w-4.5 h-4.5 fill-current text-emerald-500 dark:text-emerald-400 animate-pulse" />}
+        />
+        <StatPill
+          label="Offline"
+          count={offlineCount}
+          activeColor="text-slate-600 dark:text-slate-400"
+          bgClass="bg-slate-50/10 dark:bg-slate-950/5 border-slate-200/50 dark:border-slate-800/40"
+          icon={<Square className="w-4.5 h-4.5 text-slate-500 dark:text-slate-400 fill-current" />}
+        />
+        <StatPill
+          label="Closed"
+          count={closedCount}
+          activeColor="text-rose-600 dark:text-rose-400"
+          bgClass="bg-rose-50/10 dark:bg-rose-950/5 border-rose-100/50 dark:border-rose-900/20"
+          icon={<Archive className="w-4.5 h-4.5 text-rose-500 dark:text-rose-400" />}
+        />
       </div>
 
       {isLoading ? (

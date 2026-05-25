@@ -9,14 +9,24 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Calculator, History, Play, AlertCircle, TrendingUp, Trophy, Percent, Wallet, Shield, Coins, Search, Filter, X, RefreshCw
+} from "lucide-react";
 
-function fmtGHS(v: number) { return `GH₵ ${v.toFixed(2)}`; }
+function fmtGHS(v: number, bold = true) {
+  return (
+    <span className="font-mono whitespace-nowrap">
+      <span className="text-muted-foreground/70 font-normal mr-0.5">GH₵</span>
+      <span className={bold ? "font-semibold" : "font-normal"}>{v.toFixed(2)}</span>
+    </span>
+  );
+}
 
 function gameCloseDate(game: Game) {
   return new Date(game.closeAt).toISOString().split("T")[0];
@@ -134,255 +144,358 @@ export function Calculations() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-xl font-semibold">Calculations</h1>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Calculations</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Process daily agent balances, claim payouts, and reserve allocations.
+          </p>
+        </div>
+        <Badge variant="outline" className="border-indigo-200 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-300 font-mono px-3 py-1 font-bold text-xs uppercase tracking-wide">
+          Settlement Engine
+        </Badge>
+      </div>
 
-      <Tabs defaultValue="run">
-        <TabsList>
-          <TabsTrigger value="run">Run Calculations</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+      <Tabs defaultValue="run" className="space-y-6">
+        <TabsList className="grid w-full max-w-[400px] grid-cols-2 bg-muted/40 p-1 rounded-xl">
+          <TabsTrigger value="run" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Calculator className="w-4 h-4" />
+            Run Calculations
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <History className="w-4 h-4" />
+            History Ledger
+          </TabsTrigger>
         </TabsList>
 
         {/* ── RUN TAB ── */}
-        <TabsContent value="run" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Select Game &amp; Run</CardTitle>
+        <TabsContent value="run" className="mt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="lg:col-span-2 border-border/40 bg-card/60 backdrop-blur-sm shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base font-semibold">Select Game &amp; Run</CardTitle>
+                <CardDescription className="text-xs">
+                  Choose a game event from the calendar schedule to load its calculation properties.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                  <div className="sm:col-span-2 space-y-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Game Event</Label>
+                    <Select value={selectedRunGameId} onValueChange={handleRunGameChange}>
+                      <SelectTrigger className="h-10 text-sm bg-background border-border/50 focus:ring-2 focus:ring-primary/20 rounded-xl">
+                        <SelectValue placeholder="Select a game event…" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/55">
+                        <SelectItem value="_none" className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                          — No game selected (enter date manually) —
+                        </SelectItem>
+                        {gamesYetToRun.map(g => (
+                          <SelectItem key={g.id} value={g.id} className="text-xs">
+                            <span className="font-mono font-bold text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded mr-2">
+                              {g.eventNumber}
+                            </span>
+                            {g.name}
+                            <span className="ml-2 text-[10px] text-muted-foreground font-mono">({gameCloseDate(g)})</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Calculation Date</Label>
+                    <Input
+                      type="date"
+                      value={runDate}
+                      onChange={e => { setRunDate(e.target.value); setSelectedRunGameId("_none"); }}
+                      className="h-10 text-sm bg-background border-border/50 focus:ring-2 focus:ring-primary/20 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 pt-3 border-t border-border/40">
+                  <Button
+                    onClick={handleRun}
+                    disabled={runMutation.isPending || !runDate}
+                    className="h-10 rounded-xl px-5 font-semibold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-600/90 hover:to-violet-600/90 text-white shadow-md shadow-indigo-200 dark:shadow-none hover:shadow-lg transition-all duration-200"
+                  >
+                    {runMutation.isPending ? (
+                      <span className="flex items-center gap-1.5">
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Running...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <Play className="w-4.5 h-4.5 fill-current" />
+                        Run Calculations
+                      </span>
+                    )}
+                  </Button>
+                  <div className="flex items-start gap-1.5 text-xs text-muted-foreground leading-normal max-w-sm">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <p>
+                      Running will lock all gross entries and winning submissions entered for <strong className="text-foreground font-mono">{runDate}</strong>.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Selected Game Preview Column */}
+            <Card className="border border-indigo-100/50 dark:border-indigo-950/30 bg-indigo-50/10 dark:bg-indigo-950/5 backdrop-blur-md relative overflow-hidden flex flex-col justify-between shadow-sm rounded-xl">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl -mr-6 -mt-6 pointer-events-none" />
+              <CardHeader className="pb-3 pt-4">
+                <CardTitle className="text-xs font-semibold text-indigo-900/60 dark:text-indigo-300/60 uppercase tracking-wider">Selected Event Preview</CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 flex flex-col justify-center py-4">
+                {selectedRunGame ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      {selectedRunGame.logoUrl ? (
+                        <img src={selectedRunGame.logoUrl} alt={selectedRunGame.name} className="w-12 h-12 object-contain rounded-xl bg-background border p-1 shrink-0" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-sm shadow shrink-0">
+                          {selectedRunGame.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 dark:text-indigo-400 font-mono">
+                          Event #{selectedRunGame.eventNumber}
+                        </span>
+                        <h3 className="font-bold text-sm truncate leading-tight text-foreground">{selectedRunGame.name}</h3>
+                      </div>
+                    </div>
+                    <div className="space-y-2.5 border-t border-border/40 pt-3 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground font-medium">Goes Live:</span>
+                        <span className="font-semibold text-foreground font-mono">{new Date(selectedRunGame.goLiveAt).toLocaleDateString("en-GH", { dateStyle: "medium" })}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground font-medium">Closes At:</span>
+                        <span className="font-semibold text-foreground font-mono">{new Date(selectedRunGame.closeAt).toLocaleDateString("en-GH", { dateStyle: "medium" })}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-border/40 pt-2.5 mt-2">
+                        <span className="text-muted-foreground font-medium">Status:</span>
+                        <StatusBadge status={selectedRunGame.status} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-muted-foreground space-y-2.5">
+                    <Calculator className="w-8 h-8 mx-auto text-muted-foreground/30 animate-pulse" />
+                    <p className="text-xs max-w-[200px] mx-auto leading-relaxed">
+                      Select a scheduled game event from the dropdown to preview event parameters.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Quick summary of what will be processed */}
+          {selectedRunGame && (
+            <div className="rounded-xl border border-border/40 bg-muted/20 px-4 py-3.5 text-xs text-muted-foreground flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+              <span>
+                Calculations will process all gross and wins entries entered for <span className="font-semibold text-foreground font-mono">{runDate}</span>. Select a different game above to automatically jump to that event's date.
+              </span>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── HISTORY TAB ── */}
+        <TabsContent value="history" className="mt-4 space-y-6">
+          <Card className="border-border/40 bg-card/60 backdrop-blur-sm shadow-sm rounded-xl">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-sm font-semibold">Ledger History Filters</CardTitle>
+                <CardDescription className="text-[11px]">Filter game calculation archives by specific event schedules or agent targets.</CardDescription>
+              </div>
+              {(filterAgentId || historyGameId !== "_all") && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/20 rounded-xl"
+                  onClick={() => { setFilterAgentId(""); setHistoryGameId("_all"); }}
+                >
+                  <X className="w-3.5 h-3.5 mr-1" />
+                  Clear filters
+                </Button>
+              )}
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                <div className="sm:col-span-2 space-y-1.5">
-                  <Label className="text-xs">Game Event</Label>
-                  <Select value={selectedRunGameId} onValueChange={handleRunGameChange}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Select a game event…" />
+            <CardContent className="pb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Filter className="w-3.5 h-3.5" />
+                    Game Event
+                  </Label>
+                  <Select value={historyGameId} onValueChange={setHistoryGameId}>
+                    <SelectTrigger className="h-9 text-sm bg-background border-border/50 rounded-xl">
+                      <SelectValue placeholder="All game events" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">— No game selected (enter date manually) —</SelectItem>
-                      {gamesYetToRun.map(g => (
-                        <SelectItem key={g.id} value={g.id}>
-                          <span className="font-mono text-xs text-muted-foreground mr-1.5">{g.eventNumber}</span>
+                    <SelectContent className="rounded-xl border-border/55">
+                      <SelectItem value="_all" className="text-xs">All games</SelectItem>
+                      {gameList.map(g => (
+                        <SelectItem key={g.id} value={g.id} className="text-xs">
+                          <span className="font-mono font-bold text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-1 py-0.5 rounded mr-1.5">
+                            {g.eventNumber}
+                          </span>
                           {g.name}
-                          <span className="ml-2 text-xs text-muted-foreground">· {gameCloseDate(g)}</span>
+                          <span className="ml-2 text-[10px] text-muted-foreground font-mono">({gameCloseDate(g)})</span>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Calculation Date</Label>
-                  <Input
-                    type="date"
-                    value={runDate}
-                    onChange={e => { setRunDate(e.target.value); setSelectedRunGameId("_none"); }}
-                    className="h-9 text-sm"
-                  />
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Search className="w-3.5 h-3.5" />
+                    Agent Owner
+                  </Label>
+                  <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
+                    <SelectTrigger className="h-9 text-sm bg-background border-border/50 rounded-xl">
+                      <SelectValue placeholder="All agents" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-border/55">
+                      <SelectItem value="_all" className="text-xs">All agents</SelectItem>
+                      {agentList.map(a => (
+                        <SelectItem key={a.id} value={a.id} className="text-xs">
+                          {a.user?.fullName ?? a.fullCode} <span className="font-mono text-[10px] text-muted-foreground ml-1">({a.fullCode})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              {selectedRunGame && (
-                <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-center gap-3">
-                  <span className="text-sm font-mono font-bold text-primary bg-primary/10 px-2.5 py-1 rounded shrink-0">
-                    {selectedRunGame.eventNumber}
+              {selectedHistoryGame && (
+                <div className="mt-4 flex items-center gap-2 flex-wrap border-t border-border/40 pt-3 text-xs">
+                  <Badge variant="outline" className="font-mono font-bold bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400">
+                    {selectedHistoryGame.eventNumber}
+                  </Badge>
+                  <span className="font-semibold text-foreground">{selectedHistoryGame.name}</span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="text-muted-foreground">
+                    {new Date(selectedHistoryGame.goLiveAt).toLocaleDateString("en-GH", { dateStyle: "medium" })}
+                    {" – "}
+                    {new Date(selectedHistoryGame.closeAt).toLocaleDateString("en-GH", { dateStyle: "medium" })}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{selectedRunGame.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {new Date(selectedRunGame.goLiveAt).toLocaleDateString("en-GH", { dateStyle: "medium" })}
-                      {" – "}
-                      {new Date(selectedRunGame.closeAt).toLocaleDateString("en-GH", { dateStyle: "medium" })}
-                    </p>
-                  </div>
-                  <StatusBadge status={selectedRunGame.status} />
+                  <span className="text-muted-foreground">·</span>
+                  <StatusBadge status={selectedHistoryGame.status} />
                 </div>
               )}
-
-              <div className="flex items-center gap-3 pt-1">
-                <Button
-                  onClick={handleRun}
-                  disabled={runMutation.isPending || !runDate}
-                  className="h-9"
-                >
-                  {runMutation.isPending ? "Running…" : "Run Calculations"}
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Running locks all gross and wins entries for the selected date.
-                </p>
-              </div>
             </CardContent>
           </Card>
 
-          {/* Quick summary of what will be processed */}
-          {selectedRunGame && (
-            <div className="rounded-lg border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">Note: </span>
-              Calculations will process all gross and wins entries entered for{" "}
-              <span className="font-semibold text-foreground">{runDate}</span>. Select a different game
-              above to automatically jump to that event's date.
-            </div>
-          )}
-        </TabsContent>
-
-        {/* ── HISTORY TAB ── */}
-        <TabsContent value="history" className="mt-4 space-y-4">
-          <div className="bg-muted/30 border rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Filter by Game Event
-              </span>
-              {(filterAgentId || historyGameId !== "_all") && (
-                <Button
-                  size="sm" variant="ghost"
-                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => { setFilterAgentId(""); setHistoryGameId("_all"); }}
-                >
-                  Clear filters
-                </Button>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Game Event</Label>
-                <Select value={historyGameId} onValueChange={setHistoryGameId}>
-                  <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_all">All games</SelectItem>
-                    {gameList.map(g => (
-                      <SelectItem key={g.id} value={g.id}>
-                        <span className="font-mono text-xs text-muted-foreground mr-1.5">{g.eventNumber}</span>
-                        {g.name}
-                        <span className="ml-2 text-xs text-muted-foreground">· {gameCloseDate(g)}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
-                <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
-                  <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_all">All agents</SelectItem>
-                    {agentList.map(a => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.user?.fullName ?? a.fullCode} ({a.fullCode})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {selectedHistoryGame && (
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                  {selectedHistoryGame.eventNumber}
-                </span>
-                <span className="text-sm font-medium">{selectedHistoryGame.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(selectedHistoryGame.goLiveAt).toLocaleDateString("en-GH", { dateStyle: "medium" })}
-                  {" – "}
-                  {new Date(selectedHistoryGame.closeAt).toLocaleDateString("en-GH", { dateStyle: "medium" })}
-                </span>
-                <StatusBadge status={selectedHistoryGame.status} />
-              </div>
-            )}
-          </div>
-
           {/* Summary cards for the selected game */}
           {selectedHistoryGame && filteredCalcs.length > 0 && (
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {(
                 [
-                  ["Gross",      totals.gross,      ""],
-                  ["Wins",       totals.wins,        "text-destructive"],
-                  ["Commission", totals.commission,  "text-muted-foreground"],
-                  ["Net Gross",  totals.net,         ""],
-                  ["Reserve",    totals.reserve,     "text-muted-foreground"],
-                  ["Balance",    totals.balance,     totals.balance >= 0 ? "text-primary" : "text-destructive"],
-                ] as [string, number, string][]
-              ).map(([label, val, cls]) => (
-                <Card key={label}>
-                  <CardHeader className="pb-1 pt-3 px-4">
-                    <CardTitle className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{label}</CardTitle>
+                  ["Gross Sales", totals.gross, <TrendingUp className="w-3.5 h-3.5" />, "text-blue-600 dark:text-blue-400", "bg-blue-50/20 dark:bg-blue-950/10 border-blue-100/50 dark:border-blue-900/30", "Gross sales revenue"],
+                  ["Commission", totals.commission, <Percent className="w-3.5 h-3.5" />, "text-amber-600 dark:text-amber-400", "bg-amber-50/20 dark:bg-amber-950/10 border-amber-100/50 dark:border-amber-900/30", "Less commission paid (-)"],
+                  ["Net Gross", totals.net, <Wallet className="w-3.5 h-3.5" />, "text-indigo-600 dark:text-indigo-400", "bg-indigo-50/20 dark:bg-indigo-950/10 border-indigo-100/50 dark:border-indigo-900/30", "Net before reserves (=)"],
+                  ["Reserve Fund", totals.reserve, <Shield className="w-3.5 h-3.5" />, "text-purple-600 dark:text-purple-400", "bg-purple-50/20 dark:bg-purple-950/10 border-purple-100/50 dark:border-purple-900/30", "Less reserve allocation (-)"],
+                  ["Claims Wins", totals.wins, <Trophy className="w-3.5 h-3.5" />, "text-rose-600 dark:text-rose-400", "bg-rose-50/20 dark:bg-rose-950/10 border-rose-100/50 dark:border-rose-900/30", "Less claimed wins (-)"],
+                  ["Net Profit", totals.balance, <Coins className="w-3.5 h-3.5" />, totals.balance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400", totals.balance >= 0 ? "bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-100/50 dark:border-emerald-900/30" : "bg-rose-50/20 dark:bg-rose-950/10 border-rose-100/50 dark:border-rose-900/30", totals.balance >= 0 ? "Settlement surplus (=)" : "Settlement deficit (=)"],
+                ] as [string, number, React.ReactNode, string, string, string][]
+              ).map(([label, val, icon, color, bg, math]) => (
+                <Card key={label} className={`border ${bg} shadow-sm overflow-hidden relative group hover:shadow transition-shadow rounded-xl`}>
+                  <CardHeader className="pb-1 pt-3 px-3 flex flex-row items-center justify-between space-y-0">
+                    <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{label}</CardTitle>
+                    <span className={`${color} p-1 rounded-lg bg-background/50 border border-border/20`}>{icon}</span>
                   </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <p className={`text-sm font-bold font-mono ${cls}`}>{fmtGHS(val)}</p>
+                  <CardContent className="px-3 pb-2.5">
+                    <div className={`text-base font-bold`}>{fmtGHS(val)}</div>
+                    <p className="text-[9px] text-muted-foreground mt-0.5 font-medium italic">{math}</p>
                   </CardContent>
                 </Card>
               ))}
             </div>
           )}
 
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Writer</TableHead>
-                  <TableHead className="text-right">Gross</TableHead>
-                  <TableHead className="text-right">Commission</TableHead>
-                  <TableHead className="text-right">Net Gross</TableHead>
-                  <TableHead className="text-right">Wins</TableHead>
-                  <TableHead className="text-right">Reserve</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
+          <Card className="border border-border/40 shadow-sm rounded-xl overflow-hidden bg-card/65 backdrop-blur-sm">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/40">
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell>
+                    <TableHead className="text-xs font-semibold">Date</TableHead>
+                    <TableHead className="text-xs font-semibold">Writer</TableHead>
+                    <TableHead className="text-right text-xs font-semibold">Gross</TableHead>
+                    <TableHead className="text-right text-xs font-semibold">Commission</TableHead>
+                    <TableHead className="text-right text-xs font-semibold">Net Gross</TableHead>
+                    <TableHead className="text-right text-xs font-semibold">Wins</TableHead>
+                    <TableHead className="text-right text-xs font-semibold">Reserve</TableHead>
+                    <TableHead className="text-right text-xs font-semibold">Balance</TableHead>
                   </TableRow>
-                ) : filteredCalcs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
-                      {selectedHistoryGame
-                        ? `No calculations found for ${selectedHistoryGame.name} (${gameLiveDate(selectedHistoryGame)} – ${gameCloseDate(selectedHistoryGame)}).`
-                        : "No calculations found."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  <>
-                    {filteredCalcs.map(c => {
-                      const writer = writerMap[c.writerId];
-                      return (
-                        <TableRow key={c.id}>
-                          <TableCell className="text-sm">{c.calcDate?.split("T")[0]}</TableCell>
-                          <TableCell className="text-sm">
-                            <span className="font-mono">{writer?.fullCode ?? c.writerId.slice(0, 8) + "…"}</span>
-                            {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
+                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-muted-foreground/50" />
+                        Loading ledger history...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredCalcs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
+                        {selectedHistoryGame
+                          ? `No calculations found for ${selectedHistoryGame.name} (${gameLiveDate(selectedHistoryGame)} – ${gameCloseDate(selectedHistoryGame)}).`
+                          : "No calculations found."}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <>
+                      {filteredCalcs.map(c => {
+                        const writer = writerMap[c.writerId];
+                        return (
+                          <TableRow key={c.id} className="hover:bg-muted/20 border-b border-border/40 transition-colors">
+                            <TableCell className="text-xs font-mono text-muted-foreground">{c.calcDate?.split("T")[0]}</TableCell>
+                            <TableCell className="text-xs">
+                              <span className="font-mono bg-muted/45 px-1.5 py-0.5 rounded text-foreground font-semibold border border-border/30">
+                                {writer?.fullCode ?? c.writerId.slice(0, 8) + "…"}
+                              </span>
+                              {writer && <span className="text-muted-foreground/80 ml-1.5 text-xs font-medium">{writer.fullName}</span>}
+                            </TableCell>
+                            <TableCell className="text-sm text-right font-mono">{fmtGHS(Number(c.grossSales), false)}</TableCell>
+                            <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(Number(c.commissionAmount), false)}</TableCell>
+                            <TableCell className="text-sm text-right font-mono">{fmtGHS(Number(c.netGross), false)}</TableCell>
+                            <TableCell className="text-sm text-right font-mono text-destructive">{fmtGHS(Number(c.winsAmount), false)}</TableCell>
+                            <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(Number(c.reserveAmount), false)}</TableCell>
+                            <TableCell className="text-sm text-right font-mono">
+                              <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${Number(c.writerBalance) < 0 ? "bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border border-rose-100/50" : "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100/50"}`}>
+                                {fmtGHS(Number(c.writerBalance), true)}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {filteredCalcs.length > 1 && (
+                        <TableRow className="bg-muted/30 font-semibold border-t border-border">
+                          <TableCell className="text-xs text-muted-foreground" colSpan={2}>
+                            Totals — {filteredCalcs.length} rows
+                            {selectedHistoryGame && ` · ${selectedHistoryGame.eventNumber}`}
                           </TableCell>
-                          <TableCell className="text-sm text-right font-mono">GH₵ {Number(c.grossSales).toFixed(2)}</TableCell>
-                          <TableCell className="text-sm text-right font-mono text-muted-foreground">GH₵ {Number(c.commissionAmount).toFixed(2)}</TableCell>
-                          <TableCell className="text-sm text-right font-mono">GH₵ {Number(c.netGross).toFixed(2)}</TableCell>
-                          <TableCell className="text-sm text-right font-mono text-destructive">GH₵ {Number(c.winsAmount).toFixed(2)}</TableCell>
-                          <TableCell className="text-sm text-right font-mono text-muted-foreground">GH₵ {Number(c.reserveAmount).toFixed(2)}</TableCell>
-                          <TableCell className={`text-sm text-right font-mono font-semibold ${Number(c.writerBalance) < 0 ? "text-destructive" : "text-primary"}`}>
-                            GH₵ {Number(c.writerBalance).toFixed(2)}
+                          <TableCell className="text-right font-mono text-sm">{fmtGHS(totals.gross, true)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm text-muted-foreground">{fmtGHS(totals.commission, false)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">{fmtGHS(totals.net, true)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm text-destructive">{fmtGHS(totals.wins, true)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm text-muted-foreground">{fmtGHS(totals.reserve, false)}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            <span className={`px-2 py-1 rounded-lg text-xs font-bold ${totals.balance < 0 ? "bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400" : "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"}`}>
+                              {fmtGHS(totals.balance, true)}
+                            </span>
                           </TableCell>
                         </TableRow>
-                      );
-                    })}
-                    {filteredCalcs.length > 1 && (
-                      <TableRow className="bg-muted/40 font-semibold">
-                        <TableCell className="text-xs text-muted-foreground" colSpan={2}>
-                          Totals — {filteredCalcs.length} rows
-                          {selectedHistoryGame && ` · ${selectedHistoryGame.eventNumber}`}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm">GH₵ {totals.gross.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-muted-foreground">GH₵ {totals.commission.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">GH₵ {totals.net.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-destructive">GH₵ {totals.wins.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-muted-foreground">GH₵ {totals.reserve.toFixed(2)}</TableCell>
-                        <TableCell className={`text-right font-mono text-sm ${totals.balance < 0 ? "text-destructive" : "text-primary"}`}>
-                          GH₵ {totals.balance.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                      )}
+                    </>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
