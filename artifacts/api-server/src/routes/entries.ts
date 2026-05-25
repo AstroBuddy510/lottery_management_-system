@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, grossEntriesTable, winsEntriesTable, writersTable, agentsTable } from "@workspace/db";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import {
   CreateGrossEntryBody,
   UpdateGrossEntryParams,
@@ -38,10 +38,41 @@ router.get(
   async (req, res) => {
     const { writerId, dateFrom, dateTo, gameId } = req.query as Record<string, string>;
     const conditions = [];
-    if (writerId) conditions.push(eq(grossEntriesTable.writerId, writerId));
     if (dateFrom) conditions.push(gte(grossEntriesTable.entryDate, dateFrom));
     if (dateTo) conditions.push(lte(grossEntriesTable.entryDate, dateTo));
     if (gameId && gameId !== "undefined" && gameId !== "null") conditions.push(eq(grossEntriesTable.gameId, gameId));
+
+    if (req.user!.role === "agent") {
+      const [agentRecord] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, req.user!.userId))
+        .limit(1);
+      if (!agentRecord) {
+        res.status(404).json({ error: "Agent record not found" });
+        return;
+      }
+      const agentWriters = await db
+        .select({ id: writersTable.id })
+        .from(writersTable)
+        .where(eq(writersTable.agentId, agentRecord.id));
+      const agentWriterIds = agentWriters.map(w => w.id);
+      if (agentWriterIds.length === 0) {
+        res.json([]);
+        return;
+      }
+      if (writerId) {
+        if (!agentWriterIds.includes(writerId)) {
+          res.json([]);
+          return;
+        }
+        conditions.push(eq(grossEntriesTable.writerId, writerId));
+      } else {
+        conditions.push(inArray(grossEntriesTable.writerId, agentWriterIds));
+      }
+    } else if (writerId) {
+      conditions.push(eq(grossEntriesTable.writerId, writerId));
+    }
 
     const entries = await db
       .select()
@@ -138,10 +169,41 @@ router.get(
   async (req, res) => {
     const { writerId, dateFrom, dateTo, gameId } = req.query as Record<string, string>;
     const conditions = [];
-    if (writerId) conditions.push(eq(winsEntriesTable.writerId, writerId));
     if (dateFrom) conditions.push(gte(winsEntriesTable.entryDate, dateFrom));
     if (dateTo) conditions.push(lte(winsEntriesTable.entryDate, dateTo));
     if (gameId && gameId !== "undefined" && gameId !== "null") conditions.push(eq(winsEntriesTable.gameId, gameId));
+
+    if (req.user!.role === "agent") {
+      const [agentRecord] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, req.user!.userId))
+        .limit(1);
+      if (!agentRecord) {
+        res.status(404).json({ error: "Agent record not found" });
+        return;
+      }
+      const agentWriters = await db
+        .select({ id: writersTable.id })
+        .from(writersTable)
+        .where(eq(writersTable.agentId, agentRecord.id));
+      const agentWriterIds = agentWriters.map(w => w.id);
+      if (agentWriterIds.length === 0) {
+        res.json([]);
+        return;
+      }
+      if (writerId) {
+        if (!agentWriterIds.includes(writerId)) {
+          res.json([]);
+          return;
+        }
+        conditions.push(eq(winsEntriesTable.writerId, writerId));
+      } else {
+        conditions.push(inArray(winsEntriesTable.writerId, agentWriterIds));
+      }
+    } else if (writerId) {
+      conditions.push(eq(winsEntriesTable.writerId, writerId));
+    }
 
     const entries = await db
       .select()

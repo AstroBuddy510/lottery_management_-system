@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
+import { getServerNow } from "../lib/time-sync";
 import { useAuth } from "@/lib/auth";
 import { AgentDashboard } from "@/pages/agent-dashboard";
 import { CountdownTimer } from "@/pages/games";
@@ -375,8 +376,8 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
 
 function DirectorDashboard() {
   const [, navigate] = useLocation();
-  const today = new Date().toISOString().split("T")[0];
-  const todayDow = new Date().getDay();
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
+  const todayDow = new Date(getServerNow()).getDay();
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [page, setPage] = useState(1);
@@ -562,6 +563,7 @@ function DirectorDashboard() {
   const chartData = useMemo(() => {
     const grouped: Record<string, { date: string; gross: number; wins: number; net: number; balance: number }> = {};
     calcList.forEach(c => {
+      if (displayGame && c.gameId !== displayGame.id) return;
       const dateStr = c.calcDate?.split("T")[0] ?? "";
       if (!dateStr) return;
       if (!grouped[dateStr]) {
@@ -580,7 +582,7 @@ function DirectorDashboard() {
     });
     const sorted = Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
     return sorted.slice(-7);
-  }, [calcList]);
+  }, [calcList, displayGame]);
 
   // Filter agents by search query (name or agent code)
   const filteredAgentStats = useMemo(() => {
@@ -1151,7 +1153,7 @@ function DirectorDashboard() {
 
 /* ── Cashier window helpers ──────────────────────────────────────────────── */
 function cashierWindowStatus(windows: TimeWindow[]) {
-  const now   = new Date();
+  const now   = getServerNow();
   const dow   = now.getDay();
   const hhmm  = now.toTimeString().slice(0, 5);
   const active = windows.filter(w => w.isActive && w.dayOfWeek === dow);
@@ -1171,7 +1173,7 @@ function fmtHHMM12(t?: string | null) {
 
 function CashierDashboard() {
   const [, navigate] = useLocation();
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todayStr = useMemo(() => new Date(getServerNow()).toISOString().split("T")[0], []);
 
   const { data: allPaymentsRaw } = useListPayments({}, { query: { queryKey: getListPaymentsQueryKey({}) } });
   const { data: unread }         = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
@@ -1226,7 +1228,7 @@ function CashierDashboard() {
     [agentList]
   );
 
-  const dateStr = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
+  const dateStr = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(getServerNow());
 
   return (
     <div className="space-y-5">
@@ -1374,8 +1376,8 @@ function CashierDashboard() {
 }
 
 function EntryDashboard({ type }: { type: "gross" | "wins" }) {
-  const today = new Date().toISOString().split("T")[0];
-  const todayDow = new Date().getDay();
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
+  const todayDow = new Date(getServerNow()).getDay();
   const isGross = type === "gross";
 
   const { data: rawGross } = useListGrossEntries(
@@ -1435,7 +1437,7 @@ function EntryDashboard({ type }: { type: "gross" | "wins" }) {
 
   const dateStr = new Intl.DateTimeFormat("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
-  }).format(new Date());
+  }).format(getServerNow());
 
   const accentText = isGross ? "text-emerald-700" : "text-violet-700";
   const accentBg   = isGross ? "bg-emerald-50 border-emerald-200" : "bg-violet-50 border-violet-200";

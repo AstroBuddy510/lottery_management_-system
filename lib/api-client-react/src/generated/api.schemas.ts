@@ -1307,6 +1307,10 @@ export interface WalletTransaction {
   createdAt: string;
 }
 
+export type GetServerTime200 = {
+  utcTime: string;
+};
+
 export type ListUsersParams = {
 role?: string;
 isActive?: boolean;

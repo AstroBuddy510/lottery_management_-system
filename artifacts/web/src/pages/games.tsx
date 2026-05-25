@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getServerNow } from "../lib/time-sync";
 import {
   useListGames,
   useCreateGame,
@@ -64,7 +65,7 @@ export function CountdownTimer({ closeAt, status, className }: CountdownTimerPro
 
     const calculateTimeLeft = () => {
       const closeTime = new Date(closeAt).getTime();
-      const diff = closeTime - Date.now();
+      const diff = closeTime - getServerNow().getTime();
       return diff > 0 ? diff : 0;
     };
 

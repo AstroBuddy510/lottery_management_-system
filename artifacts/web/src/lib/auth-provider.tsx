@@ -7,6 +7,7 @@ import {
 import { AuthContext } from "./auth-context";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { syncServerTime, getServerNow } from "./time-sync";
 
 const INACTIVITY_MS   = 15 * 60 * 1000; // 15 minutes of no activity
 const WARN_SECONDS    = 59;              // countdown before auto-logout
@@ -31,6 +32,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [showWarning, setShowWarning] = useState(false);
   const [countdown, setCountdown] = useState(WARN_SECONDS);
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    syncServerTime();
+    const interval = setInterval(syncServerTime, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const loginMutation  = useLogin();
   const logoutMutation = useLogout();
@@ -61,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const expiry = parseTokenExpiry(accessToken);
     if (!expiry) return;
     // Refresh 2 minutes before expiry; never less than 30 s from now
-    const delay = Math.max(30_000, expiry - Date.now() - 2 * 60 * 1000);
+    const delay = Math.max(30_000, expiry - getServerNow().getTime() - 2 * 60 * 1000);
     refreshTimerRef.current = setTimeout(async () => {
       const rt = localStorage.getItem("refreshToken");
       if (!rt || !isLoggedInRef.current) return;

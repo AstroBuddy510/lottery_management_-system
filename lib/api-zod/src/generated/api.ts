@@ -236,6 +236,14 @@ export const GetMeResponse = zod.object({
 
 
 /**
+ * @summary Get current server time in UTC
+ */
+export const GetServerTimeResponse = zod.object({
+  "utcTime": zod.coerce.date()
+})
+
+
+/**
  * @summary List all users
  */
 export const ListUsersQueryParams = zod.object({

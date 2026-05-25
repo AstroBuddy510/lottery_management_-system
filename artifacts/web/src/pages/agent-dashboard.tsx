@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import { getServerNow } from "../lib/time-sync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import {
@@ -55,7 +56,7 @@ function Avatar({ name, src, size = "md", onPress, uploading }: {
 }
 
 function getGreeting() {
-  const h = new Date().getHours();
+  const h = getServerNow().getHours();
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
@@ -81,7 +82,7 @@ function resizeImageToDataUrl(file: File, maxPx: number): Promise<string> {
 }
 
 function relTime(dateStr: string): string {
-  const now = new Date();
+  const now = getServerNow();
   const d = new Date(dateStr);
   const diffMin = Math.floor((now.getTime() - d.getTime()) / 60000);
   if (diffMin < 1) return "Just now";
@@ -155,9 +156,9 @@ export function AgentDashboard() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const updatePhotoMutation = useUpdateMyPhoto();
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
   const firstName = user?.fullName?.split(" ")[0] ?? "Agent";
-  const todayLabel = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const todayLabel = new Date(getServerNow()).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 
   const handlePhotoChange = async (file: File) => {
     setPhotoUploading(true);
@@ -193,20 +194,37 @@ export function AgentDashboard() {
   const grossList = Array.isArray(grossEntries) ? grossEntries : [];
   const winsList = Array.isArray(winsEntries) ? winsEntries : [];
 
-  const todayGross = useMemo(() => grossList.reduce((s, e) => s + Number(e.grossAmount ?? 0), 0), [grossList]);
-  const todayWins  = useMemo(() => winsList.reduce((s, e) => s + Number(e.winsAmount ?? 0), 0), [winsList]);
+  const todayGross = useMemo(() => {
+    const liveGameIds = new Set(liveGames.map(g => g.id));
+    return grossList
+      .filter(e => e.gameId && liveGameIds.has(e.gameId))
+      .reduce((s, e) => s + Number(e.grossAmount ?? 0), 0);
+  }, [grossList, liveGames]);
+
+  const todayWins = useMemo(() => {
+    const liveGameIds = new Set(liveGames.map(g => g.id));
+    return winsList
+      .filter(e => e.gameId && liveGameIds.has(e.gameId))
+      .reduce((s, e) => s + Number(e.winsAmount ?? 0), 0);
+  }, [winsList, liveGames]);
+
   const activeWriters = writerList.filter(w => w.isActive).length;
   const unreadCount = unread?.count ?? 0;
 
   const recentActivity = useMemo(() => {
     type Item = { id: string; type: "sale" | "gross" | "wins"; label: string; amount: number; time: string };
+    const liveGameIds = new Set(liveGames.map(g => g.id));
     const items: Item[] = [
       ...salesList.map(s => ({ id: s.id, type: "sale" as const, label: `Sale · ${s.gameType ?? "—"}`, amount: Number(s.ticketAmount ?? 0), time: s.createdAt ?? s.saleDate ?? "" })),
-      ...grossList.map(e => ({ id: e.id, type: "gross" as const, label: "Gross Entry", amount: Number(e.grossAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
-      ...winsList.map(e => ({ id: e.id, type: "wins" as const, label: "Wins Entry", amount: Number(e.winsAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
+      ...grossList
+        .filter(e => e.gameId && liveGameIds.has(e.gameId))
+        .map(e => ({ id: e.id, type: "gross" as const, label: "Gross Entry", amount: Number(e.grossAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
+      ...winsList
+        .filter(e => e.gameId && liveGameIds.has(e.gameId))
+        .map(e => ({ id: e.id, type: "wins" as const, label: "Wins Entry", amount: Number(e.winsAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
     ];
     return items.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 6);
-  }, [salesList, grossList, winsList]);
+  }, [salesList, grossList, winsList, liveGames]);
 
   const actStyle = {
     sale:  { dot: "#3b82f6", badge: { bg: "#eff6ff", color: "#1d4ed8" }, label: "Sale"  },

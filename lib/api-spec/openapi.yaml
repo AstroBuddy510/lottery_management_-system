@@ -281,6 +281,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/User"
 
+  /auth/time:
+    get:
+      operationId: getServerTime
+      tags: [auth]
+      summary: Get current server time in UTC
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - utcTime
+                properties:
+                  utcTime:
+                    type: string
+                    format: date-time
+
   /users:
     get:
       operationId: listUsers

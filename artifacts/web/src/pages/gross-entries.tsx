@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { getServerNow } from "../lib/time-sync";
 import {
   useListGrossEntries, useCreateGrossEntry, useUpdateGrossEntry,
   useListWriters, getListGrossEntriesQueryKey, getListWritersQueryKey,
@@ -47,8 +48,8 @@ function EditIcon() {
 }
 
 function relDate(s: string) {
-  const today = new Date().toISOString().split("T")[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
+  const yesterday = new Date(getServerNow().getTime() - 86400000).toISOString().split("T")[0];
   const d = s.split("T")[0];
   if (d === today) return "Today";
   if (d === yesterday) return "Yesterday";
@@ -57,7 +58,7 @@ function relDate(s: string) {
 
 function AgentGrossView() {
   const qc = useQueryClient();
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
   const { data: myAgent } = useGetMyAgent({ query: { queryKey: getGetMyAgentQueryKey() } });
 
   const [filterWriterId, setFilterWriterId] = useState("");
@@ -72,12 +73,26 @@ function AgentGrossView() {
   });
   const writerList = Array.isArray(writers) ? writers : [];
 
+  const { data: games } = useListGames();
+  const gameList = Array.isArray(games) ? games : [];
+  const liveGames = useMemo(() => {
+    return gameList.filter(g => g.status === "live");
+  }, [gameList]);
+
   const { data: entries, isLoading } = useListGrossEntries({
     writerId: filterWriterId || undefined,
     dateFrom: filterFrom || undefined,
     dateTo: filterTo || undefined,
   });
-  const entryList = Array.isArray(entries) ? entries : [];
+  const rawEntryList = Array.isArray(entries) ? entries : [];
+  const isDefaultFilter = !filterWriterId && filterFrom === today && filterTo === today;
+  const entryList = useMemo(() => {
+    if (isDefaultFilter) {
+      const liveGameIds = new Set(liveGames.map(g => g.id));
+      return rawEntryList.filter(e => e.gameId && liveGameIds.has(e.gameId));
+    }
+    return rawEntryList;
+  }, [rawEntryList, isDefaultFilter, liveGames]);
 
   const todayTotal = entryList.filter(e => e.entryDate?.startsWith(today)).reduce((s, e) => s + Number(e.grossAmount ?? 0), 0);
 
@@ -88,12 +103,6 @@ function AgentGrossView() {
   const [editForm, setEditForm] = useState({ grossAmount: "" });
   const [changeReqEntry, setChangeReqEntry] = useState<GrossEntry | null>(null);
   const [changeReqForm, setChangeReqForm] = useState({ requestedAmount: "", reason: "" });
-
-  const { data: games } = useListGames();
-  const gameList = Array.isArray(games) ? games : [];
-  const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
-  }, [gameList]);
 
   // Fetch all gross entries for the selected date and game to verify which writers have already been entered
   const { data: dateEntries } = useListGrossEntries({
@@ -176,7 +185,6 @@ function AgentGrossView() {
     }
   };
 
-  const isDefaultFilter = !filterWriterId && filterFrom === today && filterTo === today;
   const hasFilter = !isDefaultFilter;
   const clearFilter = () => { setFilterWriterId(""); setFilterFrom(today); setFilterTo(today); };
 
@@ -517,7 +525,7 @@ function AdminGrossView() {
   });
   const writerList = Array.isArray(writers) ? writers : [];
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
   const [form, setForm] = useState({ writerId: "", entryDate: today, grossAmount: "" });
 
   // Fetch all gross entries for the selected date to verify which writers have already been entered

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, salesLogsTable, writersTable } from "@workspace/db";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { db, salesLogsTable, writersTable, agentsTable } from "@workspace/db";
+import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { CreateSaleBody } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 
@@ -9,9 +9,40 @@ const router = Router();
 router.get("/sales", requireAuth, async (req, res) => {
   const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
   const conditions = [];
-  if (writerId) conditions.push(eq(salesLogsTable.writerId, writerId));
   if (dateFrom) conditions.push(gte(salesLogsTable.saleDate, dateFrom));
   if (dateTo) conditions.push(lte(salesLogsTable.saleDate, dateTo));
+
+  if (req.user!.role === "agent") {
+    const [agentRecord] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, req.user!.userId))
+      .limit(1);
+    if (!agentRecord) {
+      res.status(404).json({ error: "Agent record not found" });
+      return;
+    }
+    const agentWriters = await db
+      .select({ id: writersTable.id })
+      .from(writersTable)
+      .where(eq(writersTable.agentId, agentRecord.id));
+    const agentWriterIds = agentWriters.map(w => w.id);
+    if (agentWriterIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    if (writerId) {
+      if (!agentWriterIds.includes(writerId)) {
+        res.json([]);
+        return;
+      }
+      conditions.push(eq(salesLogsTable.writerId, writerId));
+    } else {
+      conditions.push(inArray(salesLogsTable.writerId, agentWriterIds));
+    }
+  } else if (writerId) {
+    conditions.push(eq(salesLogsTable.writerId, writerId));
+  }
 
   const sales = await db
     .select()

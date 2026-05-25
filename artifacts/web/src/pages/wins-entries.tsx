@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { getServerNow } from "../lib/time-sync";
 import {
   useListWinsEntries, useCreateWinsEntry, useUpdateWinsEntry,
   useListWriters, getListWinsEntriesQueryKey, getListWritersQueryKey,
@@ -47,8 +48,8 @@ function EditIcon() {
 }
 
 function relDate(s: string) {
-  const today = new Date().toISOString().split("T")[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
+  const yesterday = new Date(getServerNow().getTime() - 86400000).toISOString().split("T")[0];
   const d = s.split("T")[0];
   if (d === today) return "Today";
   if (d === yesterday) return "Yesterday";
@@ -59,9 +60,10 @@ function AgentWinsView() {
   const qc = useQueryClient();
   const { data: myAgent } = useGetMyAgent({ query: { queryKey: getGetMyAgentQueryKey() } });
 
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
   const [filterWriterId, setFilterWriterId] = useState("");
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const [filterFrom, setFilterFrom] = useState(today);
+  const [filterTo, setFilterTo] = useState(today);
   const [showFilter, setShowFilter] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<WinsEntry | null>(null);
@@ -71,14 +73,27 @@ function AgentWinsView() {
   });
   const writerList = Array.isArray(writers) ? writers : [];
 
+  const { data: games } = useListGames();
+  const gameList = Array.isArray(games) ? games : [];
+  const liveGames = useMemo(() => {
+    return gameList.filter(g => g.status === "live");
+  }, [gameList]);
+
   const { data: entries, isLoading } = useListWinsEntries({
     writerId: filterWriterId || undefined,
     dateFrom: filterFrom || undefined,
     dateTo: filterTo || undefined,
   });
-  const entryList = Array.isArray(entries) ? entries : [];
+  const rawEntryList = Array.isArray(entries) ? entries : [];
+  const isDefaultFilter = !filterWriterId && filterFrom === today && filterTo === today;
+  const entryList = useMemo(() => {
+    if (isDefaultFilter) {
+      const liveGameIds = new Set(liveGames.map(g => g.id));
+      return rawEntryList.filter(e => e.gameId && liveGameIds.has(e.gameId));
+    }
+    return rawEntryList;
+  }, [rawEntryList, isDefaultFilter, liveGames]);
 
-  const today = new Date().toISOString().split("T")[0];
   const todayTotal = entryList.filter(e => e.entryDate?.startsWith(today)).reduce((s, e) => s + Number(e.winsAmount ?? 0), 0);
 
   const createMutation = useCreateWinsEntry();
@@ -88,12 +103,6 @@ function AgentWinsView() {
   const [editForm, setEditForm] = useState({ winsAmount: "" });
   const [changeReqEntry, setChangeReqEntry] = useState<WinsEntry | null>(null);
   const [changeReqForm, setChangeReqForm] = useState({ requestedAmount: "", reason: "" });
-
-  const { data: games } = useListGames();
-  const gameList = Array.isArray(games) ? games : [];
-  const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
-  }, [gameList]);
 
   // Fetch all wins entries for the selected date and game to verify which writers have already been entered
   const { data: dateEntries } = useListWinsEntries({
@@ -176,8 +185,8 @@ function AgentWinsView() {
     }
   };
 
-  const hasFilter = !!(filterWriterId || filterFrom || filterTo);
-  const clearFilter = () => { setFilterWriterId(""); setFilterFrom(""); setFilterTo(""); };
+  const hasFilter = !isDefaultFilter;
+  const clearFilter = () => { setFilterWriterId(""); setFilterFrom(today); setFilterTo(today); };
 
   return (
     <div className="pb-4">
@@ -518,7 +527,7 @@ function AdminWinsView() {
   });
   const writerList = Array.isArray(writers) ? writers : [];
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
   const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
 
   // Fetch all wins entries for the selected date to verify which writers have already been entered

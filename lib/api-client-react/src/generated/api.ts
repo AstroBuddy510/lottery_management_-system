@@ -59,6 +59,7 @@ import type {
   GeneratePayrollPeriod200,
   GetAgentReportParams,
   GetOrgReportParams,
+  GetServerTime200,
   GetWriterReportParams,
   GrossEntry,
   GrossEntryInput,
@@ -1072,6 +1073,83 @@ export function useGetMe<TData = Awaited<ReturnType<typeof getMe>>, TError = Err
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetMeQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetServerTimeUrl = () => {
+
+
+
+
+  return `/api/auth/time`
+}
+
+/**
+ * @summary Get current server time in UTC
+ */
+export const getServerTime = async ( options?: RequestInit): Promise<GetServerTime200> => {
+
+  return customFetch<GetServerTime200>(getGetServerTimeUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetServerTimeQueryKey = () => {
+    return [
+    `/api/auth/time`
+    ] as const;
+    }
+
+
+export const getGetServerTimeQueryOptions = <TData = Awaited<ReturnType<typeof getServerTime>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getServerTime>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetServerTimeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getServerTime>>> = ({ signal }) => getServerTime({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getServerTime>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetServerTimeQueryResult = NonNullable<Awaited<ReturnType<typeof getServerTime>>>
+export type GetServerTimeQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get current server time in UTC
+ */
+
+export function useGetServerTime<TData = Awaited<ReturnType<typeof getServerTime>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getServerTime>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetServerTimeQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

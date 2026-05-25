@@ -13,11 +13,6 @@ const JWT_SECRET = process.env["SESSION_SECRET"] ?? "dev-secret-change-in-prod";
 const ACCESS_TOKEN_EXPIRY = "15m";
 const REFRESH_TOKEN_EXPIRY = "7d";
 
-const refreshTokenStore = new Map<
-  string,
-  { userId: string; role: string; phone: string; expiresAt: number }
->();
-
 function generateTokens(payload: JwtPayload): {
   accessToken: string;
   refreshToken: string;
@@ -28,8 +23,6 @@ function generateTokens(payload: JwtPayload): {
   const refreshToken = jwt.sign(payload, JWT_SECRET, {
     expiresIn: REFRESH_TOKEN_EXPIRY,
   });
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
-  refreshTokenStore.set(refreshToken, { ...payload, expiresAt });
   return { accessToken, refreshToken };
 }
 
@@ -93,33 +86,26 @@ router.post("/auth/refresh", (req, res) => {
     return;
   }
   const { refreshToken } = parse.data;
-  const stored = refreshTokenStore.get(refreshToken);
-  if (!stored || stored.expiresAt < Date.now()) {
-    refreshTokenStore.delete(refreshToken);
-    res.status(401).json({ error: "Invalid or expired refresh token" });
-    return;
-  }
   try {
-    jwt.verify(refreshToken, JWT_SECRET);
+    const decoded = jwt.verify(refreshToken, JWT_SECRET) as JwtPayload;
+    const payload: JwtPayload = {
+      userId: decoded.userId,
+      role: decoded.role,
+      phone: decoded.phone,
+    };
+    const { accessToken, refreshToken: newRefreshToken } = generateTokens(payload);
+    res.json({ accessToken, refreshToken: newRefreshToken });
   } catch {
-    refreshTokenStore.delete(refreshToken);
-    res.status(401).json({ error: "Invalid refresh token" });
-    return;
+    res.status(401).json({ error: "Invalid or expired refresh token" });
   }
-  refreshTokenStore.delete(refreshToken);
-  const payload: JwtPayload = {
-    userId: stored.userId,
-    role: stored.role,
-    phone: stored.phone,
-  };
-  const { accessToken, refreshToken: newRefreshToken } = generateTokens(payload);
-  res.json({ accessToken, refreshToken: newRefreshToken });
 });
 
 router.post("/auth/logout", (req, res) => {
-  const { refreshToken } = (req.body ?? {}) as { refreshToken?: string };
-  if (refreshToken) refreshTokenStore.delete(refreshToken);
   res.json({ success: true });
+});
+
+router.get("/auth/time", (req, res) => {
+  res.json({ utcTime: new Date().toISOString() });
 });
 
 router.get("/auth/me", requireAuth, async (req, res) => {
