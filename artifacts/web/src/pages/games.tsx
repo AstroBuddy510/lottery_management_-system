@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   useListGames,
   useCreateGame,
@@ -48,6 +48,54 @@ function toLocalDatetimeInput(iso: string | undefined) {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+interface CountdownTimerProps {
+  closeAt: string;
+  status: string;
+  className?: string;
+}
+
+export function CountdownTimer({ closeAt, status, className }: CountdownTimerProps) {
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+
+  useEffect(() => {
+    if (status !== "live") return;
+
+    const calculateTimeLeft = () => {
+      const closeTime = new Date(closeAt).getTime();
+      const diff = closeTime - Date.now();
+      return diff > 0 ? diff : 0;
+    };
+
+    setTimeLeft(calculateTimeLeft());
+
+    const interval = setInterval(() => {
+      const diff = calculateTimeLeft();
+      setTimeLeft(diff);
+      if (diff <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [closeAt, status]);
+
+  if (status !== "live" || timeLeft <= 0) return null;
+
+  const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+  const mins = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+  const secs = Math.floor((timeLeft % (1000 * 60)) / 1000);
+
+  if (hours < 24) {
+    return (
+      <span className={className || "flex items-center gap-1.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50/75 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40 px-2 py-0.5 rounded-lg animate-pulse"}>
+        <Clock className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: "6s" }} />
+        {hours > 0 ? `${hours}h ` : ""}{mins}m {secs}s left
+      </span>
+    );
+  }
+  return null;
 }
 
 function getGameGradient(name: string) {
@@ -427,27 +475,6 @@ export function Games() {
     const cfg = STATUS_CONFIG[g.status] ?? STATUS_CONFIG.offline;
     const isClosed = g.status === "closed";
 
-    const renderCountdown = () => {
-      if (g.status !== "live") return null;
-      const now = Date.now();
-      const closeTime = new Date(g.closeAt).getTime();
-      const timeLeft = closeTime - now;
-      if (timeLeft <= 0) return null;
-
-      const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-      const mins = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-
-      if (hours < 24) {
-        return (
-          <span className="flex items-center gap-1.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50/75 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40 px-2 py-0.5 rounded-lg animate-pulse">
-            <Clock className="w-3 h-3" />
-            {hours}h {mins}m left
-          </span>
-        );
-      }
-      return null;
-    };
-
     return (
       <div
         key={g.id}
@@ -471,7 +498,7 @@ export function Games() {
             <Badge className={`text-[9px] uppercase tracking-wider px-2 py-0 h-5 font-bold ${cfg.className}`}>
               {cfg.label}
             </Badge>
-            {renderCountdown()}
+            <CountdownTimer closeAt={g.closeAt} status={g.status} />
           </div>
           <span className="text-[10px] font-mono font-bold text-indigo-700 dark:text-indigo-400 border border-indigo-100/60 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 px-2.5 py-0.5 rounded-lg">
             Event #{g.eventNumber}

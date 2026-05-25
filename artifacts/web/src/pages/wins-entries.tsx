@@ -4,6 +4,7 @@ import {
   useListWriters, getListWinsEntriesQueryKey, getListWritersQueryKey,
   useGetMyAgent, getGetMyAgentQueryKey, WinsEntry,
   useCreateEntryChangeRequest, getListEntryChangeRequestsQueryKey,
+  useListGames,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useAuth } from "@/lib/auth";
@@ -83,10 +84,16 @@ function AgentWinsView() {
   const createMutation = useCreateWinsEntry();
   const updateMutation = useUpdateWinsEntry();
   const changeRequestMutation = useCreateEntryChangeRequest();
-  const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
+  const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "", gameId: "" });
   const [editForm, setEditForm] = useState({ winsAmount: "" });
   const [changeReqEntry, setChangeReqEntry] = useState<WinsEntry | null>(null);
   const [changeReqForm, setChangeReqForm] = useState({ requestedAmount: "", reason: "" });
+
+  const { data: games } = useListGames();
+  const gameList = Array.isArray(games) ? games : [];
+  const liveGames = useMemo(() => {
+    return gameList.filter(g => g.status === "live");
+  }, [gameList]);
 
   // Fetch all wins entries for the selected date to verify which writers have already been entered
   const { data: dateEntries } = useListWinsEntries({
@@ -112,11 +119,15 @@ function AgentWinsView() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.gameId) {
+      toast.error("Please select a game event first.");
+      return;
+    }
     try {
       await createMutation.mutateAsync({ data: { writerId: form.writerId, entryDate: form.entryDate, winsAmount: form.winsAmount } });
       toast.success("Wins entry created");
       setCreateOpen(false);
-      setForm({ writerId: "", entryDate: today, winsAmount: "" });
+      setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" });
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to create entry");
@@ -293,7 +304,7 @@ function AgentWinsView() {
       </div>
 
       {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={o => { if (!o) setForm({ writerId: "", entryDate: today, winsAmount: "" }); setCreateOpen(o); }}>
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); setCreateOpen(o); }}>
         <DialogContent className="max-w-sm mx-4 rounded-2xl">
           <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
           {myAgent && (
@@ -304,34 +315,89 @@ function AgentWinsView() {
           )}
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Draw Game *</Label>
+              <Select
+                value={form.gameId}
+                onValueChange={gameId => {
+                  const selectedGame = liveGames.find(g => g.id === gameId);
+                  if (selectedGame) {
+                    const drawDate = selectedGame.closeAt.split("T")[0];
+                    setForm(f => ({ ...f, gameId, entryDate: drawDate, writerId: "" }));
+                  } else {
+                    setForm(f => ({ ...f, gameId: "", entryDate: today, writerId: "" }));
+                  }
+                }}
+              >
+                <SelectTrigger className="h-11 text-sm rounded-xl">
+                  <SelectValue placeholder={liveGames.length === 0 ? "No active games available" : "Select game…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {liveGames.map(g => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name} (#{g.eventNumber})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Writer</Label>
-                {usedWriterIds.size > 0 && (
+                <Label className="text-xs font-medium">Writer *</Label>
+                {form.gameId && usedWriterIds.size > 0 && (
                   <span className="text-[11px] text-muted-foreground">
                     {usedWriterIds.size}/{writerList.length} entered
                   </span>
                 )}
               </div>
-              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={availableWriters.length === 0}>
+              <Select
+                value={form.writerId}
+                onValueChange={v => setForm(f => ({ ...f, writerId: v }))}
+                disabled={!form.gameId || availableWriters.length === 0}
+              >
                 <SelectTrigger className="h-11 text-sm rounded-xl">
-                  <SelectValue placeholder={availableWriters.length === 0 ? "All writers entered for this date" : "Select writer…"} />
+                  <SelectValue placeholder={!form.gameId ? "Choose game first…" : availableWriters.length === 0 ? "All writers entered for this draw" : "Select writer…"} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Date</Label>
-              <Input type="date" value={form.entryDate} onChange={e => setForm(f => ({ ...f, entryDate: e.target.value }))} required className="h-11 text-sm rounded-xl" />
+              <Label className="text-xs font-medium text-muted-foreground">Date (Locked)</Label>
+              <Input
+                type="date"
+                value={form.entryDate}
+                disabled
+                readOnly
+                className="h-11 text-sm rounded-xl bg-muted text-muted-foreground cursor-not-allowed opacity-80"
+              />
             </div>
+
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Wins Amount (GH₵)</Label>
-              <Input type="number" step="0.01" min="0" value={form.winsAmount} onChange={e => setForm(f => ({ ...f, winsAmount: e.target.value }))} required className="h-11 text-sm rounded-xl" placeholder="0.00" inputMode="decimal" />
+              <Label className="text-xs font-medium">Wins Amount (GH₵) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.winsAmount}
+                onChange={e => setForm(f => ({ ...f, winsAmount: e.target.value }))}
+                disabled={!form.gameId}
+                required
+                className="h-11 text-sm rounded-xl"
+                placeholder="0.00"
+                inputMode="decimal"
+              />
             </div>
+
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button type="submit" className="flex-1 h-11 rounded-xl font-semibold bg-amber-600 hover:bg-amber-700" disabled={createMutation.isPending || !form.writerId}>
+              <Button
+                type="submit"
+                className="flex-1 h-11 rounded-xl font-semibold bg-amber-600 hover:bg-amber-700"
+                disabled={createMutation.isPending || !form.gameId || !form.writerId || !form.winsAmount}
+              >
                 {createMutation.isPending ? "Saving…" : "Add Entry"}
               </Button>
             </DialogFooter>

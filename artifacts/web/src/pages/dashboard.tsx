@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { AgentDashboard } from "@/pages/agent-dashboard";
+import { CountdownTimer } from "@/pages/games";
 import {
   useListAgents, useGetReserveBalance, useGetUnreadCount,
   useListCalculations, useListPayments, useListGrossEntries,
@@ -19,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectLabel, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtGHS } from "@/lib/utils";
 
 // Lucide icons for premium styling
@@ -423,9 +424,17 @@ function DirectorDashboard() {
 
   const viewDate = selectedDate || mostRecentDate;
 
-  const currentGame = useMemo(() => {
-    return gameList.find(g => g.status === "live") ?? null;
+  const liveGames = useMemo(() => {
+    return gameList.filter(g => g.status === "live");
   }, [gameList]);
+
+  const otherGames = useMemo(() => {
+    return gameList.filter(g => g.status !== "live");
+  }, [gameList]);
+
+  const currentGame = useMemo(() => {
+    return liveGames[0] ?? null;
+  }, [liveGames]);
 
   const handleGameSelect = (id: string) => {
     setSelectedGameId(id);
@@ -620,7 +629,10 @@ function DirectorDashboard() {
                 <span className="text-sm font-mono font-bold text-accent px-1.5 py-0.5 rounded bg-white/10">{displayGame.eventNumber}</span>
                 <span className="text-base font-extrabold tracking-tight leading-tight">{displayGame.name}</span>
                 {displayGame.status === "live" && (
-                  <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold border-none text-[10px] px-2 py-0.5 shadow-sm shadow-emerald-500/20">LIVE</Badge>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold border-none text-[10px] px-2 py-0.5 shadow-sm shadow-emerald-500/20">LIVE</Badge>
+                    <CountdownTimer closeAt={displayGame.closeAt} status={displayGame.status} className="flex items-center gap-1.5 text-[9px] font-bold text-yellow-300 bg-white/10 border border-white/20 px-2 py-0.5 rounded-lg animate-pulse" />
+                  </div>
                 )}
                 {displayGame.status === "closed" && (
                   <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-white/15 text-white border-none">Closed</Badge>
@@ -629,6 +641,29 @@ function DirectorDashboard() {
             </>
           ) : (
             <span className="text-sm text-muted-foreground font-medium">No active game for {DAY_NAMES[todayDow]}</span>
+          )}
+
+          {/* Alternative Quick Switch Pills of active games */}
+          {liveGames.length > 0 && (
+            <div className="flex items-center gap-2 mt-2.5 overflow-x-auto pb-1 scrollbar-none">
+              <span className="text-[9px] uppercase font-extrabold text-white/50 tracking-wider whitespace-nowrap">Active Games:</span>
+              {liveGames.map(g => {
+                const isSelected = displayGame?.id === g.id;
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => handleGameSelect(g.id)}
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-all shrink-0 whitespace-nowrap ${
+                      isSelected
+                        ? "bg-accent text-white shadow-sm ring-1 ring-white/25"
+                        : "bg-white/10 text-white/90 hover:bg-white/25"
+                    }`}
+                  >
+                    🟢 {g.name} (#{g.eventNumber})
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
         
@@ -646,15 +681,30 @@ function DirectorDashboard() {
               <SelectItem value="_live">
                 {currentGame ? `Current: ${currentGame.eventNumber}` : "Current game (live)"}
               </SelectItem>
-              {gameList
-                .filter(g => g.status !== "live")
-                .sort((a, b) => b.eventNumber.localeCompare(a.eventNumber))
-                .map(g => (
-                  <SelectItem key={g.id} value={g.id}>
-                    <span className="font-mono text-xs text-muted-foreground mr-1.5">{g.eventNumber}</span>
-                    {g.name}
-                  </SelectItem>
-                ))}
+              {liveGames.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Active (Live) Games</SelectLabel>
+                  {liveGames.map(g => (
+                    <SelectItem key={g.id} value={g.id}>
+                      <span className="font-mono text-xs text-muted-foreground mr-1.5">🟢 #{g.eventNumber}</span>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
+              {otherGames.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel className="text-xs font-bold text-muted-foreground">Closed / Offline Games</SelectLabel>
+                  {otherGames
+                    .sort((a, b) => b.eventNumber.localeCompare(a.eventNumber))
+                    .map(g => (
+                      <SelectItem key={g.id} value={g.id}>
+                        <span className="font-mono text-xs text-muted-foreground mr-1.5">#{g.eventNumber}</span>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
+              )}
             </SelectContent>
           </Select>
           {selectedGameId && selectedGameId !== "_live" && selectedGameId !== "_none" && (
@@ -1341,8 +1391,8 @@ function EntryDashboard({ type }: { type: "gross" | "wins" }) {
   const { writerMap } = useWriterLookup();
 
   const gameList = Array.isArray(games) ? games : [];
-  const currentGame = useMemo(() => {
-    return gameList.find(g => g.status === "live") ?? null;
+  const liveGames = useMemo(() => {
+    return gameList.filter(g => g.status === "live");
   }, [gameList]);
 
   const grossList = Array.isArray(rawGross) ? rawGross : [];
@@ -1407,7 +1457,11 @@ function EntryDashboard({ type }: { type: "gross" | "wins" }) {
           </div>
           <div className="text-xs text-muted-foreground mt-0.5 truncate">
             {dateStr}
-            {currentGame && <span className="ml-2 font-medium text-foreground">· 🎮 {currentGame.name}</span>}
+            {liveGames.length > 0 && (
+              <span className="ml-2 font-medium text-foreground">
+                · 🎮 {liveGames.map(g => g.name).join(", ")}
+              </span>
+            )}
           </div>
         </div>
         {(unread?.count ?? 0) > 0 && (

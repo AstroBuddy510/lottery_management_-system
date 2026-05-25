@@ -13,6 +13,7 @@ import {
 import { fmtGHS } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { CountdownTimer } from "@/pages/games";
 
 const AVATAR_COLORS = [
   "#2563eb","#059669","#7c3aed","#ea580c",
@@ -183,8 +184,8 @@ export function AgentDashboard() {
   const { data: games } = useListGames();
 
   const gameList = Array.isArray(games) ? games : [];
-  const liveGame = useMemo(() => {
-    return gameList.find(g => g.status === "live") ?? null;
+  const liveGames = useMemo(() => {
+    return gameList.filter(g => g.status === "live");
   }, [gameList]);
 
   const writerList = Array.isArray(writers) ? writers : [];
@@ -289,32 +290,37 @@ export function AgentDashboard() {
             <span className="text-white/80 text-xs font-medium">{todayLabel}</span>
           </div>
 
-          {/* Active Game Event Card */}
-          {liveGame ? (
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1">
-              {liveGame.logoUrl ? (
-                <img src={liveGame.logoUrl} alt={liveGame.name} className="w-10 h-10 object-contain rounded bg-white p-1 shadow-sm flex-shrink-0" />
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 shadow-inner">
-                  🎮
+          {/* Active Game Event Cards */}
+          {liveGames.length > 0 ? (
+            <div className="space-y-2 w-full">
+              {liveGames.map(g => (
+                <div key={g.id} className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1">
+                  {g.logoUrl ? (
+                    <img src={g.logoUrl} alt={g.name} className="w-10 h-10 object-contain rounded bg-white p-1 shadow-sm flex-shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 shadow-inner">
+                      🎮
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[9px] font-bold text-white/70 uppercase tracking-wider block">
+                      Active Game Event
+                    </span>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      <span className="text-xs font-mono font-bold text-yellow-300 px-1.5 py-0.5 bg-white/10 rounded">
+                        {g.eventNumber}
+                      </span>
+                      <span className="text-sm font-black tracking-tight leading-tight text-white truncate">
+                        {g.name}
+                      </span>
+                      <span className="text-[9px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                        LIVE
+                      </span>
+                      <CountdownTimer closeAt={g.closeAt} status={g.status} className="flex items-center gap-1.5 text-[9px] font-bold text-yellow-300 bg-white/10 border border-white/20 px-2 py-0.5 rounded-lg animate-pulse" />
+                    </div>
+                  </div>
                 </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <span className="text-[9px] font-bold text-white/70 uppercase tracking-wider block">
-                  Active Game Event
-                </span>
-                <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                  <span className="text-xs font-mono font-bold text-yellow-300 px-1.5 py-0.5 bg-white/10 rounded">
-                    {liveGame.eventNumber}
-                  </span>
-                  <span className="text-sm font-black tracking-tight leading-tight text-white">
-                    {liveGame.name}
-                  </span>
-                  <span className="text-[9px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-                    LIVE
-                  </span>
-                </div>
-              </div>
+              ))}
             </div>
           ) : (
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1 text-white/60 text-xs font-semibold">
