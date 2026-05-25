@@ -37,9 +37,19 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { LayoutGrid, List } from "lucide-react";
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function getTemplateGradient(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `linear-gradient(135deg, hsl(${hue}, 70%, 55%), hsl(${(hue + 40) % 360}, 75%, 45%))`;
+}
 
 function pctDisplay(raw: string | undefined) {
   if (!raw) return "—";
@@ -119,7 +129,7 @@ export function Settings() {
   const [templateForm, setTemplateForm] = useState({
     name: "", dayOfWeek: "1", logoUrl: "", description: "", isActive: true
   });
-
+  const [templateViewMode, setTemplateViewMode] = useState<"list" | "grid">("grid");
   const templateList = Array.isArray(templates) ? templates : [];
 
   const handleLogoUpload = async (file: File) => {
@@ -533,63 +543,137 @@ export function Settings() {
                     Configure recurring games played on specific days of the week.
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={() => { setTemplateForm({ name: "", dayOfWeek: "1", logoUrl: "", description: "", isActive: true }); setTemplateOpen(true); }}>
-                  + Add Template
-                </Button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center border rounded-md p-0.5 bg-muted/40">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={templateViewMode === "grid" ? "secondary" : "ghost"}
+                      className="h-7 w-7 p-0"
+                      onClick={() => setTemplateViewMode("grid")}
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={templateViewMode === "list" ? "secondary" : "ghost"}
+                      className="h-7 w-7 p-0"
+                      onClick={() => setTemplateViewMode("list")}
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Button size="sm" onClick={() => { setTemplateForm({ name: "", dayOfWeek: "1", logoUrl: "", description: "", isActive: true }); setTemplateOpen(true); }}>
+                    + Add Template
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Logo</TableHead>
-                      <TableHead>Game Name</TableHead>
-                      <TableHead>Day of Week</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-28">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loadingTemplates ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell></TableRow>
-                    ) : templateList.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No game templates yet. Add your first template.</TableCell></TableRow>
-                    ) : templateList.map(tmpl => (
-                      <TableRow key={tmpl.id}>
-                        <TableCell className="w-16">
-                          {tmpl.logoUrl ? (
-                            <img src={tmpl.logoUrl} alt={tmpl.name} className="w-10 h-10 object-contain rounded bg-muted p-1" />
-                          ) : (
-                            <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">No Logo</div>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium text-sm">{tmpl.name}</TableCell>
-                        <TableCell className="text-sm">
-                           {tmpl.dayOfWeek === 7 ? (
-                             <span className="font-semibold text-indigo-600 dark:text-indigo-400">Generic (Everyday)</span>
-                           ) : (
-                             DAY_NAMES[tmpl.dayOfWeek]
-                           )}
-                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{tmpl.description ?? <span className="italic">—</span>}</TableCell>
-                        <TableCell>
-                          <Badge variant={tmpl.isActive ? "default" : "secondary"} className="text-xs">
-                            {tmpl.isActive ? "Active" : "Inactive"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditTemplate(tmpl)}>Edit</Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteTemplate(tmpl)}>Delete</Button>
-                          </div>
-                        </TableCell>
+              {loadingTemplates ? (
+                <div className="text-center py-12 text-muted-foreground text-sm border rounded-lg bg-muted/10">Loading…</div>
+              ) : templateList.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground text-sm border rounded-lg bg-muted/10">No game templates yet. Add your first template.</div>
+              ) : templateViewMode === "list" ? (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Logo</TableHead>
+                        <TableHead>Game Name</TableHead>
+                        <TableHead>Day of Week</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-28">Action</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {templateList.map(tmpl => (
+                        <TableRow key={tmpl.id}>
+                          <TableCell className="w-16">
+                            {tmpl.logoUrl ? (
+                              <img src={tmpl.logoUrl} alt={tmpl.name} className="w-10 h-10 object-contain rounded bg-muted p-1" />
+                            ) : (
+                              <div className="w-10 h-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">No Logo</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-medium text-sm">{tmpl.name}</TableCell>
+                          <TableCell className="text-sm">
+                             {tmpl.dayOfWeek === 7 ? (
+                               <span className="font-semibold text-indigo-600 dark:text-indigo-400">Generic (Everyday)</span>
+                             ) : (
+                               DAY_NAMES[tmpl.dayOfWeek]
+                             )}
+                           </TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{tmpl.description ?? <span className="italic">—</span>}</TableCell>
+                          <TableCell>
+                            <Badge variant={tmpl.isActive ? "default" : "secondary"} className="text-xs">
+                              {tmpl.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEditTemplate(tmpl)}>Edit</Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeleteTemplate(tmpl)}>Delete</Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {templateList.map(tmpl => (
+                    <Card key={tmpl.id} className="overflow-hidden hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 border-border/80 bg-background/50 flex flex-col justify-between">
+                      <div>
+                        {/* Upper Header Card Area */}
+                        <div className="h-24 w-full relative flex items-center justify-center border-b border-border/40" style={{ background: tmpl.logoUrl ? 'var(--muted)' : getTemplateGradient(tmpl.name) }}>
+                          {tmpl.logoUrl ? (
+                            <img src={tmpl.logoUrl} alt={tmpl.name} className="w-16 h-16 object-contain rounded bg-background p-1.5 shadow-sm" />
+                          ) : (
+                            <span className="text-white font-bold text-2xl drop-shadow-md tracking-wider">
+                              {tmpl.name.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                          <div className="absolute top-2 right-2">
+                            <Badge variant={tmpl.isActive ? "default" : "secondary"} className="text-[10px] h-5 px-1.5 font-medium shadow-sm">
+                              {tmpl.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                          </div>
+                        </div>
+                        {/* Content Area */}
+                        <div className="p-4 space-y-2 flex-grow">
+                          <h4 className="font-semibold text-sm leading-tight text-foreground">{tmpl.name}</h4>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] text-muted-foreground">Schedule:</span>
+                            {tmpl.dayOfWeek === 7 ? (
+                              <Badge className="bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400 text-[10px] py-0 px-1.5 h-4.5 border-indigo-200/50 hover:bg-indigo-50/80">
+                                Everyday
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4.5 font-medium text-blue-600 border-blue-200/40 bg-blue-50/20">
+                                {DAY_NAMES[tmpl.dayOfWeek]}
+                              </Badge>
+                            )}
+                          </div>
+                          {tmpl.description ? (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed">{tmpl.description}</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground/40 italic mt-1">No description provided</p>
+                          )}
+                        </div>
+                      </div>
+                      {/* Action Area */}
+                      <div className="p-3 bg-muted/20 border-t border-border/30 flex items-center justify-end gap-1.5">
+                        <Button size="sm" variant="outline" className="h-7 text-xs px-2.5 font-medium" onClick={() => openEditTemplate(tmpl)}>Edit</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2.5 font-medium text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDeleteTemplate(tmpl)}>Delete</Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

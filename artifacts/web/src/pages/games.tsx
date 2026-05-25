@@ -96,12 +96,18 @@ function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel, i
   };
 
   const dayOfWeek = getSelectedDayOfWeek();
-  const filteredTemplates = templateList.filter(
-    (t) => t.isActive && (dayOfWeek === null || t.dayOfWeek === dayOfWeek || t.dayOfWeek === 7)
+  const activeTemplates = templateList.filter(t => t.isActive);
+
+  const matchingTemplates = activeTemplates.filter(
+    (t) => dayOfWeek === null || t.dayOfWeek === dayOfWeek || t.dayOfWeek === 7
+  );
+
+  const otherTemplates = activeTemplates.filter(
+    (t) => dayOfWeek !== null && t.dayOfWeek !== dayOfWeek && t.dayOfWeek !== 7
   );
 
   const handleSelectTemplate = (templateId: string) => {
-    const selectedTmpl = filteredTemplates.find(t => t.id === templateId);
+    const selectedTmpl = activeTemplates.find(t => t.id === templateId);
     if (selectedTmpl) {
       setForm(f => ({
         ...f,
@@ -145,7 +151,7 @@ function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel, i
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Game Name *</Label>
+        <Label className="text-xs font-medium">Game Template *</Label>
         {isEdit ? (
           <Input
             value={form.name}
@@ -156,25 +162,40 @@ function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel, i
           />
         ) : (
           <div>
-            {!form.goLiveAt ? (
-              <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/60 rounded px-3 py-2 font-medium">
-                Please select a "Goes Live" date first to view the templates scheduled for that day.
-              </div>
-            ) : filteredTemplates.length === 0 ? (
+            {activeTemplates.length === 0 ? (
               <div className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/60 rounded px-3 py-2 font-medium">
-                No templates configured for {dayOfWeek !== null ? DAY_NAMES[dayOfWeek] : "this day"}. Please configure templates in Settings.
+                No active templates configured. Please configure templates in Settings first.
               </div>
             ) : (
               <select
-                value={filteredTemplates.find(t => t.name === form.name)?.id || ""}
+                value={activeTemplates.find(t => t.name === form.name)?.id || ""}
                 onChange={(e) => handleSelectTemplate(e.target.value)}
                 required
                 className="w-full h-9 rounded border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
               >
                 <option value="">-- Choose Template --</option>
-                {filteredTemplates.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
+                {dayOfWeek === null ? (
+                  activeTemplates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))
+                ) : (
+                  <>
+                    {matchingTemplates.length > 0 && (
+                      <optgroup label={`Scheduled for ${DAY_NAMES[dayOfWeek]} (or Everyday)`}>
+                        {matchingTemplates.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherTemplates.length > 0 && (
+                      <optgroup label="Other Templates">
+                        {otherTemplates.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </>
+                )}
               </select>
             )}
           </div>
