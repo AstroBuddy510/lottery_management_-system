@@ -566,7 +566,13 @@ export function Settings() {
                           )}
                         </TableCell>
                         <TableCell className="font-medium text-sm">{tmpl.name}</TableCell>
-                        <TableCell className="text-sm">{DAY_NAMES[tmpl.dayOfWeek]}</TableCell>
+                        <TableCell className="text-sm">
+                           {tmpl.dayOfWeek === 7 ? (
+                             <span className="font-semibold text-indigo-600 dark:text-indigo-400">Generic (Everyday)</span>
+                           ) : (
+                             DAY_NAMES[tmpl.dayOfWeek]
+                           )}
+                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{tmpl.description ?? <span className="italic">—</span>}</TableCell>
                         <TableCell>
                           <Badge variant={tmpl.isActive ? "default" : "secondary"} className="text-xs">
@@ -765,6 +771,7 @@ export function Settings() {
               <Label className="text-xs">Day of Week</Label>
               <select value={templateForm.dayOfWeek} onChange={e => setTemplateForm(f => ({ ...f, dayOfWeek: e.target.value }))} className="w-full h-9 rounded border border-input bg-background px-3 text-sm">
                 {DAY_NAMES.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
+                <option value="7">Generic (Everyday)</option>
               </select>
             </div>
             <div className="space-y-1.5">
@@ -805,6 +812,7 @@ export function Settings() {
               <Label className="text-xs">Day of Week</Label>
               <select value={templateForm.dayOfWeek} onChange={e => setTemplateForm(f => ({ ...f, dayOfWeek: e.target.value }))} className="w-full h-9 rounded border border-input bg-background px-3 text-sm">
                 {DAY_NAMES.map((d, i) => <option key={i} value={String(i)}>{d}</option>)}
+                <option value="7">Generic (Everyday)</option>
               </select>
             </div>
             <div className="space-y-1.5">

@@ -965,7 +965,7 @@ export interface GameTemplate {
   name: string;
   /**
      * @minimum 0
-     * @maximum 6
+     * @maximum 7
      */
   dayOfWeek: number;
   /** @nullable */
@@ -981,7 +981,7 @@ export interface CreateGameTemplateBody {
   name: string;
   /**
      * @minimum 0
-     * @maximum 6
+     * @maximum 7
      */
   dayOfWeek: number;
   logoUrl?: string;
@@ -993,7 +993,7 @@ export interface UpdateGameTemplateBody {
   name?: string;
   /**
      * @minimum 0
-     * @maximum 6
+     * @maximum 7
      */
   dayOfWeek?: number;
   /** @nullable */

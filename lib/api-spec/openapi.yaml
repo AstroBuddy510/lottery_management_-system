@@ -3323,7 +3323,7 @@ components:
         dayOfWeek:
           type: integer
           minimum: 0
-          maximum: 6
+          maximum: 7
         logoUrl:
           type: ["string", "null"]
         description:
@@ -3344,7 +3344,7 @@ components:
         dayOfWeek:
           type: integer
           minimum: 0
-          maximum: 6
+          maximum: 7
         logoUrl:
           type: string
         description:
@@ -3360,7 +3360,7 @@ components:
         dayOfWeek:
           type: integer
           minimum: 0
-          maximum: 6
+          maximum: 7
         logoUrl:
           type: ["string", "null"]
         description:

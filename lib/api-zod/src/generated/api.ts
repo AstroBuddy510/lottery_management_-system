@@ -80,7 +80,7 @@ export const DeleteGameParams = zod.object({
  * @summary List all game templates
  */
 export const listGameTemplatesResponseDayOfWeekMin = 0;
-export const listGameTemplatesResponseDayOfWeekMax = 6;
+export const listGameTemplatesResponseDayOfWeekMax = 7;
 
 
 
@@ -101,7 +101,7 @@ export const ListGameTemplatesResponse = zod.array(ListGameTemplatesResponseItem
  * @summary Create a game template
  */
 export const createGameTemplateBodyDayOfWeekMin = 0;
-export const createGameTemplateBodyDayOfWeekMax = 6;
+export const createGameTemplateBodyDayOfWeekMax = 7;
 
 
 
@@ -122,7 +122,7 @@ export const UpdateGameTemplateParams = zod.object({
 })
 
 export const updateGameTemplateBodyDayOfWeekMin = 0;
-export const updateGameTemplateBodyDayOfWeekMax = 6;
+export const updateGameTemplateBodyDayOfWeekMax = 7;
 
 
 
@@ -135,7 +135,7 @@ export const UpdateGameTemplateBody = zod.object({
 })
 
 export const updateGameTemplateResponseDayOfWeekMin = 0;
-export const updateGameTemplateResponseDayOfWeekMax = 6;
+export const updateGameTemplateResponseDayOfWeekMax = 7;
 
 
 

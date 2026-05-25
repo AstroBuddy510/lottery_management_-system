@@ -97,7 +97,7 @@ function GameForm({ form, setForm, onSubmit, isPending, submitLabel, onCancel, i
 
   const dayOfWeek = getSelectedDayOfWeek();
   const filteredTemplates = templateList.filter(
-    (t) => t.isActive && (dayOfWeek === null || t.dayOfWeek === dayOfWeek)
+    (t) => t.isActive && (dayOfWeek === null || t.dayOfWeek === dayOfWeek || t.dayOfWeek === 7)
   );
 
   const handleSelectTemplate = (templateId: string) => {

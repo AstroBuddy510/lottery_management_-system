@@ -30,8 +30,8 @@ router.post(
       isActive?: boolean;
     };
 
-    if (!name || dayOfWeek === undefined || dayOfWeek < 0 || dayOfWeek > 6) {
-      res.status(400).json({ error: "name and valid dayOfWeek (0-6) are required" });
+    if (!name || dayOfWeek === undefined || dayOfWeek < 0 || dayOfWeek > 7) {
+      res.status(400).json({ error: "name and valid dayOfWeek (0-7) are required" });
       return;
     }
 
@@ -88,8 +88,8 @@ router.put(
 
       if (name !== undefined) updates.name = name;
       if (dayOfWeek !== undefined) {
-        if (dayOfWeek < 0 || dayOfWeek > 6) {
-          res.status(400).json({ error: "dayOfWeek must be between 0 and 6" });
+        if (dayOfWeek < 0 || dayOfWeek > 7) {
+          res.status(400).json({ error: "dayOfWeek must be between 0 and 7" });
           return;
         }
         updates.dayOfWeek = dayOfWeek;
