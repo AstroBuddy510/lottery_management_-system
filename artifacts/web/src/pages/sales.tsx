@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { getServerNow } from "../lib/time-sync";
 import {
   useListSales, useCreateSale, useListWriters,
   useGetMyAgent, getGetMyAgentQueryKey,
   getListSalesQueryKey, getListWritersQueryKey,
+  useListGrossEntries, useListWinsEntries,
+  useGetSettings,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useAuth } from "@/lib/auth";
@@ -86,6 +89,59 @@ function AgentSalesView() {
   const todaySales = salesList.filter(s => s.saleDate?.startsWith(today));
   const totalAmount = salesList.reduce((s, sale) => s + Number(sale.ticketAmount ?? 0), 0);
 
+  const { data: settings } = useGetSettings();
+  const commPct = Number(settings?.commissionPct ?? 0);
+  const resvPct = Number(settings?.reservePct ?? 0);
+
+  const { data: grossEntries } = useListGrossEntries({
+    writerId: filterWriterId || undefined,
+    dateFrom: filterFrom || today,
+    dateTo: filterTo || today,
+  });
+
+  const { data: winsEntries } = useListWinsEntries({
+    writerId: filterWriterId || undefined,
+    dateFrom: filterFrom || today,
+    dateTo: filterTo || today,
+  });
+
+  const grossList = Array.isArray(grossEntries) ? grossEntries : [];
+  const winsList = Array.isArray(winsEntries) ? winsEntries : [];
+
+  const grossSum = useMemo(() => {
+    return grossList.reduce((s, e) => s + Number(e.grossAmount ?? 0), 0);
+  }, [grossList]);
+
+  const winsSum = useMemo(() => {
+    return winsList.reduce((s, e) => s + Number(e.winsAmount ?? 0), 0);
+  }, [winsList]);
+
+  const commissionSum = useMemo(() => {
+    return grossSum * commPct;
+  }, [grossSum, commPct]);
+
+  const netGrossSum = useMemo(() => {
+    return grossSum - commissionSum;
+  }, [grossSum, commissionSum]);
+
+  const reserveSum = useMemo(() => {
+    return netGrossSum * resvPct;
+  }, [netGrossSum, resvPct]);
+
+  const balanceSum = useMemo(() => {
+    return netGrossSum - winsSum - reserveSum;
+  }, [netGrossSum, winsSum, reserveSum]);
+
+  const submittedWritersCount = useMemo(() => {
+    return new Set(grossList.map(e => e.writerId)).size;
+  }, [grossList]);
+
+  const totalWritersCount = useMemo(() => {
+    return agentWriters.filter(w => w.isActive).length;
+  }, [agentWriters]);
+
+  const submitPercentage = totalWritersCount > 0 ? (submittedWritersCount / totalWritersCount) * 100 : 0;
+
   return (
     <div className="pb-4">
       {/* Header */}
@@ -157,6 +213,64 @@ function AgentSalesView() {
             </div>
           </div>
         )}
+
+        {/* Real-time Transaction Summary Card */}
+        <div className="mt-4 bg-card border border-border/60 rounded-2xl overflow-hidden shadow-sm">
+          <div className="bg-muted/30 border-b border-border/40 px-4 py-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-foreground">Real-time Transaction Summary</h2>
+              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+                {filterFrom || filterTo
+                  ? `${filterFrom || "Start"} to ${filterTo || "End"}`
+                  : "Today's Live Progress"}
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/50 px-2.5 py-0.5 rounded-full shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+              LIVE
+            </span>
+          </div>
+
+          <div className="px-4 py-4 grid grid-cols-2 sm:grid-cols-3 gap-x-5 gap-y-3.5">
+            {[
+              { label: "Gross Sales", value: grossSum, isBalance: false },
+              { label: "Net Gross", value: netGrossSum, isBalance: false },
+              { label: "Commission", value: commissionSum, isBalance: false },
+              { label: "Wins Claimed", value: winsSum, isBalance: false },
+              { label: "Reserve Pool", value: reserveSum, isBalance: false },
+              { label: "Current Balance", value: balanceSum, isBalance: true },
+            ].map(({ label, value, isBalance }) => (
+              <div key={label} className="flex flex-col">
+                <span className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80">
+                  {label}
+                </span>
+                <span className={`text-sm font-bold font-mono mt-0.5 ${
+                  isBalance && value < 0 ? "text-rose-600 dark:text-rose-400"
+                  : isBalance ? "text-primary"
+                  : "text-foreground"
+                }`}>
+                  {fmtGHS(value)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Writer Submissions Progress Bar */}
+          <div className="px-4 pb-3.5 space-y-1.5 bg-muted/5 border-t border-border/40 pt-3">
+            <div className="flex justify-between text-xs font-semibold text-muted-foreground">
+              <span>Writer Submissions</span>
+              <span className="font-mono text-foreground font-bold">{submittedWritersCount}/{totalWritersCount}</span>
+            </div>
+            <div className="w-full bg-muted/65 dark:bg-muted/20 h-1.5 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${
+                  submitPercentage === 100 ? "bg-emerald-500" : "bg-primary"
+                }`}
+                style={{ width: `${submitPercentage}%` }}
+              />
+            </div>
+          </div>
+        </div>
 
         {/* Sale cards list */}
         <div className="mt-4 space-y-2.5">
