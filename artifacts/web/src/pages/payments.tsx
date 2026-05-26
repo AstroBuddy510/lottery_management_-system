@@ -21,6 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
+import { generateDailySettlementPDF } from "@/lib/pdf-generator";
 import {
   Banknote,
   Coins,
@@ -516,11 +517,37 @@ export function Payments() {
                 </Button>
               )}
             </div>
-            {boardCalcs.length === 0 && (
-              <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-500/10 text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-0.5 rounded-lg shadow-sm">
-                No calculations run for this date
-              </Badge>
-            )}
+            <div className="flex items-center gap-3">
+              {boardCalcs.length === 0 && (
+                <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-500/10 text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-0.5 rounded-lg shadow-sm">
+                  No calculations run for this date
+                </Badge>
+              )}
+              <Button
+                onClick={() => {
+                  const agentMapObj: Record<string, string> = {};
+                  Object.entries(agentMap).forEach(([id, info]) => {
+                    if (info) {
+                      agentMapObj[id] = `${info.code} (${info.name})`;
+                    }
+                  });
+                  generateDailySettlementPDF(
+                    boardDate,
+                    boardTotalCollected,
+                    boardTotalOut,
+                    boardTotalCollected - boardTotalOut,
+                    boardPayments,
+                    agentMapObj
+                  );
+                }}
+                disabled={boardPayments.length === 0}
+                size="sm"
+                className="bg-[#ff6700] hover:bg-[#ff6700]/90 text-white flex items-center gap-1.5 font-semibold rounded-xl h-9 px-3"
+              >
+                <Printer className="w-4 h-4" />
+                Print Settlement PDF
+              </Button>
+            </div>
           </div>
 
           {/* Settlement table */}

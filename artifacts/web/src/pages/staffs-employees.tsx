@@ -34,6 +34,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { generatePayrollPDF } from "@/lib/pdf-generator";
 import { 
   Calendar as CalendarIcon, 
   Users, 
@@ -142,10 +143,26 @@ export function StaffsEmployees() {
           <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">Staffs & Employees</h1>
           <p className="text-xs text-muted-foreground mt-0.5 font-medium">Manage company staff payroll, agency staff remunerations, and salary wallet.</p>
         </div>
-        <Button onClick={handleGeneratePeriod} disabled={generatePeriodMutation.isPending} className="gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 text-xs h-9">
-          <RefreshCw className={`h-3.5 w-3.5 ${generatePeriodMutation.isPending ? "animate-spin" : ""}`} />
-          Generate This Month's Payroll
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {payments && payments.length > 0 && (
+            <Button
+              onClick={() => {
+                const firstP = payments[0];
+                const periodLabel = firstP
+                  ? format(new Date(firstP.periodYear, firstP.periodMonth - 1, 1), "MMMM yyyy")
+                  : format(new Date(), "MMMM yyyy");
+                generatePayrollPDF(periodLabel, payments);
+              }}
+              className="gap-2 bg-[#ff6700] hover:bg-[#ff6700]/90 text-white rounded-xl shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 text-xs h-9 font-semibold"
+            >
+              Export Payroll PDF
+            </Button>
+          )}
+          <Button onClick={handleGeneratePeriod} disabled={generatePeriodMutation.isPending} className="gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 text-xs h-9">
+            <RefreshCw className={`h-3.5 w-3.5 ${generatePeriodMutation.isPending ? "animate-spin" : ""}`} />
+            Generate This Month's Payroll
+          </Button>
+        </div>
       </div>
 
       {/* KPI Stats Grid */}

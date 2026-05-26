@@ -75,6 +75,8 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "pigeon-maps": "^0.22.1",
     "qrcode.react": "^4.2.0"
   }

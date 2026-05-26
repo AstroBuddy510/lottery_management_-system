@@ -18,6 +18,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  generateWriterReportPDF,
+  generateAgentReportPDF,
+  generateOrgReportPDF,
+  generateGameSalesReportPDF,
+} from "@/lib/pdf-generator";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,24 +102,34 @@ function TotalsGrid({ t, label }: { t: ReportTotals; label?: string }) {
   );
 }
 
-function ReportLetterhead({ title, subtitle, dateFrom, dateTo }: { title: string; subtitle?: string; dateFrom?: string; dateTo?: string }) {
+function ReportLetterhead({ title, subtitle, dateFrom, dateTo, onExportPDF }: { title: string; subtitle?: string; dateFrom?: string; dateTo?: string; onExportPDF?: () => void }) {
   const range = dateFrom || dateTo ? `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}` : "All periods";
   return (
-    <div className="flex items-center gap-4 bg-card border rounded-xl px-5 py-4 mb-1">
-      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center p-1.5 flex-shrink-0">
-        <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">VS2000 Smart Office</div>
-        <div className="text-base font-bold text-foreground leading-tight mt-0.5">{title}</div>
-        {subtitle && <div className="text-sm text-muted-foreground mt-0.5">{subtitle}</div>}
-      </div>
-      <div className="text-right flex-shrink-0 space-y-0.5">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Period</div>
-        <div className="text-xs font-medium">{range}</div>
-        <div className="text-[10px] text-muted-foreground">
-          {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+    <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-card border rounded-xl px-5 py-4 mb-1">
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center p-1.5 flex-shrink-0">
+          <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
         </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">VS2000 Smart Office</div>
+          <div className="text-base font-bold text-foreground leading-tight mt-0.5">{title}</div>
+          {subtitle && <div className="text-sm text-muted-foreground mt-0.5">{subtitle}</div>}
+        </div>
+      </div>
+      <div className="flex items-center gap-4 justify-between sm:justify-end flex-shrink-0">
+        <div className="text-right space-y-0.5">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Period</div>
+          <div className="text-xs font-medium">{range}</div>
+          <div className="text-[10px] text-muted-foreground">
+            {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          </div>
+        </div>
+        {onExportPDF && (
+          <Button onClick={onExportPDF} size="sm" className="bg-[#ff6700] hover:bg-[#ff6700]/90 text-white flex items-center gap-1.5 font-semibold">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export PDF
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -293,6 +309,14 @@ function WriterReportView() {
             title="Writer Performance Report"
             subtitle={`${r.writer?.fullCode ?? "—"} — ${r.writer?.fullName ?? "—"}`}
             dateFrom={dateFrom} dateTo={dateTo}
+            onExportPDF={() => generateWriterReportPDF(
+              r.writer?.fullName ?? "Unknown Writer",
+              r.writer?.fullCode ?? "—",
+              dateFrom,
+              dateTo,
+              r.totals,
+              r.rows
+            )}
           />
 
           <TotalsGrid t={r.totals} label="Calculated Period Totals" />
@@ -455,6 +479,16 @@ function AgentReportView() {
             title="Agent Performance Report"
             subtitle={`${r.agent?.fullCode ?? "—"} — ${r.agent?.user?.fullName ?? "—"}`}
             dateFrom={dateFrom} dateTo={dateTo}
+            onExportPDF={() => generateAgentReportPDF(
+              r.agent?.user?.fullName ?? "Unknown Agent",
+              r.agent?.fullCode ?? "—",
+              dateFrom,
+              dateTo,
+              r.totals,
+              r.writers,
+              r.payments ?? [],
+              r.totalPaid ?? "0"
+            )}
           />
 
           <TotalsGrid t={r.totals} label="Agent Period Totals" />
@@ -604,7 +638,17 @@ function OrgReportView() {
 
       {r && (
         <div className="space-y-4">
-          <ReportLetterhead title="Organisation Report" dateFrom={dateFrom} dateTo={dateTo} />
+          <ReportLetterhead 
+            title="Organisation Report" 
+            dateFrom={dateFrom} 
+            dateTo={dateTo}
+            onExportPDF={() => generateOrgReportPDF(
+              dateFrom,
+              dateTo,
+              r.totals,
+              r.agents
+            )} 
+          />
 
           <TotalsGrid t={r.totals} label="Organisation Totals" />
 
@@ -761,6 +805,15 @@ function GameSalesView() {
             title="Game Sales Report"
             subtitle={`${r.agent?.fullCode ?? "—"} — ${r.agent?.user?.fullName ?? "—"}`}
             dateFrom={dateFrom} dateTo={dateTo}
+            onExportPDF={() => generateGameSalesReportPDF(
+              r.agent?.user?.fullName ?? "Unknown Agent",
+              r.agent?.fullCode ?? "—",
+              dateFrom,
+              dateTo,
+              r.summary,
+              r.byGameType,
+              r.byWriter
+            )}
           />
 
           {/* Summary strip */}
