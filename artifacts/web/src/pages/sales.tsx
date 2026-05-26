@@ -37,8 +37,8 @@ function FilterIcon() {
 }
 
 function relDate(s: string) {
-  const today = new Date().toISOString().split("T")[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
+  const yesterday = new Date(getServerNow().getTime() - 86400000).toISOString().split("T")[0];
   const d = s.split("T")[0];
   if (d === today) return "Today";
   if (d === yesterday) return "Yesterday";
@@ -447,12 +447,13 @@ function AgentSalesView() {
 
 function AdminSalesView() {
   const qc = useQueryClient();
-  const { writerMap, agentList } = useWriterLookup();
+  const { writerMap, agentList, allWriters } = useWriterLookup();
 
   const [filterAgentId, setFilterAgentId] = useState("");
   const [filterWriterId, setFilterWriterId] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [showFilter, setShowFilter] = useState(false);
 
   const { data: filterWriters } = useListWriters(filterAgentId, {}, {
     query: { queryKey: getListWritersQueryKey(filterAgentId, {}), enabled: !!filterAgentId }
@@ -464,136 +465,268 @@ function AdminSalesView() {
     dateFrom: filterFrom || undefined,
     dateTo: filterTo || undefined,
   });
+  const salesList = Array.isArray(sales) ? sales : [];
 
   const [selectedAgent, setSelectedAgent] = useState("");
   const { data: writers } = useListWriters(selectedAgent, {}, {
     query: { queryKey: getListWritersQueryKey(selectedAgent, {}), enabled: !!selectedAgent }
   });
+  const writerList = Array.isArray(writers) ? writers : [];
 
   const createMutation = useCreateSale();
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ writerId: "", gameType: "", ticketAmount: "", saleDate: new Date().toISOString().split("T")[0] });
+  const today = useMemo(() => new Date(getServerNow()).toISOString().split("T")[0], []);
+  const [form, setForm] = useState({ writerId: "", gameType: "", ticketAmount: "", saleDate: today });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await createMutation.mutateAsync({ data: { writerId: form.writerId, gameType: form.gameType, ticketAmount: form.ticketAmount, saleDate: form.saleDate } });
-      toast.success("Sale logged");
+      toast.success("Sale logged successfully");
       setOpen(false);
-      setForm({ writerId: "", gameType: "", ticketAmount: "", saleDate: new Date().toISOString().split("T")[0] });
-      qc.invalidateQueries({ queryKey: getListSalesQueryKey({}) });
+      setForm({ writerId: "", gameType: "", ticketAmount: "", saleDate: today });
+      qc.invalidateQueries({ queryKey: ["/api/sales"] });
     } catch {
       toast.error("Failed to log sale");
     }
   };
 
-  const writerList = Array.isArray(writers) ? writers : [];
+  const hasFilter = !!(filterAgentId || filterWriterId || filterFrom || filterTo);
   const clearFilter = () => { setFilterAgentId(""); setFilterWriterId(""); setFilterFrom(""); setFilterTo(""); };
 
+  const totalAmount = salesList.reduce((s, sale) => s + Number(sale.ticketAmount ?? 0), 0);
+  const uniqueWriters = new Set(salesList.map(s => s.writerId)).size;
+
+  const [open, setOpen] = useState(false);
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-semibold">Sales Log</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">View and record lottery sales by writer</p>
-        </div>
-        <Button size="sm" onClick={() => setOpen(true)}>Log Sale</Button>
-      </div>
+    <div className="pb-8 relative min-h-screen">
+      {/* Background radial glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-64 bg-gradient-to-b from-blue-500/5 via-transparent to-transparent blur-3xl pointer-events-none" />
 
-      <div className="bg-muted/30 border rounded-xl p-4 mb-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filter Sales</span>
-          <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={clearFilter}>Clear filters</Button>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
-            <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
-              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_all">All agents</SelectItem>
-                {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
-              </SelectContent>
-            </Select>
+      {/* Header */}
+      <div className="sticky top-0 bg-background/80 backdrop-blur-md border-b border-border/40 z-20 px-4 py-3.5">
+        <div className="flex items-center gap-3 max-w-xl mx-auto md:max-w-4xl">
+          <div className="flex-1">
+            <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-400">Sales Log (Admin)</h1>
+            <p className="text-xs text-muted-foreground mt-0.5 font-medium">{salesList.length} records · <span className="font-semibold text-primary font-mono">{fmtGHS(totalAmount)}</span></p>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Writer</Label>
-            <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)} disabled={!filterAgentId}>
-              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="All writers" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_all">All writers</SelectItem>
-                {filterWriterList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">From</Label>
-            <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 text-sm bg-background" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">To</Label>
-            <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 text-sm bg-background" />
-          </div>
+          <button
+            onClick={() => setShowFilter(f => !f)}
+            className={`p-2.5 rounded-xl transition-all duration-200 active:scale-95 border ${
+              showFilter || hasFilter 
+                ? "bg-primary text-primary-foreground border-primary" 
+                : "bg-background border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            }`}
+          >
+            <FilterIcon />
+          </button>
+          <button
+            onClick={() => setOpen(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold active:scale-95 transition-all shadow-md shadow-blue-500/10 border border-blue-500/15"
+          >
+            <PlusIcon /> Log Sale
+          </button>
         </div>
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Writer</TableHead>
-              <TableHead>Game Type</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
-            ) : !Array.isArray(sales) || sales.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-sm">No sales found.</TableCell></TableRow>
-            ) : sales.map(s => {
-              const writer = writerMap[s.writerId];
-              return (
-                <TableRow key={s.id}>
-                  <TableCell className="text-sm">{s.saleDate?.split("T")[0]}</TableCell>
-                  <TableCell className="text-sm">
-                    <span className="font-mono">{writer?.fullCode ?? s.writerId.slice(0, 8) + "…"}</span>
-                    {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
-                  </TableCell>
-                  <TableCell className="text-sm">{s.gameType}</TableCell>
-                  <TableCell className="text-sm text-right font-mono">GH₵ {Number(s.ticketAmount).toFixed(2)}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+      <div className="px-4 max-w-xl mx-auto md:max-w-4xl">
+        {/* Filter panel */}
+        {showFilter && (
+          <div className="mt-4 bg-card/45 backdrop-blur-md border border-border/50 shadow-sm rounded-3xl p-5 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">Agent</Label>
+                <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
+                  <SelectTrigger className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20"><SelectValue placeholder="All Agents" /></SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 bg-card/95 backdrop-blur-md">
+                    <SelectItem value="_all" className="rounded-lg">All agents</SelectItem>
+                    {agentList.map(a => <SelectItem key={a.id} value={a.id} className="rounded-lg">{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">Writer</Label>
+                <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)} disabled={!filterAgentId}>
+                  <SelectTrigger className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20"><SelectValue placeholder="All Writers" /></SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 bg-card/95 backdrop-blur-md">
+                    <SelectItem value="_all" className="rounded-lg">All writers</SelectItem>
+                    {filterWriterList.map(w => <SelectItem key={w.id} value={w.id} className="rounded-lg">{w.fullCode} — {w.fullName}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">From</Label>
+                <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">To</Label>
+                <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20" />
+              </div>
+            </div>
+
+            {hasFilter && (
+              <button onClick={clearFilter} className="text-xs text-primary font-semibold hover:underline active:opacity-70 transition-opacity">
+                Clear all filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Stats Grid */}
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 animate-fade-in">
+          <div className="bg-gradient-to-br from-card/75 to-card/45 backdrop-blur-md border border-border/50 rounded-2xl p-5 shadow-sm flex items-center gap-4 hover:border-blue-500/20 transition-all duration-300">
+            <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Total Sales</span>
+              <span className="text-xl font-extrabold text-foreground font-mono tabular-nums">{fmtGHS(totalAmount)}</span>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-card/75 to-card/45 backdrop-blur-md border border-border/50 rounded-2xl p-5 shadow-sm flex items-center gap-4 hover:border-indigo-500/20 transition-all duration-300">
+            <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
+              </svg>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Ticket Count</span>
+              <span className="text-xl font-extrabold text-foreground font-mono tabular-nums">{salesList.length} logged</span>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-card/75 to-card/45 backdrop-blur-md border border-border/50 rounded-2xl p-5 shadow-sm flex items-center gap-4 hover:border-purple-500/20 transition-all duration-300">
+            <div className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center flex-shrink-0">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Unique Writers</span>
+              <span className="text-xl font-extrabold text-foreground font-mono tabular-nums">{uniqueWriters} writers</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Transaction Records */}
+        <div className="mt-8 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Transaction Records</span>
+            {salesList.length > 0 && <span className="text-[10px] text-muted-foreground font-semibold">{salesList.length} total logs</span>}
+          </div>
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[1,2,3,4].map(i => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+            </div>
+          ) : salesList.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground bg-card/30 border border-border/40 rounded-3xl p-6">
+              <div className="text-4xl mb-3">🧾</div>
+              <div className="font-bold text-sm text-foreground">No sales records logged</div>
+              <div className="text-xs mt-1 text-muted-foreground">Tap Log Sale above to record a ticket entry</div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {salesList.map(s => {
+                const writer = writerMap[s.writerId];
+                const writerObj = allWriters.find(w => w.id === s.writerId);
+                const agent = writerObj ? agentList.find(a => a.id === writerObj.agentId) : null;
+                return (
+                  <div key={s.id} className="bg-card/60 backdrop-blur-sm border border-border/40 hover:border-blue-500/20 hover:shadow-md transition-all duration-300 rounded-2xl p-4 flex items-center justify-between animate-fade-in">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                          <rect x="5" y="2" width="14" height="20" rx="2" /><path d="M9 7h6M9 11h6M9 15h4" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] px-2 py-0.5 bg-muted rounded font-bold font-mono text-muted-foreground">
+                            {writer?.fullCode ?? s.writerId.slice(0, 8)}
+                          </span>
+                          {writer && <span className="text-sm font-bold text-gray-800 dark:text-gray-100 truncate">{writer.fullName}</span>}
+                        </div>
+                        {agent && (
+                          <span className="text-[10px] text-muted-foreground mt-0.5 block font-medium">
+                            Agent: <span className="font-semibold text-foreground">{agent.user?.fullName ?? agent.fullCode}</span>
+                          </span>
+                        )}
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 rounded-md">
+                            {s.gameType || "—"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/60">·</span>
+                          <span className="text-xs text-muted-foreground font-medium">{relDate(s.saleDate ?? "")}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-3">
+                      <span className="text-sm font-extrabold font-mono text-foreground tabular-nums">
+                        {fmtGHS(Number(s.ticketAmount ?? 0))}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
-      <Dialog open={open} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm(f => ({ ...f, writerId: "" })); } setOpen(o); }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Log Sale</DialogTitle></DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4">
+      {/* Log Sale Dialog */}
+      <Dialog open={open} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm({ writerId: "", gameType: "", ticketAmount: "", saleDate: today }); } setOpen(o); }}>
+        <DialogContent className="max-w-md mx-4 rounded-3xl border border-border/50 bg-card/95 backdrop-blur-md shadow-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-extrabold text-lg">
+              <svg className="text-blue-500 w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Log Ticket Sale
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Agent</Label>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agent *</Label>
               <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20"><SelectValue placeholder="Select agent..." /></SelectTrigger>
+                <SelectContent className="rounded-xl border-border/50 bg-card/95 backdrop-blur-md">
+                  {agentList.map(a => <SelectItem key={a.id} value={a.id} className="rounded-lg">{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Writer</Label>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Writer *</Label>
               <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={!selectedAgent}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select writer..." /></SelectTrigger>
-                <SelectContent>{writerList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20"><SelectValue placeholder="Select writer…" /></SelectTrigger>
+                <SelectContent className="rounded-xl border-border/50 bg-card/95 backdrop-blur-md">
+                  {writerList.map(w => <SelectItem key={w.id} value={w.id} className="rounded-lg">{w.fullCode} — {w.fullName}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5"><Label className="text-xs">Game Type</Label><Input value={form.gameType} onChange={e => setForm(f => ({ ...f, gameType: e.target.value }))} required className="h-9 text-sm" placeholder="e.g. Pick 3" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Amount</Label><Input type="number" step="0.01" min="0" value={form.ticketAmount} onChange={e => setForm(f => ({ ...f, ticketAmount: e.target.value }))} required className="h-9 text-sm" /></div>
-            <div className="space-y-1.5"><Label className="text-xs">Date</Label><Input type="date" value={form.saleDate} onChange={e => setForm(f => ({ ...f, saleDate: e.target.value }))} required className="h-9 text-sm" /></div>
-            <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending || !form.writerId}>Log</Button>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Game Type *</Label>
+              <Input value={form.gameType} onChange={e => setForm(f => ({ ...f, gameType: e.target.value }))} required className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20" placeholder="e.g. Pick 3, Fortune Draw" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Amount (GH₵) *</Label>
+              <Input type="number" step="0.01" min="0" value={form.ticketAmount} onChange={e => setForm(f => ({ ...f, ticketAmount: e.target.value }))} required className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20" placeholder="0.00" inputMode="decimal" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Date *</Label>
+              <Input type="date" value={form.saleDate} onChange={e => setForm(f => ({ ...f, saleDate: e.target.value }))} required className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <DialogFooter className="gap-3 pt-3">
+              <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl font-semibold border-border" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" className="flex-1 h-11 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/10" disabled={createMutation.isPending || !form.writerId}>
+                {createMutation.isPending ? "Logging…" : "Log Sale"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -81,11 +81,11 @@ function AgentWinsView() {
 
   const { data: entries, isLoading } = useListWinsEntries({
     writerId: filterWriterId || undefined,
-    dateFrom: filterFrom || undefined,
-    dateTo: filterTo || undefined,
+    dateFrom: showFilter ? (filterFrom || undefined) : undefined,
+    dateTo: showFilter ? (filterTo || undefined) : undefined,
   });
   const rawEntryList = Array.isArray(entries) ? entries : [];
-  const isDefaultFilter = !filterWriterId && filterFrom === today && filterTo === today;
+  const isDefaultFilter = !filterWriterId && !showFilter;
   const entryList = useMemo(() => {
     if (isDefaultFilter) {
       const liveGameIds = new Set(liveGames.map(g => g.id));
@@ -559,7 +559,7 @@ function AdminWinsView() {
   const [editEntry, setEditEntry] = useState<WinsEntry | null>(null);
   const [editForm, setEditForm] = useState({ winsAmount: "" });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListWinsEntriesQueryKey({}) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/entries/wins"] });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

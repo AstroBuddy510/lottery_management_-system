@@ -54,7 +54,7 @@ function GrossTab() {
   const [form, setForm] = useState({ writerId: "", entryDate: new Date().toISOString().split("T")[0], grossAmount: "" });
   const [editForm, setEditForm] = useState({ grossAmount: "" });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListGrossEntriesQueryKey({}) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/entries/gross"] });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -269,7 +269,7 @@ function WinsTab() {
   const [form, setForm] = useState({ writerId: "", entryDate: new Date().toISOString().split("T")[0], winsAmount: "" });
   const [editForm, setEditForm] = useState({ winsAmount: "" });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListWinsEntriesQueryKey({}) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/entries/wins"] });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

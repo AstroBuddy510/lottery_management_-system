@@ -81,11 +81,11 @@ function AgentGrossView() {
 
   const { data: entries, isLoading } = useListGrossEntries({
     writerId: filterWriterId || undefined,
-    dateFrom: filterFrom || undefined,
-    dateTo: filterTo || undefined,
+    dateFrom: showFilter ? (filterFrom || undefined) : undefined,
+    dateTo: showFilter ? (filterTo || undefined) : undefined,
   });
   const rawEntryList = Array.isArray(entries) ? entries : [];
-  const isDefaultFilter = !filterWriterId && filterFrom === today && filterTo === today;
+  const isDefaultFilter = !filterWriterId && !showFilter;
   const entryList = useMemo(() => {
     if (isDefaultFilter) {
       const liveGameIds = new Set(liveGames.map(g => g.id));
@@ -557,7 +557,7 @@ function AdminGrossView() {
   const [editEntry, setEditEntry] = useState<GrossEntry | null>(null);
   const [editForm, setEditForm] = useState({ grossAmount: "" });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: getListGrossEntriesQueryKey({}) });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/entries/gross"] });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
