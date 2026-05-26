@@ -21,6 +21,28 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
+import {
+  Banknote,
+  Coins,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  Plus,
+  Trash2,
+  Calendar,
+  Clock,
+  Printer,
+  QrCode,
+  Search,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  ChevronRight,
+  Filter,
+  FileText,
+  User,
+  ArrowRightLeft
+} from "lucide-react";
 
 type ExpenseItem = { expenseCategoryId: string; name: string; amount: string };
 type CreatedPayment = {
@@ -61,26 +83,42 @@ function fmtHHMM(t?: string | null) {
 function WindowBanner({ windows }: { windows: TimeWindow[] }) {
   const ws = getWindowStatus(windows);
   return (
-    <div className={`rounded-xl border px-5 py-3 flex items-center gap-4 flex-wrap ${ws.open ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${ws.open ? "bg-emerald-100" : "bg-red-100"}`}>
-        <svg className={`w-4 h-4 ${ws.open ? "text-emerald-700" : "text-red-600"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
+    <div className={`relative overflow-hidden rounded-2xl border px-5 py-4 flex items-center gap-4 flex-wrap backdrop-blur-md transition-all duration-300 ${
+      ws.open 
+        ? "bg-emerald-500/10 dark:bg-emerald-500/5 border-emerald-500/20 dark:border-emerald-500/10 text-emerald-800 dark:text-emerald-300 shadow-sm shadow-emerald-500/5" 
+        : "bg-rose-500/10 dark:bg-rose-500/5 border-rose-500/20 dark:border-rose-500/10 text-rose-800 dark:text-rose-300 shadow-sm shadow-rose-500/5"
+    }`}>
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border transition-all ${
+        ws.open 
+          ? "bg-emerald-500/20 dark:bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400" 
+          : "bg-rose-500/20 dark:bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+      }`}>
+        <Clock className="w-5 h-5 animate-pulse" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className={`text-sm font-bold ${ws.open ? "text-emerald-800" : "text-red-700"}`}>
+        <div className="text-sm font-extrabold tracking-tight flex items-center gap-1.5">
           Payment Window: {ws.open ? "OPEN" : "CLOSED"}
+          {ws.open && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          )}
         </div>
-        <div className="text-xs text-muted-foreground mt-0.5">
+        <div className="text-xs text-muted-foreground/90 mt-0.5 font-medium">
           {ws.open && ws.window
             ? `Accepting payments until ${fmtHHMM(ws.window.windowClose)}`
             : ws.nextTime
               ? `Next window opens at ${fmtHHMM(ws.nextTime)}`
               : "No payment windows scheduled for today"}
-              </div>
+        </div>
       </div>
-      <span className={`text-xs font-semibold px-3 py-1 rounded-full ${ws.open ? "bg-emerald-200 text-emerald-800" : "bg-red-200 text-red-800"}`}>
-        {ws.open ? "● ACCEPTING" : "○ RESTRICTED"}
+      <span className={`text-[10px] font-extrabold px-3 py-1 rounded-lg tracking-wider uppercase border shadow-xs ${
+        ws.open 
+          ? "bg-emerald-500/20 dark:bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300" 
+          : "bg-rose-500/20 dark:bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300"
+      }`}>
+        {ws.open ? "Accepting" : "Restricted"}
       </span>
     </div>
   );
@@ -89,12 +127,12 @@ function WindowBanner({ windows }: { windows: TimeWindow[] }) {
 /* ── Settlement status badge ─────────────────────────────────────────────── */
 type Settlement = { balanceDue: number; collected: number; paidOut: number; hasCalc: boolean };
 function settlementStatus(s: Settlement) {
-  if (!s.hasCalc) return { label: "No Calc", color: "text-muted-foreground", bg: "bg-muted/50 text-muted-foreground" };
+  if (!s.hasCalc) return { label: "No Calc", color: "text-muted-foreground", bg: "bg-muted/60 dark:bg-muted/20 border-muted-foreground/10 text-muted-foreground" };
   const net = s.collected - s.paidOut;
   const shortfall = s.balanceDue - net;
-  if (Math.abs(shortfall) < 0.005) return { label: "Settled", color: "text-emerald-700", bg: "bg-emerald-100 text-emerald-800" };
-  if (shortfall > 0) return { label: `Due ${fmtGHS(shortfall)}`, color: "text-red-600", bg: "bg-red-100 text-red-800" };
-  return { label: `Overpaid ${fmtGHS(-shortfall)}`, color: "text-amber-700", bg: "bg-amber-100 text-amber-800" };
+  if (Math.abs(shortfall) < 0.005) return { label: "Settled", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10 dark:bg-emerald-500/5 border-emerald-500/20 text-emerald-700 dark:text-emerald-400" };
+  if (shortfall > 0) return { label: `Due ${fmtGHS(shortfall)}`, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/10 dark:bg-rose-500/5 border-rose-500/20 text-rose-700 dark:text-rose-400" };
+  return { label: `Overpaid ${fmtGHS(-shortfall)}`, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10 dark:bg-amber-500/5 border-amber-500/20 text-amber-700 dark:text-amber-400" };
 }
 
 /* ── Main Payments component ─────────────────────────────────────────────── */
@@ -344,109 +382,165 @@ export function Payments() {
   };
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-6 space-y-6 relative min-h-screen">
+      {/* Background radial glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-64 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent blur-3xl pointer-events-none" />
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-4 relative z-10">
         <div>
-          <h1 className="text-xl font-semibold">Cashier Station</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Payment collection · settlement tracking · receipts</p>
+          <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">Cashier Station</h1>
+          <p className="text-xs text-muted-foreground mt-0.5 font-medium">Payment collection · settlement tracking · receipts</p>
         </div>
-        <Button onClick={() => { resetForm(); setOpen(true); }} className="gap-2">
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <Button onClick={() => { resetForm(); setOpen(true); }} className="gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+          <Plus className="w-4 h-4" />
           Record Payment
         </Button>
       </div>
 
       {/* ── Time window banner ── */}
-      <WindowBanner windows={windows} />
+      <div className="relative z-10">
+        <WindowBanner windows={windows} />
+      </div>
 
       {/* ── Today's cash position ── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border bg-card p-4 space-y-1.5">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pay-In Today</div>
-          <div className="text-2xl font-bold text-emerald-700">{fmtGHS(todayPayIn)}</div>
-          <div className="text-[11px] text-muted-foreground">{todayValid.filter(p => p.transactionType === "pay_in").length} transaction(s)</div>
-        </div>
-        <div className="rounded-xl border bg-card p-4 space-y-1.5">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pay-Out Today</div>
-          <div className="text-2xl font-bold text-orange-600">{fmtGHS(todayPayOut)}</div>
-          <div className="text-[11px] text-muted-foreground">{todayValid.filter(p => p.transactionType === "pay_out").length} transaction(s)</div>
-        </div>
-        <div className={`rounded-xl border p-4 space-y-1.5 ${netPosition >= 0 ? "bg-primary/5 border-primary/20" : "bg-red-50 border-red-200"}`}>
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Net Cash Position</div>
-          <div className={`text-2xl font-bold ${netPosition >= 0 ? "text-primary" : "text-destructive"}`}>{fmtGHS(netPosition)}</div>
-          <div className="text-[11px] text-muted-foreground">Pay-In minus Pay-Out</div>
-        </div>
-        <div className="rounded-xl border bg-card p-4 space-y-1.5">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Settlement Status</div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-emerald-700">{settledCount}</span>
-            <span className="text-sm text-muted-foreground">settled</span>
-            {outstandingCount > 0 && (
-              <><span className="text-destructive font-bold text-lg">{outstandingCount}</span><span className="text-xs text-destructive">pending</span></>
-            )}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 relative z-10">
+        {/* Pay-In Today */}
+        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-emerald-500/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4.5 flex flex-col justify-between min-h-[110px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Pay-In Today</span>
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-[11px] text-muted-foreground">for {boardDate === todayStr ? "today" : boardDate}</div>
+          <div className="mt-2.5">
+            <div className="text-xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">{fmtGHS(todayPayIn)}</div>
+            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">{todayValid.filter(p => p.transactionType === "pay_in").length} transaction(s)</div>
+          </div>
+        </div>
+
+        {/* Pay-Out Today */}
+        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-orange-500/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4.5 flex flex-col justify-between min-h-[110px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Pay-Out Today</span>
+            <div className="p-1.5 rounded-lg bg-orange-500/10 dark:bg-orange-500/5 text-orange-600 dark:text-orange-400 border border-orange-500/25">
+              <TrendingDown className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2.5">
+            <div className="text-xl font-bold font-mono tracking-tight text-orange-600 dark:text-orange-400">{fmtGHS(todayPayOut)}</div>
+            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">{todayValid.filter(p => p.transactionType === "pay_out").length} transaction(s)</div>
+          </div>
+        </div>
+
+        {/* Net Cash Position */}
+        <div className={`bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4.5 flex flex-col justify-between min-h-[110px] ${
+          netPosition >= 0 ? "hover:border-indigo-500/20" : "hover:border-rose-500/20"
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Net Cash Position</span>
+            <div className={`p-1.5 rounded-lg border ${
+              netPosition >= 0 
+                ? "bg-indigo-500/10 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border-indigo-500/25" 
+                : "bg-rose-500/10 dark:bg-rose-500/5 text-rose-600 dark:text-rose-400 border-rose-500/25"
+            }`}>
+              <Banknote className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2.5">
+            <div className={`text-xl font-bold font-mono tracking-tight ${netPosition >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-rose-600 dark:text-rose-400"}`}>{fmtGHS(netPosition)}</div>
+            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">Pay-In minus Pay-Out</div>
+          </div>
+        </div>
+
+        {/* Settlement Status */}
+        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4.5 flex flex-col justify-between min-h-[110px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Settlement Status</span>
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+              <Activity className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2.5">
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">{settledCount}</span>
+              <span className="text-[10px] text-muted-foreground/70 font-semibold mr-1.5">settled</span>
+              {outstandingCount > 0 && (
+                <>
+                  <span className="text-lg font-bold font-mono tracking-tight text-rose-600 dark:text-rose-400">{outstandingCount}</span>
+                  <span className="text-[10px] text-rose-500 font-semibold">pending</span>
+                </>
+              )}
+            </div>
+            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">for {boardDate === todayStr ? "today" : boardDate}</div>
+          </div>
         </div>
       </div>
 
       {/* ── Main tabs ── */}
-      <Tabs defaultValue="settlement">
-        <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
-          <TabsTrigger value="settlement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 py-2.5 text-sm">
+      <Tabs defaultValue="settlement" className="relative z-10 space-y-6">
+        <TabsList className="w-full justify-start border-b border-border/40 rounded-none h-auto p-0 bg-transparent gap-4">
+          <TabsTrigger value="settlement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Settlement Board
           </TabsTrigger>
-          <TabsTrigger value="pending-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 py-2.5 text-sm relative">
+          <TabsTrigger value="pending-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
             Pending Cash Requests
             {pendingList.length > 0 && (
-              <span className="ml-2 bg-amber-500 text-white rounded-full px-2 py-0.5 text-[10px] font-bold">
+              <span className="ml-2 bg-rose-500 text-white rounded-full px-1.5 py-0.5 text-[8.5px] font-extrabold shadow-xs">
                 {pendingList.length}
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-5 py-2.5 text-sm">
+          <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Transaction History
           </TabsTrigger>
         </TabsList>
 
         {/* ── Settlement Board ── */}
-        <TabsContent value="settlement" className="mt-5 space-y-4">
-
+        <TabsContent value="settlement" className="space-y-4 outline-none">
           {/* Date + summary header */}
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center justify-between flex-wrap gap-3 bg-card/45 backdrop-blur-md border border-border/40 rounded-xl p-3.5 shadow-sm">
             <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground whitespace-nowrap">Settlement Date</Label>
-              <Input type="date" value={boardDate} onChange={e => setBoardDate(e.target.value)} className="h-8 text-sm w-40" />
+              <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Settlement Date</Label>
+              <div className="relative">
+                <Input 
+                  type="date" 
+                  value={boardDate} 
+                  onChange={e => setBoardDate(e.target.value)} 
+                  className="h-8 text-xs w-36 bg-background/60 border-border/60 rounded-lg pr-8 focus:ring-1 focus:ring-primary" 
+                />
+              </div>
               {boardDate !== todayStr && (
-                <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setBoardDate(todayStr)}>Today</Button>
+                <Button size="sm" variant="ghost" className="h-8 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20" onClick={() => setBoardDate(todayStr)}>
+                  Today
+                </Button>
               )}
             </div>
             {boardCalcs.length === 0 && (
-              <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-xs">
-                No calculations run for this date yet
+              <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-500/10 text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-0.5 rounded-lg shadow-sm">
+                No calculations run for this date
               </Badge>
             )}
           </div>
 
           {/* Settlement table */}
-          <div className="border rounded-lg overflow-hidden">
+          <div className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
             <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead className="font-semibold">Agent</TableHead>
-                  <TableHead className="text-right font-semibold">Balance Due</TableHead>
-                  <TableHead className="text-right font-semibold">Collected</TableHead>
-                  <TableHead className="text-right font-semibold">Paid Out</TableHead>
-                  <TableHead className="text-right font-semibold">Net Position</TableHead>
-                  <TableHead className="text-center font-semibold">Status</TableHead>
-                  <TableHead className="text-right font-semibold">Action</TableHead>
+              <TableHeader className="bg-muted/30">
+                <TableRow className="border-b border-border/40">
+                  <TableHead className="text-xs font-bold text-muted-foreground pl-5">Agent</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Balance Due</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Collected</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Paid Out</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Net Position</TableHead>
+                  <TableHead className="text-center text-xs font-bold text-muted-foreground">Status</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground pr-5">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {settlements.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-sm">
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-xs font-medium">
                       No active agents found.
                     </TableCell>
                   </TableRow>
@@ -456,41 +550,54 @@ export function Payments() {
                   const shortfall = row.balanceDue - netCollected;
                   const { agent } = row;
                   const name = agentMap[agent.id]?.name ?? agent.fullCode;
+                  
+                  const rowClass = !row.hasCalc 
+                    ? "opacity-60 border-b border-border/40 hover:bg-muted/5 transition-colors" 
+                    : shortfall > 0.005 
+                      ? "bg-rose-500/5 dark:bg-rose-500/[0.02] border-b border-border/40 border-l-2 border-l-rose-500 hover:bg-rose-500/10 dark:hover:bg-rose-500/[0.05] transition-colors" 
+                      : shortfall < -0.005 
+                        ? "bg-amber-500/5 dark:bg-amber-500/[0.02] border-b border-border/40 border-l-2 border-l-amber-500 hover:bg-amber-500/10 dark:hover:bg-amber-500/[0.05] transition-colors" 
+                        : "bg-emerald-500/5 dark:bg-emerald-500/[0.02] border-b border-border/40 border-l-2 border-l-emerald-500 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/[0.05] transition-colors";
+
                   return (
-                    <TableRow key={agent.id} className={!row.hasCalc ? "opacity-60" : shortfall > 0.005 ? "bg-red-50/40" : shortfall < -0.005 ? "bg-amber-50/30" : "bg-emerald-50/30"}>
-                      <TableCell>
-                        <div className="font-medium text-sm">{name}</div>
-                        <div className="text-xs text-muted-foreground font-mono">{agent.fullCode}</div>
+                    <TableRow key={agent.id} className={rowClass}>
+                      <TableCell className="pl-5 py-3.5">
+                        <div className="font-bold text-xs text-foreground">{name}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{agent.fullCode}</div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {row.hasCalc ? fmtGHS(row.balanceDue) : <span className="text-muted-foreground text-xs">—</span>}
+                      <TableCell className="text-right font-mono text-xs">
+                        {row.hasCalc ? fmtGHS(row.balanceDue) : <span className="text-muted-foreground/50 text-[10px]">—</span>}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-emerald-700">
-                        {row.collected > 0 ? fmtGHS(row.collected) : <span className="text-muted-foreground">—</span>}
+                      <TableCell className="text-right font-mono text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                        {row.collected > 0 ? fmtGHS(row.collected) : <span className="text-muted-foreground/40">—</span>}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-orange-600">
-                        {row.paidOut > 0 ? fmtGHS(row.paidOut) : <span className="text-muted-foreground">—</span>}
+                      <TableCell className="text-right font-mono text-xs text-orange-600 dark:text-orange-400 font-medium">
+                        {row.paidOut > 0 ? fmtGHS(row.paidOut) : <span className="text-muted-foreground/40">—</span>}
                       </TableCell>
-                      <TableCell className={`text-right font-mono text-sm font-semibold ${netCollected >= 0 ? "text-primary" : "text-destructive"}`}>
-                        {row.hasCalc || row.collected > 0 ? fmtGHS(netCollected) : <span className="text-muted-foreground text-xs">—</span>}
+                      <TableCell className={`text-right font-mono text-xs font-bold ${netCollected >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-rose-600 dark:text-rose-400"}`}>
+                        {row.hasCalc || row.collected > 0 ? fmtGHS(netCollected) : <span className="text-muted-foreground/50 text-[10px]">—</span>}
                       </TableCell>
-                      <TableCell className="text-center">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${st.bg}`}>{st.label}</span>
+                      <TableCell className="text-center py-3.5">
+                        <span className={`text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-lg tracking-wider uppercase border shadow-xs ${st.bg}`}>
+                          {st.label}
+                        </span>
                       </TableCell>
-                      <TableCell className="text-right">
-                        {row.hasCalc && shortfall > 0.005 && (
-                          <Button size="sm" className="h-7 text-xs" onClick={() => prefillAgent(agent.id, shortfall, "pay_in")}>
-                            Collect {fmtGHS(shortfall)}
-                          </Button>
-                        )}
-                        {row.hasCalc && row.balanceDue < -0.005 && Math.abs(row.paidOut) < Math.abs(row.balanceDue) - 0.005 && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs text-orange-700 border-orange-300" onClick={() => prefillAgent(agent.id, Math.abs(row.balanceDue) - row.paidOut, "pay_out")}>
-                            Pay Out {fmtGHS(Math.abs(row.balanceDue) - row.paidOut)}
-                          </Button>
-                        )}
-                        {!row.hasCalc && (row.collected > 0 || row.paidOut > 0) && (
-                          <span className="text-[10px] text-muted-foreground">Has transactions</span>
-                        )}
+                      <TableCell className="text-right pr-5 py-3.5">
+                        <div className="flex justify-end gap-1.5">
+                          {row.hasCalc && shortfall > 0.005 && (
+                            <Button size="sm" className="h-7 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs" onClick={() => prefillAgent(agent.id, shortfall, "pay_in")}>
+                              Collect {fmtGHS(shortfall)}
+                            </Button>
+                          )}
+                          {row.hasCalc && row.balanceDue < -0.005 && Math.abs(row.paidOut) < Math.abs(row.balanceDue) - 0.005 && (
+                            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold rounded-lg text-orange-600 dark:text-orange-400 border-orange-500/20 hover:bg-orange-500/10" onClick={() => prefillAgent(agent.id, Math.abs(row.balanceDue) - row.paidOut, "pay_out")}>
+                              Pay Out {fmtGHS(Math.abs(row.balanceDue) - row.paidOut)}
+                            </Button>
+                          )}
+                          {!row.hasCalc && (row.collected > 0 || row.paidOut > 0) && (
+                            <span className="text-[9.5px] text-muted-foreground font-semibold uppercase tracking-wider">Has Txns</span>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -500,22 +607,22 @@ export function Payments() {
 
             {/* Board totals footer */}
             {(boardCalcs.length > 0 || boardPayments.length > 0) && (
-              <div className="border-t bg-muted/30 px-4 py-3 flex items-center gap-6 flex-wrap text-sm">
+              <div className="border-t border-border/40 bg-muted/40 px-5 py-3.5 flex items-center gap-6 flex-wrap text-xs font-bold text-foreground">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Total Due:</span>
-                  <span className="font-mono font-semibold">{fmtGHS(boardTotalDue)}</span>
+                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Total Due:</span>
+                  <span className="font-mono">{fmtGHS(boardTotalDue)}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Collected:</span>
-                  <span className="font-mono font-semibold text-emerald-700">{fmtGHS(boardTotalCollected)}</span>
+                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Collected:</span>
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400">{fmtGHS(boardTotalCollected)}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Paid Out:</span>
-                  <span className="font-mono font-semibold text-orange-600">{fmtGHS(boardTotalOut)}</span>
+                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Paid Out:</span>
+                  <span className="font-mono text-orange-600 dark:text-orange-400">{fmtGHS(boardTotalOut)}</span>
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
-                  <span className="text-xs text-muted-foreground">Outstanding:</span>
-                  <span className={`font-mono font-bold ${boardTotalDue - boardTotalCollected > 0.005 ? "text-destructive" : "text-emerald-700"}`}>
+                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Outstanding:</span>
+                  <span className={`font-mono text-sm font-extrabold ${boardTotalDue - boardTotalCollected > 0.005 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                     {fmtGHS(Math.max(0, boardTotalDue - boardTotalCollected + boardTotalOut))}
                   </span>
                 </div>
@@ -525,54 +632,63 @@ export function Payments() {
         </TabsContent>
 
         {/* ── Pending Cash Requests ── */}
-        <TabsContent value="pending-requests" className="mt-5 space-y-4">
-          <div className="border rounded-lg overflow-hidden">
+        <TabsContent value="pending-requests" className="space-y-4 outline-none">
+          <div className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
             <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead className="font-semibold">Agent</TableHead>
-                  <TableHead className="font-semibold">Request Date</TableHead>
-                  <TableHead className="font-semibold">Method</TableHead>
-                  <TableHead className="text-right font-semibold">Amount</TableHead>
-                  <TableHead className="text-center font-semibold">Status</TableHead>
-                  <TableHead className="text-right font-semibold">Actions</TableHead>
+              <TableHeader className="bg-muted/30">
+                <TableRow className="border-b border-border/40">
+                  <TableHead className="text-xs font-bold text-muted-foreground pl-5">Agent</TableHead>
+                  <TableHead className="text-xs font-bold text-muted-foreground">Request Date</TableHead>
+                  <TableHead className="text-xs font-bold text-muted-foreground">Method</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Amount</TableHead>
+                  <TableHead className="text-center text-xs font-bold text-muted-foreground">Status</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground pr-5">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingPending ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading requests…</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground text-xs font-medium">
+                      <Activity className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-600/60" />
+                      Loading requests…
+                    </TableCell>
+                  </TableRow>
                 ) : pendingList.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No pending cash requests found.</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground text-xs font-medium">
+                      No pending cash requests found.
+                    </TableCell>
+                  </TableRow>
                 ) : pendingList.map(req => {
                   const agentInfo = agentMap[req.agentId];
                   const name = agentInfo?.name ?? "—";
                   const code = agentInfo?.code ?? "";
                   return (
-                    <TableRow key={req.id}>
-                      <TableCell>
-                        <div className="font-medium text-sm">{name}</div>
-                        <div className="text-xs text-muted-foreground font-mono">{code}</div>
+                    <TableRow key={req.id} className="hover:bg-muted/10 border-b border-border/40 transition-colors">
+                      <TableCell className="pl-5 py-3.5">
+                        <div className="font-bold text-xs text-foreground">{name}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{code}</div>
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="text-xs text-foreground/80 font-medium py-3.5">
                         {req.paymentDate}
                       </TableCell>
-                      <TableCell className="text-sm font-semibold uppercase">
+                      <TableCell className="text-xs font-extrabold uppercase tracking-wide text-foreground/80 py-3.5">
                         {req.paymentMethod}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm font-bold text-primary">
+                      <TableCell className="text-right font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 py-3.5">
                         {fmtGHS(Number(req.amount))}
                       </TableCell>
-                      <TableCell className="text-center">
-                        <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                      <TableCell className="text-center py-3.5">
+                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-lg tracking-wider uppercase border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400 shadow-xs">
                           PENDING CASHIER
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handleApprove(req.id, req.amount)} disabled={approveMutation.isPending}>
-                            Approve & Collect Cash
+                      <TableCell className="text-right pr-5 py-3.5">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button size="sm" className="h-7 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs" onClick={() => handleApprove(req.id, req.amount)} disabled={approveMutation.isPending}>
+                            Approve & Collect
                           </Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:bg-destructive/10" onClick={() => handleReject(req.id)} disabled={rejectMutation.isPending}>
+                          <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold rounded-lg text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/10" onClick={() => handleReject(req.id)} disabled={rejectMutation.isPending}>
                             Reject
                           </Button>
                         </div>
@@ -586,23 +702,25 @@ export function Payments() {
         </TabsContent>
 
         {/* ── Transaction History ── */}
-        <TabsContent value="history" className="mt-5 space-y-4">
-
+        <TabsContent value="history" className="space-y-4 outline-none">
           {/* Filters */}
-          <div className="bg-muted/30 border rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filter Transactions</span>
+          <div className="bg-card/45 border border-border/40 backdrop-blur-md rounded-2xl p-4 shadow-sm relative">
+            <div className="flex items-center justify-between mb-3.5">
+              <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5" />
+                Filter Transactions
+              </span>
               {(filterAgentId || filterFrom || filterTo) && (
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>
                   Clear filters
                 </Button>
               )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
+                <Label className="text-xs font-semibold text-muted-foreground">Agent</Label>
                 <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
-                  <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 text-xs bg-background/60 border-border/60 rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_all">All agents</SelectItem>
                     {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
@@ -610,69 +728,92 @@ export function Payments() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">From</Label>
-                <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 text-sm bg-background" />
+                <Label className="text-xs font-semibold text-muted-foreground">From</Label>
+                <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 text-xs bg-background/60 border-border/60 rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-muted-foreground">To</Label>
-                <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 text-sm bg-background" />
+                <Label className="text-xs font-semibold text-muted-foreground">To</Label>
+                <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 text-xs bg-background/60 border-border/60 rounded-xl" />
               </div>
             </div>
           </div>
 
           {/* Transaction table */}
-          <div className="border rounded-lg overflow-hidden">
+          <div className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
             <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Receipt #</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Agent</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Gross</TableHead>
-                  <TableHead className="text-right">Net Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  {canVoid && <TableHead className="w-16">Void</TableHead>}
+              <TableHeader className="bg-muted/30">
+                <TableRow className="border-b border-border/40">
+                  <TableHead className="text-xs font-bold text-muted-foreground pl-5">Receipt #</TableHead>
+                  <TableHead className="text-xs font-bold text-muted-foreground">Date</TableHead>
+                  <TableHead className="text-xs font-bold text-muted-foreground">Time</TableHead>
+                  <TableHead className="text-xs font-bold text-muted-foreground">Agent</TableHead>
+                  <TableHead className="text-xs font-bold text-muted-foreground">Type</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Gross</TableHead>
+                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Net Amount</TableHead>
+                  <TableHead className="text-xs font-bold text-muted-foreground">Status</TableHead>
+                  {canVoid && <TableHead className="w-16 text-right pr-5 text-xs font-bold text-muted-foreground">Void</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingPayments ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-sm">Loading…</TableCell></TableRow>
-                ) : paymentList.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-sm">No transactions found.</TableCell></TableRow>
-                ) : paymentList.map(p => (
-                  <TableRow key={p.id} className={p.isVoided ? "opacity-40 line-through" : ""}>
-                    <TableCell className="text-xs font-mono text-muted-foreground">{p.receiptNumber ?? "—"}</TableCell>
-                    <TableCell className="text-sm">{p.paymentDate?.split("T")[0]}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground font-mono">{fmtTime(p.createdAt)}</TableCell>
-                    <TableCell>
-                      <div className="text-sm font-medium">{agentMap[p.agentId]?.name ?? "—"}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{agentMap[p.agentId]?.code ?? ""}</div>
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-xs font-medium">
+                      <Activity className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-600/60" />
+                      Loading transactions…
                     </TableCell>
-                    <TableCell>
+                  </TableRow>
+                ) : paymentList.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-xs font-medium">
+                      No transactions found.
+                    </TableCell>
+                  </TableRow>
+                ) : paymentList.map(p => (
+                  <TableRow key={p.id} className={`border-b border-border/40 transition-colors ${p.isVoided ? "opacity-45 bg-muted/10 line-through" : "hover:bg-muted/10"}`}>
+                    <TableCell className="text-xs font-mono font-bold text-muted-foreground pl-5 py-3.5">{p.receiptNumber ?? "—"}</TableCell>
+                    <TableCell className="text-xs font-medium text-foreground/80 py-3.5">{p.paymentDate?.split("T")[0]}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground/70 font-mono py-3.5">{fmtTime(p.createdAt)}</TableCell>
+                    <TableCell className="py-3.5">
+                      <div className="text-xs font-bold text-foreground">{agentMap[p.agentId]?.name ?? "—"}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{agentMap[p.agentId]?.code ?? ""}</div>
+                    </TableCell>
+                    <TableCell className="py-3.5">
                       <Badge
                         variant={p.transactionType === "pay_in" ? "default" : "secondary"}
-                        className={`text-xs ${p.transactionType === "pay_out" ? "bg-orange-100 text-orange-700 border-orange-200" : ""}`}
+                        className={`text-[9.5px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border shadow-xs ${
+                          p.transactionType === "pay_out" 
+                            ? "bg-orange-500/10 border-orange-500/20 text-orange-700 dark:text-orange-400" 
+                            : "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                        }`}
                       >
                         {p.transactionType === "pay_in" ? "Pay-In" : "Pay-Out"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-right font-mono text-muted-foreground">
+                    <TableCell className="text-xs text-right font-mono text-muted-foreground py-3.5">
                       {p.grossAmount ? fmtGHS(Number(p.grossAmount)) : "—"}
                     </TableCell>
-                    <TableCell className={`text-sm text-right font-mono font-semibold ${p.transactionType === "pay_out" ? "text-orange-700" : "text-primary"}`}>
+                    <TableCell className={`text-xs text-right font-mono font-bold py-3.5 ${
+                      p.isVoided
+                        ? "text-muted-foreground"
+                        : p.transactionType === "pay_out" 
+                          ? "text-orange-600 dark:text-orange-400" 
+                          : "text-indigo-600 dark:text-indigo-400"
+                    }`}>
                       {fmtGHS(Number(p.amount))}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={p.isVoided ? "destructive" : "outline"} className="text-xs">
+                    <TableCell className="py-3.5">
+                      <Badge variant={p.isVoided ? "destructive" : "outline"} className={`text-[9.5px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border ${
+                        p.isVoided
+                          ? "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400"
+                          : "bg-indigo-500/5 border-indigo-500/10 text-indigo-700 dark:text-indigo-400"
+                      }`}>
                         {p.isVoided ? "Voided" : "Valid"}
                       </Badge>
                     </TableCell>
                     {canVoid && (
-                      <TableCell>
+                      <TableCell className="text-right pr-5 py-3.5">
                         {!p.isVoided && (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive hover:text-destructive" onClick={() => handleVoid(p.id)}>
+                          <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-500/10" onClick={() => handleVoid(p.id)}>
                             Void
                           </Button>
                         )}
@@ -685,23 +826,27 @@ export function Payments() {
 
             {/* History totals footer */}
             {!loadingPayments && paymentList.filter(p => !p.isVoided).length > 0 && (
-              <div className="border-t bg-muted/30 px-4 py-3 flex items-center gap-6 flex-wrap text-sm">
+              <div className="border-t border-border/40 bg-muted/40 px-5 py-3.5 flex items-center gap-6 flex-wrap text-xs font-bold text-foreground">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Pay-In:</span>
-                  <span className="font-mono font-semibold text-emerald-700">
+                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Pay-In:</span>
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400">
                     {fmtGHS(paymentList.filter(p => !p.isVoided && p.transactionType === "pay_in").reduce((s, p) => s + Number(p.amount), 0))}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Pay-Out:</span>
-                  <span className="font-mono font-semibold text-orange-600">
+                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Pay-Out:</span>
+                  <span className="font-mono text-orange-600 dark:text-orange-400">
                     {fmtGHS(paymentList.filter(p => !p.isVoided && p.transactionType === "pay_out").reduce((s, p) => s + Number(p.amount), 0))}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
-                  <span className="text-xs text-muted-foreground">{paymentList.filter(p => !p.isVoided).length} valid transaction(s)</span>
+                  <span className="text-[10px] text-muted-foreground font-semibold">
+                    {paymentList.filter(p => !p.isVoided).length} valid transaction(s)
+                  </span>
                   {paymentList.some(p => p.isVoided) && (
-                    <span className="text-xs text-muted-foreground">· {paymentList.filter(p => p.isVoided).length} voided</span>
+                    <span className="text-[10px] text-rose-500 font-semibold">
+                      · {paymentList.filter(p => p.isVoided).length} voided
+                    </span>
                   )}
                 </div>
               </div>
@@ -712,32 +857,35 @@ export function Payments() {
 
       {/* ── Record Payment Modal ── */}
       <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) resetForm(); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Record Payment</DialogTitle>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-border/40 bg-card/95 backdrop-blur-lg shadow-2xl p-6">
+          <DialogHeader className="pb-3">
+            <DialogTitle className="text-base font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">Record Payment</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-5">
-
             {/* Transaction type selector */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {(["pay_in", "pay_out"] as const).map(type => (
                 <button
                   key={type}
                   type="button"
                   onClick={() => setForm(f => ({ ...f, transactionType: type }))}
-                  className={`rounded-xl border-2 p-3.5 text-left transition-colors ${
+                  className={`rounded-2xl border p-4 text-left transition-all duration-300 shadow-xs flex flex-col justify-between ${
                     form.transactionType === type
-                      ? type === "pay_in" ? "border-emerald-500 bg-emerald-50" : "border-orange-500 bg-orange-50"
-                      : "border-muted hover:border-muted-foreground/30"
+                      ? type === "pay_in" 
+                        ? "border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/5 shadow-emerald-500/5" 
+                        : "border-orange-500/50 bg-orange-500/10 dark:bg-orange-500/5 shadow-orange-500/5"
+                      : "border-border/60 hover:border-border bg-card/50 hover:bg-card"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-bold ${type === "pay_in" ? "bg-emerald-600" : "bg-orange-500"}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-extrabold ${
+                      type === "pay_in" ? "bg-emerald-600" : "bg-orange-500"
+                    }`}>
                       {type === "pay_in" ? "↓" : "↑"}
                     </div>
                     <div>
-                      <div className="text-sm font-semibold">{type === "pay_in" ? "Pay-In" : "Pay-Out"}</div>
-                      <div className="text-xs text-muted-foreground">{type === "pay_in" ? "Cash received from agent" : "Cash issued to agent"}</div>
+                      <div className="text-xs font-bold text-foreground">{type === "pay_in" ? "Pay-In" : "Pay-Out"}</div>
+                      <div className="text-[10px] text-muted-foreground/80 mt-0.5">{type === "pay_in" ? "Cash from agent" : "Cash to agent"}</div>
                     </div>
                   </div>
                 </button>
@@ -746,9 +894,9 @@ export function Payments() {
 
             {/* Agent */}
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Agent</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">Agent</Label>
               <Select value={form.agentId} onValueChange={v => setForm(f => ({ ...f, agentId: v }))}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent…" /></SelectTrigger>
+                <SelectTrigger className="h-9 text-xs bg-background/60 border-border/60 rounded-xl"><SelectValue placeholder="Select agent…" /></SelectTrigger>
                 <SelectContent>
                   {agentList.filter(a => a.isActive).map(a => (
                     <SelectItem key={a.id} value={a.id}>
@@ -760,45 +908,45 @@ export function Payments() {
             </div>
 
             {/* Amount + Date */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Gross Amount (GH₵)</Label>
+                <Label className="text-xs font-semibold text-muted-foreground">Gross Amount (GH₵)</Label>
                 <Input
                   type="number" step="0.01" min="0.01"
                   value={form.grossAmount}
                   onChange={e => setForm(f => ({ ...f, grossAmount: e.target.value }))}
-                  required className="h-9 text-sm" placeholder="0.00"
+                  required className="h-9 text-xs bg-background/60 border-border/60 rounded-xl" placeholder="0.00"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Payment Date</Label>
+                <Label className="text-xs font-semibold text-muted-foreground">Payment Date</Label>
                 <Input
                   type="date"
                   value={form.paymentDate}
                   onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
-                  required className="h-9 text-sm"
+                  required className="h-9 text-xs bg-background/60 border-border/60 rounded-xl"
                 />
               </div>
             </div>
 
             {/* Expense deductions */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Expense Deductions</Label>
-                <Button type="button" size="sm" variant="outline" className="h-7 text-xs px-2" onClick={addExpenseItem}>
+                <Label className="text-xs font-semibold text-muted-foreground">Expense Deductions</Label>
+                <Button type="button" size="sm" variant="outline" className="h-7 text-[10px] font-bold rounded-lg border-border/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10" onClick={addExpenseItem}>
                   + Add Expense
                 </Button>
               </div>
               {expenseList.length === 0 && (
-                <p className="text-xs text-muted-foreground italic">No expense categories configured. Use custom category or ask an administrator.</p>
+                <p className="text-[11px] text-muted-foreground italic">No expense categories configured. Use custom category or ask an administrator.</p>
               )}
               {expenseItems.length > 0 && (
-                <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                <div className="space-y-3 rounded-2xl border border-border/50 bg-muted/20 p-3.5">
                   {expenseItems.map((item, idx) => (
-                    <div key={idx} className="space-y-2 border-b last:border-b-0 pb-2 last:pb-0">
+                    <div key={idx} className="space-y-2.5 border-b border-border/40 last:border-b-0 pb-2.5 last:pb-0">
                       <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
                         <Select value={item.expenseCategoryId || "_none"} onValueChange={v => updateExpenseItem(idx, "expenseCategoryId", v === "_none" ? "" : v)}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select expense…" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs bg-background/60 border-border/60 rounded-lg"><SelectValue placeholder="Select expense…" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="_none">Select category…</SelectItem>
                             {expenseList.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
@@ -806,17 +954,17 @@ export function Payments() {
                           </SelectContent>
                         </Select>
                         <div className="relative w-28">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">GH₵</span>
-                          <Input type="number" step="0.01" min="0" value={item.amount} onChange={e => updateExpenseItem(idx, "amount", e.target.value)} className="h-8 text-xs pl-8" placeholder="0.00" />
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10.5px] text-muted-foreground">GH₵</span>
+                          <Input type="number" step="0.01" min="0" value={item.amount} onChange={e => updateExpenseItem(idx, "amount", e.target.value)} className="h-8 text-xs pl-8 bg-background/60 border-border/60 rounded-lg" placeholder="0.00" />
                         </div>
-                        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 text-destructive" onClick={() => removeExpenseItem(idx)}>×</Button>
+                        <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-lg" onClick={() => removeExpenseItem(idx)}>×</Button>
                       </div>
                       {item.expenseCategoryId === "custom" && (
                         <Input
                           type="text"
                           value={item.name}
                           onChange={e => updateExpenseItem(idx, "name", e.target.value)}
-                          className="h-8 text-xs w-full"
+                          className="h-8 text-xs w-full bg-background/60 border-border/60 rounded-lg"
                           placeholder="Enter custom category name (e.g. Office Supplies)…"
                           required
                         />
@@ -829,30 +977,30 @@ export function Payments() {
 
             {/* Net preview */}
             {form.grossAmount && (
-              <div className="rounded-xl border bg-muted/20 p-4 space-y-2">
-                <div className="flex justify-between text-xs text-muted-foreground">
+              <div className="rounded-2xl border border-border/40 bg-muted/20 p-4 space-y-2 text-xs font-semibold text-foreground">
+                <div className="flex justify-between text-muted-foreground">
                   <span>Gross amount</span>
                   <span className="font-mono">GH₵ {gross.toFixed(2)}</span>
                 </div>
                 {expenseItems.map((item, idx) => (
-                  <div key={idx} className="flex justify-between text-xs text-muted-foreground pl-3">
+                  <div key={idx} className="flex justify-between text-muted-foreground pl-3">
                     <span>— {item.name || "Expense"}</span>
-                    <span className="font-mono text-destructive">−GH₵ {(Number(item.amount) || 0).toFixed(2)}</span>
+                    <span className="font-mono text-rose-600 dark:text-rose-400">−GH₵ {(Number(item.amount) || 0).toFixed(2)}</span>
                   </div>
                 ))}
-                {expenseItems.length > 0 && <div className="border-t" />}
-                <div className="flex justify-between text-sm font-bold">
+                {expenseItems.length > 0 && <div className="border-t border-border/40" />}
+                <div className="flex justify-between text-sm font-bold pt-1">
                   <span>Net {form.transactionType === "pay_in" ? "collected" : "paid out"}</span>
-                  <span className={`font-mono ${netAmount < 0 ? "text-destructive" : form.transactionType === "pay_in" ? "text-emerald-700" : "text-orange-700"}`}>
+                  <span className={`font-mono text-base font-extrabold ${netAmount < 0 ? "text-rose-600 dark:text-rose-400" : form.transactionType === "pay_in" ? "text-emerald-600 dark:text-emerald-400" : "text-orange-600 dark:text-orange-400"}`}>
                     GH₵ {netAmount.toFixed(2)}
                   </span>
                 </div>
               </div>
             )}
 
-            <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => { setOpen(false); resetForm(); }}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending || !form.agentId || !form.grossAmount}>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" size="sm" className="rounded-xl border-border/60" onClick={() => { setOpen(false); resetForm(); }}>Cancel</Button>
+              <Button type="submit" size="sm" className="rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold" disabled={createMutation.isPending || !form.agentId || !form.grossAmount}>
                 {createMutation.isPending ? "Recording…" : "Record Payment"}
               </Button>
             </DialogFooter>
@@ -862,41 +1010,45 @@ export function Payments() {
 
       {/* ── Receipt Modal ── */}
       <Dialog open={!!receiptPayment} onOpenChange={v => !v && setReceiptPayment(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm rounded-3xl border border-border/40 bg-card/95 backdrop-blur-lg shadow-2xl p-6">
           <DialogHeader>
-            <DialogTitle className="text-center">Payment Receipt</DialogTitle>
+            <DialogTitle className="text-center text-sm font-extrabold tracking-wider uppercase text-muted-foreground/80">Payment Receipt</DialogTitle>
           </DialogHeader>
           {receiptPayment && (
-            <div className="space-y-4" ref={receiptRef}>
+            <div className="space-y-4 pt-1" ref={receiptRef}>
               {/* Receipt number */}
-              <div className="text-center rounded-xl border-2 border-primary/30 bg-primary/5 p-4">
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Receipt Number</div>
-                <div className="text-3xl font-bold font-mono tracking-wider text-primary">{receiptPayment.receiptNumber ?? "—"}</div>
+              <div className="text-center rounded-2xl border-2 border-dashed border-indigo-500/30 bg-indigo-500/5 p-4">
+                <div className="text-[9px] font-extrabold text-muted-foreground/80 uppercase tracking-widest mb-1">Receipt Number</div>
+                <div className="text-2xl font-black font-mono tracking-widest text-indigo-600 dark:text-indigo-400">{receiptPayment.receiptNumber ?? "—"}</div>
               </div>
 
               {/* QR Code */}
               {receiptPayment.receiptNumber && (
-                <div className="flex flex-col items-center gap-1.5">
-                  <QRCodeSVG value={receiptPayment.receiptNumber} size={140} level="M" includeMargin className="rounded-lg border p-2" />
-                  <p className="text-xs text-muted-foreground">Scan to verify</p>
+                <div className="flex flex-col items-center gap-1.5 my-2">
+                  <QRCodeSVG value={receiptPayment.receiptNumber} size={130} level="M" includeMargin className="rounded-xl border border-border/40 p-2 bg-white" />
+                  <p className="text-[10px] text-muted-foreground font-semibold">Scan to verify transaction</p>
                 </div>
               )}
 
               {/* Payment details */}
-              <div className="rounded-lg border bg-muted/20 p-3 space-y-2 text-sm">
+              <div className="rounded-2xl border border-border/40 bg-muted/20 p-4.5 space-y-2 text-xs font-semibold text-foreground">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Agent</span>
-                  <span className="font-medium">{agentMap[receiptPayment.agentId]?.name ?? "—"}</span>
+                  <span className="font-bold">{agentMap[receiptPayment.agentId]?.name ?? "—"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Type</span>
-                  <Badge variant={receiptPayment.transactionType === "pay_in" ? "default" : "secondary"} className="text-xs">
+                  <Badge variant={receiptPayment.transactionType === "pay_in" ? "default" : "secondary"} className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-lg border shadow-xs ${
+                    receiptPayment.transactionType === "pay_in" 
+                      ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-400" 
+                      : "bg-orange-500/10 border-orange-500/25 text-orange-700 dark:text-orange-400"
+                  }`}>
                     {receiptPayment.transactionType === "pay_in" ? "Pay-In" : "Pay-Out"}
                   </Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Date</span>
-                  <span>{receiptPayment.paymentDate}</span>
+                  <span className="font-medium">{receiptPayment.paymentDate}</span>
                 </div>
                 {receiptPayment.grossAmount && (
                   <div className="flex justify-between">
@@ -905,25 +1057,25 @@ export function Payments() {
                   </div>
                 )}
                 {(receiptPayment.expenseItems ?? []).map((exp, idx) => (
-                  <div key={idx} className="flex justify-between text-xs text-muted-foreground pl-2">
+                  <div key={idx} className="flex justify-between text-muted-foreground pl-2.5">
                     <span>— {exp.name}</span>
-                    <span className="font-mono text-destructive">−{fmtGHS(Number(exp.amount))}</span>
+                    <span className="font-mono text-rose-600 dark:text-rose-400">−{fmtGHS(Number(exp.amount))}</span>
                   </div>
                 ))}
-                <div className="border-t pt-2 flex justify-between font-semibold">
+                <div className="border-t border-border/40 pt-2 flex justify-between font-bold text-sm">
                   <span>Net Amount</span>
-                  <span className={`font-mono ${receiptPayment.transactionType === "pay_in" ? "text-emerald-700" : "text-orange-700"}`}>
+                  <span className={`font-mono text-base font-extrabold ${receiptPayment.transactionType === "pay_in" ? "text-emerald-600 dark:text-emerald-400" : "text-orange-600 dark:text-orange-400"}`}>
                     {fmtGHS(Number(receiptPayment.amount))}
                   </span>
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1" onClick={handlePrintReceipt}>
-                  <svg className="w-3.5 h-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                  Print
+              <div className="flex gap-3">
+                <Button variant="outline" size="sm" className="flex-1 rounded-xl border-border/60" onClick={handlePrintReceipt}>
+                  <Printer className="w-3.5 h-3.5 mr-1.5" />
+                  Print Receipt
                 </Button>
-                <Button size="sm" className="flex-1" onClick={() => setReceiptPayment(null)}>Done</Button>
+                <Button size="sm" className="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold" onClick={() => setReceiptPayment(null)}>Done</Button>
               </div>
             </div>
           )}
