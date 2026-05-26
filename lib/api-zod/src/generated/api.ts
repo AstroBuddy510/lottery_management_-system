@@ -917,7 +917,8 @@ export const GetSettingsResponse = zod.object({
   "reservePct": zod.string(),
   "effectiveDate": zod.string(),
   "updatedAt": zod.string(),
-  "updatedBy": zod.string().optional()
+  "updatedBy": zod.string().optional(),
+  "folderColor": zod.string().optional()
 })
 
 
@@ -929,7 +930,8 @@ export const CreateSettingsBody = zod.object({
   "agentCommissionPct": zod.string(),
   "writerCommissionPct": zod.string(),
   "reservePct": zod.string(),
-  "effectiveDate": zod.string()
+  "effectiveDate": zod.string(),
+  "folderColor": zod.string().optional()
 })
 
 

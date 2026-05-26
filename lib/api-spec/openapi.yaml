@@ -2547,6 +2547,8 @@ components:
           type: string
         updatedBy:
           type: string
+        folderColor:
+          type: string
 
     SystemSettingsInput:
       type: object
@@ -2561,6 +2563,8 @@ components:
         reservePct:
           type: string
         effectiveDate:
+          type: string
+        folderColor:
           type: string
 
     TimeWindow:

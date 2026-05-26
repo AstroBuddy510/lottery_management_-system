@@ -372,6 +372,7 @@ export interface SystemSettings {
   effectiveDate: string;
   updatedAt: string;
   updatedBy?: string;
+  folderColor?: string;
 }
 
 export interface SystemSettingsInput {
@@ -380,6 +381,7 @@ export interface SystemSettingsInput {
   writerCommissionPct: string;
   reservePct: string;
   effectiveDate: string;
+  folderColor?: string;
 }
 
 export interface TimeWindow {

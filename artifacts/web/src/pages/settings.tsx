@@ -103,7 +103,7 @@ export function Settings() {
   // ── Rates state ──
   const [ratesOpen, setRatesOpen] = useState(false);
   const [ratesForm, setRatesForm] = useState({
-    commissionPct: "", agentCommissionPct: "", writerCommissionPct: "", reservePct: "", effectiveDate: "",
+    commissionPct: "", agentCommissionPct: "", writerCommissionPct: "", reservePct: "", effectiveDate: "", folderColor: "#10b981",
   });
 
   // ── Time window state ──
@@ -150,6 +150,7 @@ export function Settings() {
       writerCommissionPct: decimalToPct(settings?.writerCommissionPct),
       reservePct: decimalToPct(settings?.reservePct),
       effectiveDate: settings?.effectiveDate?.split("T")[0] ?? "",
+      folderColor: settings?.folderColor ?? "#10b981",
     });
     setRatesOpen(true);
   };
@@ -164,6 +165,7 @@ export function Settings() {
           writerCommissionPct: pctToDecimal(ratesForm.writerCommissionPct),
           reservePct: pctToDecimal(ratesForm.reservePct),
           effectiveDate: ratesForm.effectiveDate,
+          folderColor: ratesForm.folderColor,
         },
       });
       toast({ title: "Commission rates updated" });
@@ -410,9 +412,14 @@ export function Settings() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex items-center gap-4 pt-1 text-xs text-muted-foreground border-t">
+                  <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-muted-foreground border-t">
                     <span>Effective from: <span className="font-medium text-foreground">{settings.effectiveDate?.split("T")[0]}</span></span>
                     <span>Overall commission: <span className="font-medium text-foreground">{pctDisplay(settings.commissionPct)}</span></span>
+                    <span className="flex items-center gap-1.5">
+                      Folder Color:
+                      <span className="inline-block w-3.5 h-3.5 rounded border border-border" style={{ backgroundColor: settings.folderColor ?? "#10b981" }} />
+                      <span className="font-mono text-[10px] text-foreground font-medium">{settings.folderColor ?? "#10b981"}</span>
+                    </span>
                     <span className="ml-auto">Last updated: <span className="font-medium text-foreground">{settings.updatedAt ? new Date(settings.updatedAt).toLocaleDateString() : "—"}</span></span>
                   </div>
                 </div>
@@ -706,6 +713,17 @@ export function Settings() {
                   <Input type="number" step="0.01" min="0" max="100" value={ratesForm.commissionPct} onChange={e => setRatesForm(f => ({ ...f, commissionPct: e.target.value }))} required className="h-9 text-sm pr-8" placeholder="0.00" />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
                 </div>
+              </div>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Folder Appearance Settings</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Archive Folder Color</Label>
+                <div className="flex items-center gap-2">
+                  <Input type="color" value={ratesForm.folderColor} onChange={e => setRatesForm(f => ({ ...f, folderColor: e.target.value }))} required className="w-12 h-9 p-0.5 border cursor-pointer bg-transparent" />
+                  <Input type="text" value={ratesForm.folderColor} onChange={e => setRatesForm(f => ({ ...f, folderColor: e.target.value }))} required className="h-9 text-sm font-mono" placeholder="#10b981" />
+                </div>
+                <p className="text-[10px] text-muted-foreground">Select or enter a hex color code for the archived games monthly folders.</p>
               </div>
             </div>
             <div className="space-y-1">

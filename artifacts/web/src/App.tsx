@@ -101,11 +101,11 @@ function Router() {
       </Route>
 
       <Route path="/games">
-        {() => <ProtectedRoute component={Games} roles={['administrator']} />}
+        {() => <ProtectedRoute component={Games} roles={['administrator', 'director']} />}
       </Route>
 
       <Route path="/settings">
-        {() => <ProtectedRoute component={Settings} roles={['administrator']} />}
+        {() => <ProtectedRoute component={Settings} roles={['administrator', 'director']} />}
       </Route>
 
       <Route path="/sales">

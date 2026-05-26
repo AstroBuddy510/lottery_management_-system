@@ -10,6 +10,7 @@ import {
   paymentsTable,
   reserveAllocationsTable,
   salesLogsTable,
+  gamesTable,
 } from "@workspace/db";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { GetWriterReportParams, GetAgentReportParams } from "@workspace/api-zod";
@@ -508,7 +509,150 @@ router.get(
       queue,
       history,
     });
-  },
+  }
+);
+
+// ── GET /reports/game/:gameId ──────────────────────────────────────────────────
+router.get(
+  "/reports/game/:gameId",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (req, res) => {
+    const gameId = req.params.gameId as string;
+
+    const [game] = await db
+      .select()
+      .from(gamesTable)
+      .where(eq(gamesTable.id, gameId))
+      .limit(1);
+
+    if (!game) {
+      res.status(404).json({ error: "Game not found" });
+      return;
+    }
+
+    const calcs = await db
+      .select({
+        calc: dailyCalculationsTable,
+        writer: {
+          id: writersTable.id,
+          fullName: writersTable.fullName,
+          fullCode: writersTable.fullCode,
+          agentId: writersTable.agentId,
+        },
+        agent: {
+          id: agentsTable.id,
+          fullCode: agentsTable.fullCode,
+          agencyName: agentsTable.agencyName,
+        },
+        agentUser: {
+          fullName: usersTable.fullName,
+        }
+      })
+      .from(dailyCalculationsTable)
+      .innerJoin(writersTable, eq(dailyCalculationsTable.writerId, writersTable.id))
+      .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+      .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+      .where(eq(dailyCalculationsTable.gameId, gameId));
+
+    const totals = {
+      grossSales: 0,
+      commissionAmount: 0,
+      netGross: 0,
+      winsAmount: 0,
+      reserveAmount: 0,
+      writerBalance: 0,
+    };
+
+    const agentMap = new Map<string, {
+      agent: { id: string; fullCode: string; agencyName: string | null; ownerName: string };
+      totals: typeof totals;
+    }>();
+
+    const writerMap = new Map<string, {
+      writer: { id: string; fullCode: string; fullName: string; agentId: string };
+      totals: typeof totals;
+    }>();
+
+    for (const row of calcs) {
+      const gs = parseFloat(row.calc.grossSales ?? "0");
+      const comm = parseFloat(row.calc.commissionAmount ?? "0");
+      const ng = parseFloat(row.calc.netGross ?? "0");
+      const wins = parseFloat(row.calc.winsAmount ?? "0");
+      const resAmt = parseFloat(row.calc.reserveAmount ?? "0");
+      const bal = parseFloat(row.calc.writerBalance ?? "0");
+
+      totals.grossSales += gs;
+      totals.commissionAmount += comm;
+      totals.netGross += ng;
+      totals.winsAmount += wins;
+      totals.reserveAmount += resAmt;
+      totals.writerBalance += bal;
+
+      let agentEntry = agentMap.get(row.agent.id);
+      if (!agentEntry) {
+        agentEntry = {
+          agent: {
+            id: row.agent.id,
+            fullCode: row.agent.fullCode,
+            agencyName: row.agent.agencyName,
+            ownerName: row.agentUser.fullName ?? "—",
+          },
+          totals: { grossSales: 0, commissionAmount: 0, netGross: 0, winsAmount: 0, reserveAmount: 0, writerBalance: 0 },
+        };
+        agentMap.set(row.agent.id, agentEntry);
+      }
+      agentEntry.totals.grossSales += gs;
+      agentEntry.totals.commissionAmount += comm;
+      agentEntry.totals.netGross += ng;
+      agentEntry.totals.winsAmount += wins;
+      agentEntry.totals.reserveAmount += resAmt;
+      agentEntry.totals.writerBalance += bal;
+
+      let writerEntry = writerMap.get(row.writer.id);
+      if (!writerEntry) {
+        writerEntry = {
+          writer: {
+            id: row.writer.id,
+            fullCode: row.writer.fullCode,
+            fullName: row.writer.fullName,
+            agentId: row.writer.agentId,
+          },
+          totals: { grossSales: 0, commissionAmount: 0, netGross: 0, winsAmount: 0, reserveAmount: 0, writerBalance: 0 },
+        };
+        writerMap.set(row.writer.id, writerEntry);
+      }
+      writerEntry.totals.grossSales += gs;
+      writerEntry.totals.commissionAmount += comm;
+      writerEntry.totals.netGross += ng;
+      writerEntry.totals.winsAmount += wins;
+      writerEntry.totals.reserveAmount += resAmt;
+      writerEntry.totals.writerBalance += bal;
+    }
+
+    const formatTotals = (t: typeof totals) => ({
+      grossSales: t.grossSales.toFixed(2),
+      commissionAmount: t.commissionAmount.toFixed(2),
+      netGross: t.netGross.toFixed(2),
+      winsAmount: t.winsAmount.toFixed(2),
+      reserveAmount: t.reserveAmount.toFixed(2),
+      writerBalance: t.writerBalance.toFixed(2),
+    });
+
+    res.json({
+      game,
+      calculationsCount: calcs.length,
+      totals: formatTotals(totals),
+      agents: [...agentMap.values()].map(a => ({
+        agent: a.agent,
+        totals: formatTotals(a.totals),
+      })),
+      writers: [...writerMap.values()].map(w => ({
+        writer: w.writer,
+        totals: formatTotals(w.totals),
+      })),
+    });
+  }
 );
 
 export default router;

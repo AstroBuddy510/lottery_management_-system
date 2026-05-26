@@ -7,6 +7,7 @@ import {
   smallint,
   time,
   boolean,
+  text,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -21,6 +22,7 @@ export const systemSettingsTable = pgTable("system_settings", {
   updatedBy: uuid("updated_by").notNull().references(() => usersTable.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   effectiveDate: date("effective_date").notNull(),
+  folderColor: text("folder_color").notNull().default("#10b981"),
 });
 
 export const cashierTimeWindowsTable = pgTable("cashier_time_windows", {

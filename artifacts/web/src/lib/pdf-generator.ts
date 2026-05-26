@@ -791,3 +791,147 @@ export function generatePayrollPDF(
   drawSignatureBlock(doc, "Approved By (HR/Cashier)", "Authorized By (Director)");
   doc.save(`payroll_summary_${periodLabel.replace(/\s+/g, "_")}.pdf`);
 }
+
+// ─── 7. GAME EVENT AUDIT REPORT PDF ───
+export function generateGameEventReportPDF(
+  gameName: string,
+  eventNumber: string,
+  closeDateStr: string,
+  totals: any,
+  agents: any[],
+  writers: any[]
+) {
+  const doc = new jsPDF() as any;
+
+  const startY = drawBrandHeader(
+    doc,
+    "Game Event Audit Report",
+    [
+      { label: "Event Code", value: eventNumber },
+      { label: "Close Date", value: fmtDate(closeDateStr) },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+    ],
+    "Audited Game Details",
+    [`Name: ${gameName}`, `Event: ${eventNumber}`, "Status: Completed Draw Event"]
+  );
+
+  // Consolidated Agent Table
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(0, 78, 152);
+  doc.text("AGENT CONTRIBUTION BREAKDOWN", 15, startY);
+
+  const agentCols = [
+    { header: "Agent (Owner)", dataKey: "agent" },
+    { header: "Gross Sales", dataKey: "grossSales" },
+    { header: "Commission", dataKey: "commissionAmount" },
+    { header: "Net Gross", dataKey: "netGross" },
+    { header: "Wins Paid", dataKey: "winsAmount" },
+    { header: "Reserve Fund", dataKey: "reserveAmount" },
+    { header: "Net Balance", dataKey: "writerBalance" },
+  ];
+
+  const agentData = agents.map((a) => ({
+    agent: `${a.agent.fullCode} (${a.agent.ownerName})`,
+    grossSales: fmt(a.totals.grossSales),
+    commissionAmount: fmt(a.totals.commissionAmount),
+    netGross: fmt(a.totals.netGross),
+    winsAmount: fmt(a.totals.winsAmount),
+    reserveAmount: fmt(a.totals.reserveAmount),
+    writerBalance: fmt(a.totals.writerBalance),
+  }));
+
+  autoTable(doc, {
+    columns: agentCols,
+    body: agentData,
+    startY: startY + 4,
+    theme: "striped",
+    headStyles: { ...tableTheme.headStyles, halign: "right" },
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: {
+      agent: { halign: "left" },
+    },
+    margin: tableTheme.margin,
+  } as any);
+
+  let nextY = doc.lastAutoTable.finalY + 10;
+
+  // Writer Table
+  if (writers && writers.length > 0) {
+    if (nextY > 210) {
+      doc.addPage();
+      nextY = 20;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(0, 78, 152);
+    doc.text("WRITER CONTRIBUTION BREAKDOWN", 15, nextY);
+
+    const writerCols = [
+      { header: "Writer Code & Name", dataKey: "writer" },
+      { header: "Gross Sales", dataKey: "grossSales" },
+      { header: "Commission", dataKey: "commissionAmount" },
+      { header: "Net Gross", dataKey: "netGross" },
+      { header: "Wins Paid", dataKey: "winsAmount" },
+      { header: "Net Balance", dataKey: "writerBalance" },
+    ];
+
+    const writerData = writers.map((w) => ({
+      writer: `${w.writer.fullCode} — ${w.writer.fullName}`,
+      grossSales: fmt(w.totals.grossSales),
+      commissionAmount: fmt(w.totals.commissionAmount),
+      netGross: fmt(w.totals.netGross),
+      winsAmount: fmt(w.totals.winsAmount),
+      writerBalance: fmt(w.totals.writerBalance),
+    }));
+
+    autoTable(doc, {
+      columns: writerCols,
+      body: writerData,
+      startY: nextY + 4,
+      theme: "grid",
+      headStyles: { ...tableTheme.headStyles, halign: "right" },
+      bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+      columnStyles: {
+        writer: { halign: "left" },
+      },
+      margin: tableTheme.margin,
+    } as any);
+
+    nextY = doc.lastAutoTable.finalY + 10;
+  }
+
+  // Summary box
+  if (nextY > 230) {
+    doc.addPage();
+    nextY = 20;
+  }
+
+  const pageWidth = doc.internal.pageSize.width;
+  doc.setFillColor(241, 245, 249);
+  doc.rect(pageWidth - 95, nextY, 80, 36, "F");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text("Total Gross Sales:", pageWidth - 90, nextY + 7);
+  doc.text("Total Commissions:", pageWidth - 90, nextY + 14);
+  doc.text("Total Wins Paid:", pageWidth - 90, nextY + 21);
+  doc.text("Net Profit / Bal:", pageWidth - 90, nextY + 30);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(40, 40, 40);
+  doc.text(fmt(totals.grossSales), pageWidth - 20, nextY + 7, { align: "right" });
+  doc.text(fmt(totals.commissionAmount), pageWidth - 20, nextY + 14, { align: "right" });
+  doc.text(fmt(totals.winsAmount), pageWidth - 20, nextY + 21, { align: "right" });
+
+  const profit = Number(totals.writerBalance);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(profit < 0 ? 220 : 16, profit < 0 ? 38 : 124, profit < 0 ? 38 : 65);
+  doc.text(fmt(totals.writerBalance), pageWidth - 20, nextY + 31, { align: "right" });
+
+  drawSignatureBlock(doc, "Audited By (Cashier)", "Authorized Signatory (Director)");
+  doc.save(`event_audit_report_${eventNumber}.pdf`);
+}
