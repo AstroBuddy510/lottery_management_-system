@@ -76,8 +76,15 @@ function AgentGrossView() {
   const { data: games } = useListGames();
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
+    return gameList.filter(g => g.status === "live" && new Date(g.closeAt) > new Date(getServerNow()));
   }, [gameList]);
+
+  const isGameClosed = (gameId?: string) => {
+    if (!gameId) return false;
+    const game = gameList.find(g => g.id === gameId);
+    if (!game) return false;
+    return game.status === "closed" || new Date(game.closeAt) <= new Date(getServerNow());
+  };
 
   const { data: entries, isLoading } = useListGrossEntries({
     writerId: filterWriterId || undefined,
@@ -271,8 +278,9 @@ function AgentGrossView() {
             </div>
           ) : entryList.map(entry => {
             const writer = writerList.find(w => w.id === entry.writerId);
+            const isLocked = entry.locked || isGameClosed(entry.gameId);
             return (
-              <div key={entry.id} className={`bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3 ${entry.locked ? "opacity-60" : ""}`}>
+              <div key={entry.id} className={`bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3 ${isLocked ? "opacity-60" : ""}`}>
                 <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white flex-shrink-0">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
                     <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" />
@@ -286,11 +294,11 @@ function AgentGrossView() {
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">{relDate(entry.entryDate ?? "")}</span>
                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                      entry.locked
+                      isLocked
                         ? "bg-muted text-muted-foreground"
                         : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
                     }`}>
-                      {entry.locked ? "Locked" : "Open"}
+                      {isLocked ? "Locked" : "Open"}
                     </span>
                   </div>
                 </div>
@@ -298,7 +306,7 @@ function AgentGrossView() {
                   <div className="text-right">
                     <div className="text-sm font-bold tabular-nums">{fmtGHS(Number(entry.grossAmount ?? 0))}</div>
                   </div>
-                  {!entry.locked ? (
+                  {!isLocked ? (
                     <button
                       onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount }); }}
                       className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"

@@ -76,7 +76,7 @@ function AgentWinsView() {
   const { data: games } = useListGames();
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
+    return gameList.filter(g => g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun));
   }, [gameList]);
 
   const { data: entries, isLoading } = useListWinsEntries({
@@ -271,8 +271,13 @@ function AgentWinsView() {
             </div>
           ) : entryList.map(entry => {
             const writer = writerList.find(w => w.id === entry.writerId);
+            const isCalculated = entry.gameId ? (() => {
+              const game = gameList.find(g => g.id === entry.gameId);
+              return game ? !!(game as any).calculationsRun : false;
+            })() : false;
+            const isLocked = entry.locked || isCalculated;
             return (
-              <div key={entry.id} className={`bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3 ${entry.locked ? "opacity-60" : ""}`}>
+              <div key={entry.id} className={`bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3 ${isLocked ? "opacity-60" : ""}`}>
                 <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-white flex-shrink-0">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
                     <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
@@ -289,11 +294,11 @@ function AgentWinsView() {
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">{relDate(entry.entryDate ?? "")}</span>
                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                      entry.locked
+                      isLocked
                         ? "bg-muted text-muted-foreground"
                         : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
                     }`}>
-                      {entry.locked ? "Locked" : "Open"}
+                      {isLocked ? "Locked" : "Open"}
                     </span>
                   </div>
                 </div>
@@ -301,7 +306,7 @@ function AgentWinsView() {
                   <div className="text-right">
                     <div className="text-sm font-bold tabular-nums">{fmtGHS(Number(entry.winsAmount ?? 0))}</div>
                   </div>
-                  {!entry.locked ? (
+                  {!isLocked ? (
                     <button
                       onClick={() => { setEditEntry(entry); setEditForm({ winsAmount: entry.winsAmount }); }}
                       className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, grossEntriesTable, winsEntriesTable, writersTable, agentsTable } from "@workspace/db";
+import { db, grossEntriesTable, winsEntriesTable, writersTable, agentsTable, gamesTable, dailyCalculationsTable } from "@workspace/db";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import {
   CreateGrossEntryBody,
@@ -105,6 +105,26 @@ router.post(
         res.status(403).json({ error: "Writer does not belong to your agent account" });
         return;
       }
+
+      // Check if game is closed
+      if (!parse.data.gameId) {
+        res.status(400).json({ error: "gameId is required" });
+        return;
+      }
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(eq(gamesTable.id, parse.data.gameId))
+        .limit(1);
+      if (!game) {
+        res.status(404).json({ error: "Game not found" });
+        return;
+      }
+      const isClosed = game.status === "closed" || new Date(game.closeAt) <= new Date();
+      if (isClosed) {
+        res.status(409).json({ error: "Cannot create gross entry: Game is closed" });
+        return;
+      }
     }
 
     const [entry] = await db
@@ -149,6 +169,26 @@ router.patch(
       const agentId = await getAgentIdForUser(req.user!.userId);
       if (!agentId || !(await writerBelongsToAgent(existing.writerId, agentId))) {
         res.status(403).json({ error: "Access denied" });
+        return;
+      }
+
+      // Check if game is closed
+      if (!existing.gameId) {
+        res.status(400).json({ error: "Entry is not associated with a game" });
+        return;
+      }
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(eq(gamesTable.id, existing.gameId))
+        .limit(1);
+      if (!game) {
+        res.status(404).json({ error: "Game not found" });
+        return;
+      }
+      const isClosed = game.status === "closed" || new Date(game.closeAt) <= new Date();
+      if (isClosed) {
+        res.status(409).json({ error: "Cannot edit gross entry: Game is closed" });
         return;
       }
     }
@@ -236,6 +276,21 @@ router.post(
         res.status(403).json({ error: "Writer does not belong to your agent account" });
         return;
       }
+
+      // Check if calculations have run for this game
+      if (!parse.data.gameId) {
+        res.status(400).json({ error: "gameId is required" });
+        return;
+      }
+      const calculations = await db
+        .select()
+        .from(dailyCalculationsTable)
+        .where(eq(dailyCalculationsTable.gameId, parse.data.gameId))
+        .limit(1);
+      if (calculations.length > 0) {
+        res.status(409).json({ error: "Cannot create wins entry: Calculations have already been run for this game" });
+        return;
+      }
     }
 
     const [entry] = await db
@@ -280,6 +335,21 @@ router.patch(
       const agentId = await getAgentIdForUser(req.user!.userId);
       if (!agentId || !(await writerBelongsToAgent(existing.writerId, agentId))) {
         res.status(403).json({ error: "Access denied" });
+        return;
+      }
+
+      // Check if calculations have run for this game
+      if (!existing.gameId) {
+        res.status(400).json({ error: "Entry is not associated with a game" });
+        return;
+      }
+      const calculations = await db
+        .select()
+        .from(dailyCalculationsTable)
+        .where(eq(dailyCalculationsTable.gameId, existing.gameId))
+        .limit(1);
+      if (calculations.length > 0) {
+        res.status(409).json({ error: "Cannot edit wins entry: Calculations have already been run for this game" });
         return;
       }
     }

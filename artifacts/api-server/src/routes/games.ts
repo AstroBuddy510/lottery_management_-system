@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, gamesTable } from "@workspace/db";
+import { db, gamesTable, dailyCalculationsTable } from "@workspace/db";
 import { eq, lt, and, not, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 
@@ -28,7 +28,22 @@ router.get("/games", requireAuth, async (req, res) => {
     .select()
     .from(gamesTable)
     .orderBy(gamesTable.createdAt);
-  res.json(games);
+
+  const calculations = await db
+    .select({ gameId: dailyCalculationsTable.gameId })
+    .from(dailyCalculationsTable)
+    .groupBy(dailyCalculationsTable.gameId);
+
+  const calculatedGameIds = new Set(
+    calculations.map((c) => c.gameId).filter(Boolean)
+  );
+
+  const gamesWithStatus = games.map((g) => ({
+    ...g,
+    calculationsRun: calculatedGameIds.has(g.id),
+  }));
+
+  res.json(gamesWithStatus);
 });
 
 router.post(
