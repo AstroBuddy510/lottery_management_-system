@@ -36,6 +36,15 @@ const ROLES = [
 
 const ROLE_LABELS: Record<string, string> = Object.fromEntries(ROLES.map(r => [r.value, r.label]));
 
+const ROLE_COLORS: Record<string, string> = {
+  director: "bg-indigo-500/10 text-indigo-700 border-indigo-200/50 dark:bg-indigo-500/5 dark:text-indigo-300 dark:border-indigo-500/20",
+  administrator: "bg-rose-500/10 text-rose-700 border-rose-200/50 dark:bg-rose-500/5 dark:text-rose-300 dark:border-rose-500/20",
+  cashier: "bg-emerald-500/10 text-emerald-700 border-emerald-200/50 dark:bg-emerald-500/5 dark:text-emerald-300 dark:border-emerald-500/20",
+  gross_entry: "bg-blue-500/10 text-blue-700 border-blue-200/50 dark:bg-blue-500/5 dark:text-blue-300 dark:border-blue-500/20",
+  wins_entry: "bg-amber-500/10 text-amber-700 border-amber-200/50 dark:bg-amber-500/5 dark:text-amber-300 dark:border-amber-500/20",
+  agent: "bg-violet-500/10 text-violet-700 border-violet-200/50 dark:bg-violet-500/5 dark:text-violet-300 dark:border-violet-500/20",
+};
+
 const AVATAR_COLORS = [
   "bg-blue-600","bg-emerald-600","bg-violet-600","bg-orange-500","bg-pink-600","bg-teal-600",
 ];
@@ -48,13 +57,13 @@ function UserAvatar({ name, picture }: { name: string; picture?: string | null }
       <img
         src={picture}
         alt={name}
-        className="w-8 h-8 rounded-full object-cover ring-1 ring-border flex-shrink-0"
+        className="w-9 h-9 rounded-full object-cover ring-2 ring-background shadow-xs border border-border/30 flex-shrink-0"
         onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
       />
     );
   }
   return (
-    <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+    <div className={`w-9 h-9 rounded-full ${color} flex items-center justify-center text-white text-xs font-black shadow-xs ring-2 ring-background border border-border/20 flex-shrink-0`}>
       {initials || "?"}
     </div>
   );
@@ -123,10 +132,17 @@ function WritersSection({ agentId }: { agentId: string }) {
   };
 
   return (
-    <div className="mt-2 mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Writers</span>
-        <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => setAddOpen(true)}>Add Writer</Button>
+    <div className="mt-2 mb-4 p-4 bg-muted/40 dark:bg-muted/10 border border-border/40 rounded-xl space-y-3">
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-black text-muted-foreground/80 uppercase tracking-widest">Writers List</span>
+          <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+            {writers ? writers.length : 0} Total
+          </span>
+        </div>
+        <Button size="sm" variant="outline" className="h-7 text-xs px-3 font-bold rounded-lg border-border/60 hover:bg-muted/50 transition-colors shadow-xs" onClick={() => setAddOpen(true)}>
+          + Add Writer
+        </Button>
       </div>
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading writers...</p>
@@ -135,21 +151,29 @@ function WritersSection({ agentId }: { agentId: string }) {
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-xs text-muted-foreground border-b">
-              <th className="text-left pb-1 font-medium">Code</th>
-              <th className="text-left pb-1 font-medium">Name</th>
-              <th className="text-left pb-1 font-medium">Status</th>
-              <th className="pb-1 w-16"></th>
+            <tr className="text-[10px] text-muted-foreground/75 border-b border-border/40 uppercase tracking-wider font-bold">
+              <th className="text-left pb-2 font-bold">Code</th>
+              <th className="text-left pb-2 font-bold">Name</th>
+              <th className="text-left pb-2 font-bold">Status</th>
+              <th className="pb-2 w-16 text-right pr-2"></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/20">
             {writers.map(w => (
-              <tr key={w.id} className={`border-b last:border-0 ${!w.isActive ? "opacity-50" : ""}`}>
-                <td className="py-1 font-mono text-xs">{w.fullCode}</td>
-                <td className="py-1 text-xs">{w.fullName}</td>
-                <td className="py-1"><Badge variant={w.isActive ? "default" : "secondary"} className="text-xs h-4 px-1">{w.isActive ? "Active" : "Inactive"}</Badge></td>
-                <td className="py-1 text-right">
-                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}>Edit</Button>
+              <tr key={w.id} className={`hover:bg-muted/20 transition-colors ${!w.isActive ? "opacity-50" : ""}`}>
+                <td className="py-2 font-mono text-xs font-semibold text-foreground/90">{w.fullCode}</td>
+                <td className="py-2 text-xs font-medium text-foreground/90">{w.fullName}</td>
+                <td className="py-2">
+                  <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0.1 rounded-full border ${
+                    w.isActive 
+                      ? "bg-emerald-500/10 text-emerald-700 border-emerald-200/40 dark:bg-emerald-500/5 dark:text-emerald-300" 
+                      : "bg-slate-500/10 text-slate-700 border-slate-200/40"
+                  }`}>
+                    {w.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </td>
+                <td className="py-2 text-right pr-2">
+                  <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold rounded-md text-primary hover:bg-primary/10 transition-colors" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}>Edit</Button>
                 </td>
               </tr>
             ))}
@@ -353,40 +377,40 @@ function UsersTab() {
   return (
     <>
       {/* ── Filter toolbar ── */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-4 p-4 bg-card/65 backdrop-blur-md border border-border/40 rounded-2xl shadow-xs mb-4">
         {/* Search */}
-        <div className="relative flex-1 min-w-48 max-w-xs">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search name or phone…"
-            className="pl-8 h-9 text-sm bg-slate-50"
+            className="pl-9 h-9 text-xs bg-muted/20 border-border/40 focus-visible:ring-primary/45 rounded-xl transition-all"
           />
         </div>
 
         {/* Role filter */}
         <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="h-9 w-40 text-sm bg-slate-50">
+          <SelectTrigger className="h-9 w-40 text-xs bg-muted/20 border-border/40 focus:ring-primary/45 rounded-xl">
             <SelectValue placeholder="All roles" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All roles</SelectItem>
-            {ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+          <SelectContent className="rounded-xl border-border/50">
+            <SelectItem value="all" className="text-xs">All roles</SelectItem>
+            {ROLES.map(r => <SelectItem key={r.value} value={r.value} className="text-xs">{r.label}</SelectItem>)}
           </SelectContent>
         </Select>
 
         {/* Status pills */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 p-1 bg-muted/20 border border-border/30 rounded-xl">
           {([
-            ["all",      "All",      "bg-slate-800 text-white",    "bg-white text-slate-500 border hover:bg-slate-50"],
-            ["active",   "Active",   "bg-emerald-500 text-white",  "bg-white text-slate-500 border hover:bg-emerald-50"],
-            ["inactive", "Inactive", "bg-slate-400 text-white",    "bg-white text-slate-400 border hover:bg-slate-50"],
+            ["all",      "All",      "bg-primary text-primary-foreground shadow-xs",    "bg-transparent text-muted-foreground hover:bg-muted/30"],
+            ["active",   "Active",   "bg-emerald-600 text-white shadow-xs",  "bg-transparent text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"],
+            ["inactive", "Inactive", "bg-rose-600 text-white shadow-xs",    "bg-transparent text-muted-foreground hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"],
           ] as [typeof statusFilter, string, string, string][]).map(([f, label, active, inactive]) => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${statusFilter === f ? active : inactive}`}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 ${statusFilter === f ? active : inactive}`}
             >
               {label}
             </button>
@@ -396,24 +420,24 @@ function UsersTab() {
         {/* Result count + Add button */}
         <div className="ml-auto flex items-center gap-3">
           {(search || roleFilter !== "all" || statusFilter !== "all") && (
-            <span className="text-xs text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs font-semibold text-muted-foreground/80">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
           )}
-          <Button size="sm" className="bg-accent hover:bg-accent/90 text-white font-semibold" onClick={() => setCreateOpen(true)}>
+          <Button size="sm" className="bg-gradient-to-r from-primary to-secondary hover:from-primary/95 hover:to-secondary/95 text-white font-extrabold text-xs px-4 h-9 shadow-sm shadow-primary/10 rounded-xl hover:-translate-y-0.5 transition-all duration-300" onClick={() => setCreateOpen(true)}>
             + Add User
           </Button>
         </div>
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
+      <div className="bg-card/75 backdrop-blur-md border border-border/40 shadow-sm rounded-2xl overflow-hidden mt-4">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Last Login</TableHead>
-              <TableHead className="w-44">Action</TableHead>
+            <TableRow className="hover:bg-transparent border-b border-border/40">
+              <TableHead className="text-xs font-bold text-muted-foreground">Name</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Phone</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Role</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Status</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Last Login</TableHead>
+              <TableHead className="w-44 text-right pr-6 text-xs font-bold text-muted-foreground">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -422,37 +446,53 @@ function UsersTab() {
             ) : filtered.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">{search || roleFilter !== "all" || statusFilter !== "all" ? "No users match your filters." : "No users found."}</TableCell></TableRow>
             ) : filtered.map(u => (
-              <TableRow key={u.id} className={!u.isActive ? "opacity-50" : ""}>
+              <TableRow key={u.id} className={`hover:bg-muted/30 transition-colors ${!u.isActive ? "opacity-50" : ""}`}>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
                     <button
                       type="button"
                       onClick={e => handlePhotoClick(e, u)}
-                      className="relative group flex-shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="relative group flex-shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 transition-all"
                       title="Click to upload profile photo"
                     >
                       <UserAvatar name={u.fullName} picture={u.profilePicture} />
-                      <span className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                      <span className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
                       </span>
                     </button>
-                    <span className="font-medium text-sm">{u.fullName}</span>
+                    <span className="font-extrabold text-sm block tracking-tight text-foreground">{u.fullName}</span>
                   </div>
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground font-mono">{u.phone ?? "—"}</TableCell>
-                <TableCell><Badge variant="outline" className="text-xs">{ROLE_LABELS[u.role] ?? u.role}</Badge></TableCell>
-                <TableCell><Badge variant={u.isActive ? "default" : "secondary"} className="text-xs">{u.isActive ? "Active" : "Inactive"}</Badge></TableCell>
-                <TableCell className="text-xs text-muted-foreground">
+                <TableCell className="text-xs text-muted-foreground font-mono font-medium">{u.phone ?? "—"}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${ROLE_COLORS[u.role] ?? "bg-slate-500/10 text-slate-700 border-slate-200/50"}`}>
+                    {ROLE_LABELS[u.role] ?? u.role}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    u.isActive 
+                      ? "bg-emerald-500/10 text-emerald-700 border-emerald-200/50 dark:bg-emerald-500/5 dark:text-emerald-300 dark:border-emerald-500/20" 
+                      : "bg-rose-500/10 text-rose-700 border-rose-200/50 dark:bg-rose-500/5 dark:text-rose-300 dark:border-rose-500/20"
+                  }`}>
+                    {u.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground/80 font-medium">
                   {u.lastLogin
-                    ? `${new Date(u.lastLogin).toLocaleDateString()} ${new Date(u.lastLogin).toLocaleTimeString()}`
+                    ? `${new Date(u.lastLogin).toLocaleDateString()} ${new Date(u.lastLogin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                     : "—"}
                 </TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(u)}>Edit</Button>
-                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-amber-600" onClick={() => handleRegeneratePin(u)}>Reset PIN</Button>
-                    {u.isActive && <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDeactivate(u)}>Deactivate</Button>}
-                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(u)}>Delete</Button>
+                  <div className="flex gap-1.5 justify-end pr-2">
+                    <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-border/40 hover:bg-muted/50 transition-colors" onClick={() => openEdit(u)}>Edit</Button>
+                    <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-amber-500/20 text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 transition-colors" onClick={() => handleRegeneratePin(u)}>Reset PIN</Button>
+                    {u.isActive ? (
+                      <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-rose-500/20 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700 dark:hover:text-rose-400 transition-colors" onClick={() => handleDeactivate(u)}>Deactivate</Button>
+                    ) : (
+                      <span className="w-1"></span>
+                    )}
+                    <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-red-500/30 text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400 transition-colors" onClick={() => handleDelete(u)}>Delete</Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -880,30 +920,30 @@ function AgentsTab() {
   return (
     <>
       {/* ── Filter toolbar ── */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-4 p-4 bg-card/65 backdrop-blur-md border border-border/40 rounded-2xl shadow-xs mb-4">
         {/* Search */}
-        <div className="relative flex-1 min-w-48 max-w-xs">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <Input
             value={agentSearch}
             onChange={e => setAgentSearch(e.target.value)}
             placeholder="Search agency, code, agent or location…"
-            className="pl-8 h-9 text-sm bg-slate-50"
+            className="pl-9 h-9 text-xs bg-muted/20 border-border/40 focus-visible:ring-primary/45 rounded-xl transition-all"
           />
         </div>
 
         {/* Status pills */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 p-1 bg-muted/20 border border-border/30 rounded-xl">
           {([
-            ["all",          "All",       "bg-slate-800 text-white",   "bg-white text-slate-500 border hover:bg-slate-50"],
-            ["active-clear", "Clear",     "bg-emerald-500 text-white", "bg-white text-slate-500 border hover:bg-emerald-50"],
-            ["active-debt",  "Has Debt",  "bg-amber-500 text-white",   "bg-white text-slate-500 border hover:bg-amber-50"],
-            ["closed",       "Closed",    "bg-slate-400 text-white",   "bg-white text-slate-400 border hover:bg-slate-50"],
+            ["all",          "All",       "bg-primary text-primary-foreground shadow-xs",   "bg-transparent text-muted-foreground hover:bg-muted/30"],
+            ["active-clear", "Clear",     "bg-emerald-600 text-white shadow-xs", "bg-transparent text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"],
+            ["active-debt",  "Has Debt",  "bg-amber-600 text-white shadow-xs",   "bg-transparent text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400"],
+            ["closed",       "Closed",    "bg-rose-600 text-white shadow-xs",   "bg-transparent text-muted-foreground hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400"],
           ] as [typeof agentStatusFilter, string, string, string][]).map(([f, label, active, inactive]) => (
             <button
               key={f}
               onClick={() => setAgentStatusFilter(f)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${agentStatusFilter === f ? active : inactive}`}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 ${agentStatusFilter === f ? active : inactive}`}
             >
               {label}
             </button>
@@ -913,24 +953,26 @@ function AgentsTab() {
         {/* Result count + Add button */}
         <div className="ml-auto flex items-center gap-3">
           {(agentSearch || agentStatusFilter !== "all") && (
-            <span className="text-xs text-muted-foreground">{filteredAgents.length} result{filteredAgents.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs font-semibold text-muted-foreground/80">{filteredAgents.length} result{filteredAgents.length !== 1 ? "s" : ""}</span>
           )}
-          <Button size="sm" onClick={() => setCreateOpen(true)}>Add Agency</Button>
+          <Button size="sm" className="bg-gradient-to-r from-primary to-secondary hover:from-primary/95 hover:to-secondary/95 text-white font-extrabold text-xs px-4 h-9 shadow-sm shadow-primary/10 rounded-xl hover:-translate-y-0.5 transition-all duration-300" onClick={() => setCreateOpen(true)}>
+            Add Agency
+          </Button>
         </div>
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
+      <div className="bg-card/75 backdrop-blur-md border border-border/40 shadow-sm rounded-2xl overflow-hidden mt-4">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-8"></TableHead>
-              <TableHead>Code</TableHead>
-              <TableHead>Agency</TableHead>
-              <TableHead>Agent</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Debt</TableHead>
-              <TableHead className="w-20">Action</TableHead>
+            <TableRow className="hover:bg-transparent border-b border-border/40">
+              <TableHead className="w-10"></TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Code</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Agency</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Agent</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Location</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Status</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Debt</TableHead>
+              <TableHead className="w-20 text-right pr-6 text-xs font-bold text-muted-foreground">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -945,37 +987,43 @@ function AgentsTab() {
               return (
                 <Fragment key={a.id}>
                   <TableRow
-                    className={`cursor-pointer hover:bg-muted/50 transition-colors${!a.isActive ? " opacity-50" : ""}`}
+                    className={`cursor-pointer hover:bg-muted/30 transition-colors ${!a.isActive ? "opacity-50" : ""}`}
                     onClick={() => openEdit(a)}
                   >
-                    <TableCell onClick={e => { e.stopPropagation(); setExpanded(expanded === a.id ? null : a.id); }} className="cursor-default">
+                    <TableCell onClick={e => { e.stopPropagation(); setExpanded(expanded === a.id ? null : a.id); }} className={`cursor-default border-l-4 ${
+                      st === "active-clear" ? "border-l-emerald-500" :
+                      st === "active-debt" ? "border-l-amber-500" :
+                      "border-l-rose-500"
+                    }`}>
                       <button
-                        className="text-muted-foreground hover:text-foreground text-xs w-5 h-5 flex items-center justify-center"
+                        className="text-muted-foreground hover:text-foreground text-xs w-5 h-5 flex items-center justify-center rounded-lg hover:bg-muted/50 transition-colors"
                         aria-label={expanded === a.id ? "Collapse writers" : "Expand writers"}
                         tabIndex={-1}
                       >
                         {expanded === a.id ? "▼" : "▶"}
                       </button>
                     </TableCell>
-                    <TableCell className="font-mono text-sm font-medium">{a.fullCode}</TableCell>
-                    <TableCell className="text-sm font-medium">{a.agencyName ?? "—"}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{a.user?.fullName ?? "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{a.location ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-xs font-extrabold text-foreground">{a.fullCode}</TableCell>
+                    <TableCell className="text-sm font-extrabold text-foreground tracking-tight">{a.agencyName ?? "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground font-semibold">{a.user?.fullName ?? "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground/80 font-medium">{a.location ?? "—"}</TableCell>
                     <TableCell>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
+                      <Badge variant="outline" className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.cls}`}>
                         {cfg.label}
-                      </span>
+                      </Badge>
                     </TableCell>
-                    <TableCell className={`text-sm font-mono ${debt > 0 ? "text-amber-600 font-semibold" : "text-muted-foreground"}`}>
+                    <TableCell className={`text-xs font-mono font-bold tracking-tight ${debt > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/60"}`}>
                       {debt > 0 ? `GHS ${debt.toFixed(2)}` : "—"}
                     </TableCell>
                     <TableCell onClick={e => e.stopPropagation()}>
-                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(a)}>Edit</Button>
+                      <div className="flex justify-end pr-2">
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-border/40 hover:bg-muted/50 transition-colors" onClick={() => openEdit(a)}>Edit</Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                   {expanded === a.id && (
                     <TableRow>
-                      <TableCell colSpan={8} className="bg-muted/30 px-8 py-2">
+                      <TableCell colSpan={8} className="bg-muted/10 dark:bg-muted/5 px-8 py-3 border-l-4 border-l-primary/40">
                         <WritersSection agentId={a.id} />
                       </TableCell>
                     </TableRow>
@@ -1337,16 +1385,16 @@ function AgencyStaffTab() {
   return (
     <>
       {/* Agent selection */}
-      <div className="flex flex-wrap items-end gap-3 mb-5">
-        <div className="space-y-1.5 flex-1 min-w-56 max-w-sm">
-          <Label className="text-xs font-medium">Select Agency</Label>
+      <div className="flex flex-wrap items-end gap-4 p-4 bg-card/65 backdrop-blur-md border border-border/40 rounded-2xl shadow-xs mb-4">
+        <div className="space-y-1.5 flex-1 min-w-[240px] max-w-sm">
+          <Label className="text-xs font-bold text-muted-foreground/80 uppercase tracking-wider">Select Agency</Label>
           <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-            <SelectTrigger className="h-9 text-sm bg-slate-50">
+            <SelectTrigger className="h-9 text-xs bg-muted/20 border-border/40 focus:ring-primary/45 rounded-xl">
               <SelectValue placeholder="Choose an agency…" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="rounded-xl border-border/50">
               {agentsList.map(a => (
-                <SelectItem key={a.id} value={a.id}>
+                <SelectItem key={a.id} value={a.id} className="text-xs">
                   {a.fullCode} — {a.agencyName || a.user?.fullName || "Unnamed"}
                 </SelectItem>
               ))}
@@ -1354,43 +1402,45 @@ function AgencyStaffTab() {
           </Select>
         </div>
         {selectedAgentId && (
-          <Button size="sm" className="bg-accent hover:bg-accent/90 text-white font-semibold" onClick={() => setAddOpen(true)}>+ Add Staff</Button>
+          <Button size="sm" className="bg-gradient-to-r from-primary to-secondary hover:from-primary/95 hover:to-secondary/95 text-white font-extrabold text-xs px-4 h-9 shadow-sm shadow-primary/10 rounded-xl hover:-translate-y-0.5 transition-all duration-300 ml-auto" onClick={() => setAddOpen(true)}>
+            + Add Staff Member
+          </Button>
         )}
       </div>
 
       {!selectedAgentId ? (
-        <div className="text-center py-12 text-muted-foreground text-sm">Select an agency above to view and manage its staff.</div>
+        <div className="text-center py-12 text-muted-foreground text-sm bg-card/40 border border-border/30 rounded-2xl">Select an agency above to view and manage its staff.</div>
       ) : isLoading ? (
-        <div className="text-center py-12 text-muted-foreground text-sm">Loading staff…</div>
+        <div className="text-center py-12 text-muted-foreground text-sm bg-card/40 border border-border/30 rounded-2xl">Loading staff…</div>
       ) : staffList.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground text-sm">No staff members for {selectedAgent?.agencyName || "this agency"} yet.</div>
+        <div className="text-center py-12 text-muted-foreground text-sm bg-card/40 border border-border/30 rounded-2xl">No staff members for {selectedAgent?.agencyName || "this agency"} yet.</div>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
+        <div className="bg-card/75 backdrop-blur-md border border-border/40 shadow-sm rounded-2xl overflow-hidden mt-4">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="text-right">Salary (GHS)</TableHead>
-                <TableHead className="text-right">Allowances (GHS)</TableHead>
-                <TableHead className="text-right">Bonuses (GHS)</TableHead>
-                <TableHead className="text-right font-semibold">Total (GHS)</TableHead>
-                <TableHead className="w-32">Action</TableHead>
+              <TableRow className="hover:bg-transparent border-b border-border/40">
+                <TableHead className="text-xs font-bold text-muted-foreground">Name</TableHead>
+                <TableHead className="text-right text-xs font-bold text-muted-foreground">Salary (GHS)</TableHead>
+                <TableHead className="text-right text-xs font-bold text-muted-foreground">Allowances (GHS)</TableHead>
+                <TableHead className="text-right text-xs font-bold text-muted-foreground">Bonuses (GHS)</TableHead>
+                <TableHead className="text-right text-xs font-extrabold text-primary">Total (GHS)</TableHead>
+                <TableHead className="w-32 text-right pr-6 text-xs font-bold text-muted-foreground">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {staffList.map(s => {
                 const total = parseFloat(s.salary) + parseFloat(s.allowances) + parseFloat(s.bonuses);
                 return (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium text-sm">{s.name}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{parseFloat(s.salary).toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono text-sm text-blue-600">{parseFloat(s.allowances).toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono text-sm text-emerald-600">{parseFloat(s.bonuses).toFixed(2)}</TableCell>
+                  <TableRow key={s.id} className="hover:bg-muted/30 transition-colors">
+                    <TableCell className="font-extrabold text-sm text-foreground">{s.name}</TableCell>
+                    <TableCell className="text-right font-mono text-xs font-medium text-foreground">{parseFloat(s.salary).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">{parseFloat(s.allowances).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">{parseFloat(s.bonuses).toFixed(2)}</TableCell>
                     <TableCell className="text-right font-mono text-sm font-bold text-primary">{total.toFixed(2)}</TableCell>
                     <TableCell>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(s)}>Edit</Button>
-                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive" onClick={() => handleDelete(s)}>Delete</Button>
+                      <div className="flex gap-1.5 justify-end pr-2">
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-border/40 hover:bg-muted/50 transition-colors" onClick={() => openEdit(s)}>Edit</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-red-500/20 text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400 transition-colors" onClick={() => handleDelete(s)}>Delete</Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1559,59 +1609,69 @@ function CompanyStaffTab() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted-foreground">Internal company employees — manage payroll, positions and status.</p>
-        <Button size="sm" className="bg-accent hover:bg-accent/90 text-white font-semibold" onClick={() => setAddOpen(true)}>+ Add Staff</Button>
+      <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-card/65 backdrop-blur-md border border-border/40 rounded-2xl shadow-xs mb-4">
+        <p className="text-xs font-semibold text-muted-foreground/80">Internal company employees — manage payroll, positions and status.</p>
+        <Button size="sm" className="bg-gradient-to-r from-primary to-secondary hover:from-primary/95 hover:to-secondary/95 text-white font-extrabold text-xs px-4 h-9 shadow-sm shadow-primary/10 rounded-xl hover:-translate-y-0.5 transition-all duration-300 ml-auto" onClick={() => setAddOpen(true)}>
+          + Add Staff
+        </Button>
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground text-sm">Loading company staff…</div>
+        <div className="text-center py-12 text-muted-foreground text-sm bg-card/40 border border-border/30 rounded-2xl">Loading company staff…</div>
       ) : staffList.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground text-sm">No company staff members yet. Click "+ Add Staff" to begin.</div>
+        <div className="text-center py-12 text-muted-foreground text-sm bg-card/40 border border-border/30 rounded-2xl">No company staff members yet. Click "+ Add Staff" to begin.</div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-4">
           {staffList.map(s => {
             const total = parseFloat(s.salary) + parseFloat(s.allowances) + parseFloat(s.bonuses);
             const initials = s.fullName.split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase();
             const color = AVATAR_COLORS[s.fullName.charCodeAt(0) % AVATAR_COLORS.length];
             const isSuspended = s.status === "suspended";
             return (
-              <Card key={s.id} className={`overflow-hidden transition-all hover:shadow-md ${isSuspended ? "opacity-60" : ""}`}>
-                <CardContent className="p-4 space-y-3">
+              <Card key={s.id} className={`overflow-hidden backdrop-blur-md bg-card/75 border border-border/40 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 rounded-2xl relative ${
+                isSuspended ? "opacity-60 border-l-4 border-l-rose-500" : "border-l-4 border-l-emerald-500"
+              }`}>
+                <CardContent className="p-5 space-y-4">
                   {/* Header */}
                   <div className="flex items-center gap-3">
                     {s.profilePicture ? (
-                      <img src={s.profilePicture} alt={s.fullName} className="w-12 h-12 rounded-full object-cover ring-2 ring-border flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      <img src={s.profilePicture} alt={s.fullName} className="w-11 h-11 rounded-full object-cover ring-2 ring-background shadow-xs border border-border/30 flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     ) : (
-                      <div className={`w-12 h-12 rounded-full ${color} flex items-center justify-center text-white text-sm font-bold flex-shrink-0`}>{initials || "?"}</div>
+                      <div className={`w-11 h-11 rounded-full ${color} flex items-center justify-center text-white text-xs font-black shadow-xs ring-2 ring-background border border-border/20 flex-shrink-0`}>{initials || "?"}</div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm truncate">{s.fullName}</p>
-                      <p className="text-xs text-muted-foreground truncate">{s.position}</p>
+                      <p className="font-extrabold text-sm text-foreground truncate tracking-tight">{s.fullName}</p>
+                      <p className="text-xs text-muted-foreground/80 font-semibold truncate mt-0.5">{s.position}</p>
                     </div>
-                    <Badge variant={isSuspended ? "secondary" : "default"} className="text-[10px] flex-shrink-0">{isSuspended ? "Suspended" : "Active"}</Badge>
+                    <Badge variant={isSuspended ? "secondary" : "outline"} className={`text-[9px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                      isSuspended 
+                        ? "bg-rose-500/10 text-rose-700 border-rose-200/50 dark:bg-rose-500/5 dark:text-rose-300" 
+                        : "bg-emerald-500/10 text-emerald-700 border-emerald-200/50 dark:bg-emerald-500/5 dark:text-emerald-300"
+                    }`}>{isSuspended ? "Suspended" : "Active"}</Badge>
                   </div>
-                  {/* Financials */}
-                  <div className="grid grid-cols-3 gap-2 text-center">
+
+                  {/* Financials in grid with visual borders */}
+                  <div className="grid grid-cols-3 gap-2 bg-muted/20 border border-border/30 rounded-xl p-2.5 text-center">
                     <div>
-                      <p className="text-[10px] uppercase text-muted-foreground font-medium">Salary</p>
-                      <p className="text-sm font-mono font-semibold">{parseFloat(s.salary).toFixed(2)}</p>
+                      <p className="text-[9px] uppercase text-muted-foreground/80 font-bold tracking-wider">Salary</p>
+                      <p className="text-xs font-mono font-bold text-foreground mt-0.5">{parseFloat(s.salary).toFixed(2)}</p>
+                    </div>
+                    <div className="border-l border-r border-border/30">
+                      <p className="text-[9px] uppercase text-muted-foreground/80 font-bold tracking-wider">Allowance</p>
+                      <p className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 mt-0.5">{parseFloat(s.allowances).toFixed(2)}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] uppercase text-muted-foreground font-medium">Allowance</p>
-                      <p className="text-sm font-mono font-semibold text-blue-600">{parseFloat(s.allowances).toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase text-muted-foreground font-medium">Bonus</p>
-                      <p className="text-sm font-mono font-semibold text-emerald-600">{parseFloat(s.bonuses).toFixed(2)}</p>
+                      <p className="text-[9px] uppercase text-muted-foreground/80 font-bold tracking-wider">Bonus</p>
+                      <p className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{parseFloat(s.bonuses).toFixed(2)}</p>
                     </div>
                   </div>
-                  <div className="border-t pt-2 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-primary">Total: GHS {total.toFixed(2)}</span>
+
+                  <div className="border-t border-border/40 pt-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-primary tracking-tight">Total: <span className="font-mono text-sm font-black">{total.toFixed(2)}</span> GHS</span>
                     <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => openEdit(s)}>Edit</Button>
-                      <Button size="sm" variant="ghost" className={`h-6 text-xs px-2 ${isSuspended ? "text-emerald-600" : "text-amber-600"}`} onClick={() => handleToggleStatus(s)}>{isSuspended ? "Activate" : "Suspend"}</Button>
-                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2 text-destructive" onClick={() => handleDelete(s)}>Delete</Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold text-muted-foreground hover:text-foreground transition-colors" onClick={() => openEdit(s)}>Edit</Button>
+                      <Button size="sm" variant="ghost" className={`h-6 text-[10px] px-2 font-bold transition-colors ${isSuspended ? "text-emerald-600 hover:text-emerald-700" : "text-amber-600 hover:text-amber-700"}`} onClick={() => handleToggleStatus(s)}>{isSuspended ? "Activate" : "Suspend"}</Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold text-red-600 hover:text-red-700 transition-colors" onClick={() => handleDelete(s)}>Delete</Button>
                     </div>
                   </div>
                 </CardContent>
@@ -1731,18 +1791,50 @@ export function Users() {
     : "View and manage internal company staff members.";
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold">{heading}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">{subHeading}</p>
+    <div className="p-6 relative space-y-6">
+      {/* Background glow effects */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute top-0 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl pointer-events-none -z-10" />
+
+      <div className="flex items-center justify-between flex-wrap gap-4 border-b border-border/40 pb-4">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">{heading}</h1>
+          <p className="text-xs font-semibold text-muted-foreground/80 mt-1">{subHeading}</p>
+        </div>
       </div>
 
-      <Tabs defaultValue={defaultTab}>
-        <TabsList className="mb-4">
-          {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="agents">Agents</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="agency-staff">Agency Staff</TabsTrigger>}
-          <TabsTrigger value="company-staff">Company Staff</TabsTrigger>
+      <Tabs defaultValue={defaultTab} className="relative z-10 space-y-6">
+        <TabsList className="w-full justify-start border-b border-border/40 rounded-none h-auto p-0 bg-transparent gap-2">
+          {isAdmin && (
+            <TabsTrigger
+              value="users"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent"
+            >
+              Users
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger
+              value="agents"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent"
+            >
+              Agents
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger
+              value="agency-staff"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent"
+            >
+              Agency Staff
+            </TabsTrigger>
+          )}
+          <TabsTrigger
+            value="company-staff"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent"
+          >
+            Company Staff
+          </TabsTrigger>
         </TabsList>
 
         {isAdmin && (

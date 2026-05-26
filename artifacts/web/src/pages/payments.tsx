@@ -499,19 +499,19 @@ export function Payments() {
         {/* ── Settlement Board ── */}
         <TabsContent value="settlement" className="space-y-4 outline-none">
           {/* Date + summary header */}
-          <div className="flex items-center justify-between flex-wrap gap-3 bg-card/45 backdrop-blur-md border border-border/40 rounded-xl p-3.5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Settlement Date</Label>
+          <div className="flex items-center justify-between flex-wrap gap-4 bg-card/45 backdrop-blur-md border border-border/40 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <Label className="text-xs font-bold text-muted-foreground whitespace-nowrap">Settlement Date</Label>
               <div className="relative">
                 <Input 
                   type="date" 
                   value={boardDate} 
                   onChange={e => setBoardDate(e.target.value)} 
-                  className="h-8 text-xs w-36 bg-background/60 border-border/60 rounded-lg pr-8 focus:ring-1 focus:ring-primary" 
+                  className="h-9 text-xs w-44 bg-background/60 border-border/60 rounded-xl px-3 focus:ring-1 focus:ring-primary" 
                 />
               </div>
               {boardDate !== todayStr && (
-                <Button size="sm" variant="ghost" className="h-8 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20" onClick={() => setBoardDate(todayStr)}>
+                <Button size="sm" variant="ghost" className="h-9 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 rounded-xl px-3" onClick={() => setBoardDate(todayStr)}>
                   Today
                 </Button>
               )}

@@ -17,7 +17,7 @@ import {
 } from "@workspace/api-client-react";
 import type { TimeWindow } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1231,144 +1231,225 @@ function CashierDashboard() {
   const dateStr = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(getServerNow());
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6 relative z-10">
 
       {/* ── Time window banner ── */}
-      <div className={`rounded-xl border px-5 py-3 flex items-center gap-4 flex-wrap ${ws.open ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${ws.open ? "bg-emerald-100" : "bg-red-100"}`}>
-          <svg className={`w-4.5 h-4.5 ${ws.open ? "text-emerald-700" : "text-red-600"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
+      <div className={`relative overflow-hidden rounded-2xl border px-5 py-4 flex items-center gap-4 flex-wrap backdrop-blur-md transition-all duration-300 ${
+        ws.open 
+          ? "bg-emerald-500/10 dark:bg-emerald-500/5 border-emerald-500/20 dark:border-emerald-500/10 text-emerald-800 dark:text-emerald-300 shadow-sm shadow-emerald-500/5" 
+          : "bg-rose-500/10 dark:bg-rose-500/5 border-rose-500/20 dark:border-rose-500/10 text-rose-800 dark:text-rose-300 shadow-sm shadow-rose-500/5"
+      }`}>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border transition-all ${
+          ws.open 
+            ? "bg-emerald-500/20 dark:bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400" 
+            : "bg-rose-500/20 dark:bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+        }`}>
+          <Clock className="w-5 h-5 animate-pulse" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className={`text-sm font-bold ${ws.open ? "text-emerald-800" : "text-red-700"}`}>
+          <div className="text-sm font-extrabold tracking-tight flex items-center gap-1.5">
             Payment Window: {ws.open ? "OPEN" : "CLOSED"}
-            {ws.open && ws.window && <span className="font-normal ml-1 text-xs">· closes {fmtHHMM12(ws.window.windowClose)}</span>}
-            {!ws.open && ws.nextTime && <span className="font-normal ml-1 text-xs">· opens at {fmtHHMM12(ws.nextTime)}</span>}
+            {ws.open && (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+            )}
+            {ws.open && ws.window && <span className="font-semibold text-xs text-muted-foreground/80 ml-1">· closes {fmtHHMM12(ws.window.windowClose)}</span>}
+            {!ws.open && ws.nextTime && <span className="font-semibold text-xs text-muted-foreground/80 ml-1">· opens at {fmtHHMM12(ws.nextTime)}</span>}
           </div>
-          <div className="text-xs text-muted-foreground mt-0.5">{dateStr}</div>
+          <div className="text-xs text-muted-foreground mt-0.5 font-medium">{dateStr}</div>
         </div>
         <Button
           size="sm"
           onClick={() => navigate("/payments")}
-          className={ws.open ? "bg-emerald-700 hover:bg-emerald-800" : ""}
+          className={`gap-2 rounded-xl text-xs font-bold shadow-md hover:-translate-y-0.5 transition-all duration-300 ${
+            ws.open 
+              ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white" 
+              : "bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white"
+          }`}
         >
-          Go to Cashier Station →
+          Go to Cashier Station <ArrowRight className="w-3.5 h-3.5" />
         </Button>
       </div>
 
       {/* ── Cash position stat cards ── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border bg-card p-4 space-y-1.5">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pay-In Today</div>
-          <div className="text-2xl font-bold text-emerald-700">{fmtGHS(todayPayIn)}</div>
-          <div className="text-[11px] text-muted-foreground">{todayValid.filter(p => p.transactionType === "pay_in").length} transaction(s)</div>
-        </div>
-        <div className="rounded-xl border bg-card p-4 space-y-1.5">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pay-Out Today</div>
-          <div className="text-2xl font-bold text-orange-600">{fmtGHS(todayPayOut)}</div>
-          <div className="text-[11px] text-muted-foreground">{todayValid.filter(p => p.transactionType === "pay_out").length} transaction(s)</div>
-        </div>
-        <div className={`rounded-xl border p-4 space-y-1.5 ${netPos >= 0 ? "bg-primary/5 border-primary/20" : "bg-red-50 border-red-200"}`}>
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Net Cash Position</div>
-          <div className={`text-2xl font-bold ${netPos >= 0 ? "text-primary" : "text-destructive"}`}>{fmtGHS(netPos)}</div>
-          <div className="text-[11px] text-muted-foreground">pay-in minus pay-out</div>
-        </div>
-        <div className="rounded-xl border bg-card p-4 space-y-1.5">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Settlement Today</div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-emerald-700">{settledCount}</span>
-            <span className="text-xs text-muted-foreground">settled</span>
-            {outstandingCount > 0 && <><span className="text-lg font-bold text-destructive">{outstandingCount}</span><span className="text-xs text-destructive">outstanding</span></>}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {/* Pay-In Today */}
+        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-emerald-500/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4 flex flex-col justify-between min-h-[110px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Pay-In Today</span>
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            {(unread?.count ?? 0) > 0 && <span className="text-destructive font-medium">{unread!.count} unread notif.</span>}
-            {!(unread?.count) && "of agents with calcs"}
+          <div className="mt-2.5">
+            <div className="text-xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">{fmtGHS(todayPayIn)}</div>
+            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">{todayValid.filter(p => p.transactionType === "pay_in").length} transaction(s)</div>
+          </div>
+        </div>
+
+        {/* Pay-Out Today */}
+        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-orange-500/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4 flex flex-col justify-between min-h-[110px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Pay-Out Today</span>
+            <div className="p-1.5 rounded-lg bg-orange-500/10 dark:bg-orange-500/5 text-orange-600 dark:text-orange-400 border border-orange-500/25">
+              <ArrowDownRight className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2.5">
+            <div className="text-xl font-bold font-mono tracking-tight text-orange-600 dark:text-orange-400">{fmtGHS(todayPayOut)}</div>
+            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">{todayValid.filter(p => p.transactionType === "pay_out").length} transaction(s)</div>
+          </div>
+        </div>
+
+        {/* Net Cash Position */}
+        <div className={`bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4 flex flex-col justify-between min-h-[110px] ${
+          netPos >= 0 ? "hover:border-indigo-500/20" : "hover:border-rose-500/20"
+        }`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Net Cash Position</span>
+            <div className={`p-1.5 rounded-lg border ${
+              netPos >= 0 
+                ? "bg-indigo-500/10 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border-indigo-500/25" 
+                : "bg-rose-500/10 dark:bg-rose-500/5 text-rose-600 dark:text-rose-400 border-rose-500/25"
+            }`}>
+              <Wallet className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2.5">
+            <div className={`text-xl font-bold font-mono tracking-tight ${netPos >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-rose-600 dark:text-rose-400"}`}>{fmtGHS(netPos)}</div>
+            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">Pay-In minus Pay-Out</div>
+          </div>
+        </div>
+
+        {/* Settlement Today */}
+        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4 flex flex-col justify-between min-h-[110px]">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Settlement Today</span>
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+              <Activity className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-2.5">
+            <div className="flex items-baseline gap-1">
+              <span className="text-xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">{settledCount}</span>
+              <span className="text-[10px] text-muted-foreground/70 font-semibold mr-1.5">settled</span>
+              {outstandingCount > 0 && (
+                <>
+                  <span className="text-lg font-bold font-mono tracking-tight text-rose-600 dark:text-rose-400">{outstandingCount}</span>
+                  <span className="text-[10px] text-rose-500 font-semibold">due</span>
+                </>
+              )}
+            </div>
+            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">
+              {(unread?.count ?? 0) > 0 ? (
+                <span className="text-rose-500 font-bold">{unread!.count} unread notifications</span>
+              ) : (
+                "of active agents"
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* ── Agent settlement snapshot ── */}
       {activeWithCalc.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold">Agent Settlement — Today</h2>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => navigate("/payments")}>
-              Full board →
+        <Card className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
+          <CardHeader className="pb-3 px-5 pt-5 flex flex-row items-center justify-between space-y-0 border-b border-border/40">
+            <div>
+              <CardTitle className="text-sm font-bold text-foreground">Agent Settlement — Today</CardTitle>
+              <CardDescription className="text-xs text-muted-foreground">Snapshot of agent balances and due outlays for current game session.</CardDescription>
+            </div>
+            <Button size="sm" variant="ghost" className="h-7 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10" onClick={() => navigate("/payments")}>
+              Full Board →
             </Button>
-          </div>
-          <div className="border rounded-lg divide-y overflow-hidden">
+          </CardHeader>
+          <CardContent className="p-0 divide-y divide-border/40">
             {activeWithCalc.map(row => {
               const { agent, balDue, collected, shortfall, hasCalc } = row;
               const isSettled   = hasCalc && Math.abs(shortfall) < 0.005;
               const isOutstand  = hasCalc && shortfall > 0.005;
               const isOverpaid  = hasCalc && shortfall < -0.005;
+
+              const rowClass = isSettled
+                ? "flex items-center gap-4 px-5 py-3.5 bg-emerald-500/[0.01] border-l-2 border-l-emerald-500 hover:bg-muted/5 transition-colors"
+                : isOutstand
+                  ? "flex items-center gap-4 px-5 py-3.5 bg-rose-500/[0.01] border-l-2 border-l-rose-500 hover:bg-muted/5 transition-colors"
+                  : isOverpaid
+                    ? "flex items-center gap-4 px-5 py-3.5 bg-amber-500/[0.01] border-l-2 border-l-amber-500 hover:bg-muted/5 transition-colors"
+                    : "flex items-center gap-4 px-5 py-3.5 hover:bg-muted/5 transition-colors";
+
               return (
-                <div key={agent.id} className={`flex items-center gap-3 px-4 py-3 ${isOutstand ? "bg-red-50/40" : isSettled ? "bg-emerald-50/30" : ""}`}>
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isSettled ? "bg-emerald-500" : isOutstand ? "bg-red-500 animate-pulse" : isOverpaid ? "bg-amber-500" : "bg-muted-foreground/30"}`} />
+                <div key={agent.id} className={rowClass}>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{agent.user?.fullName ?? agent.fullCode}</div>
-                    <div className="text-xs text-muted-foreground font-mono">{agent.fullCode}</div>
+                    <div className="text-xs font-bold text-foreground truncate">{agent.user?.fullName ?? agent.fullCode}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{agent.fullCode}</div>
                   </div>
                   {hasCalc && (
-                    <div className="text-right">
-                      <div className="text-xs text-muted-foreground">Due</div>
-                      <div className="text-sm font-mono font-semibold">{fmtGHS(balDue)}</div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[9px] text-muted-foreground/80 uppercase font-extrabold tracking-wider">Due</div>
+                      <div className="text-xs font-mono font-bold text-foreground mt-0.5">{fmtGHS(balDue)}</div>
                     </div>
                   )}
-                  <div className="text-right">
-                    <div className="text-xs text-muted-foreground">Collected</div>
-                    <div className={`text-sm font-mono font-semibold ${collected > 0 ? "text-emerald-700" : "text-muted-foreground"}`}>{fmtGHS(collected)}</div>
+                  <div className="text-right shrink-0 ml-4">
+                    <div className="text-[9px] text-muted-foreground/80 uppercase font-extrabold tracking-wider">Collected</div>
+                    <div className={`text-xs font-mono font-bold mt-0.5 ${collected > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>{fmtGHS(collected)}</div>
                   </div>
-                  <div className="w-24 text-right">
-                    {isSettled && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Settled ✓</span>}
-                    {isOutstand && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-800">Due {fmtGHS(shortfall)}</span>}
-                    {isOverpaid && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Overpaid</span>}
-                    {!hasCalc && collected > 0 && <span className="text-xs text-muted-foreground">Has txns</span>}
+                  <div className="w-28 text-right shrink-0 ml-4">
+                    {isSettled && <span className="text-[9.5px] font-extrabold px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-400 shadow-xs">Settled ✓</span>}
+                    {isOutstand && <span className="text-[9.5px] font-extrabold px-2 py-0.5 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-400 shadow-xs">Due {fmtGHS(shortfall)}</span>}
+                    {isOverpaid && <span className="text-[9.5px] font-extrabold px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-400 shadow-xs">Overpaid</span>}
+                    {!hasCalc && collected > 0 && <span className="text-[9.5px] text-muted-foreground font-semibold">Has txns</span>}
                   </div>
                 </div>
               );
             })}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Recent transactions ── */}
       {recentTxns.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold">Recent Transactions — Today</h2>
-          </div>
-          <div className="border rounded-lg divide-y overflow-hidden">
+        <Card className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
+          <CardHeader className="pb-3 px-5 pt-5 border-b border-border/40">
+            <CardTitle className="text-sm font-bold text-foreground">Recent Transactions — Today</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">Most recent payment logs recorded by cashier desk today.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0 divide-y divide-border/40">
             {recentTxns.map(p => {
               const isIn = p.transactionType === "pay_in";
               return (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold ${isIn ? "bg-emerald-600" : "bg-orange-500"}`}>
+                <div key={p.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/5 transition-colors">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-xs font-black shadow-sm ${
+                    isIn ? "bg-gradient-to-br from-emerald-500 to-teal-600" : "bg-gradient-to-br from-orange-500 to-amber-600"
+                  }`}>
                     {isIn ? "↓" : "↑"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{agentNameMap[p.agentId] ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground font-mono">{p.receiptNumber ?? "—"}</div>
+                    <div className="text-xs font-bold text-foreground truncate">{agentNameMap[p.agentId] ?? "—"}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{p.receiptNumber ?? "—"}</div>
                   </div>
-                  <div className="text-right">
-                    <div className={`text-sm font-mono font-semibold ${isIn ? "text-emerald-700" : "text-orange-600"}`}>{fmtGHS(Number(p.amount))}</div>
-                    <div className="text-xs text-muted-foreground">{isIn ? "Pay-In" : "Pay-Out"}</div>
+                  <div className="text-right shrink-0">
+                    <div className={`text-xs font-mono font-bold ${isIn ? "text-emerald-600 dark:text-emerald-400" : "text-orange-600 dark:text-orange-400"}`}>{fmtGHS(Number(p.amount))}</div>
+                    <div className="text-[9.5px] text-muted-foreground mt-0.5 font-semibold">{isIn ? "Pay-In (Collection)" : "Pay-Out (Wins payout)"}</div>
                   </div>
                 </div>
               );
             })}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Empty state when no activity */}
       {todayValid.length === 0 && activeWithCalc.length === 0 && (
-        <div className="text-center py-12 border rounded-xl border-dashed text-muted-foreground text-sm space-y-2">
-          <div className="text-2xl">💼</div>
-          <div className="font-medium">No transactions yet today</div>
-          <div className="text-xs">Head to the Cashier Station to record payments</div>
-          <Button size="sm" className="mt-2" onClick={() => navigate("/payments")}>Open Cashier Station</Button>
+        <div className="text-center py-12 border-2 border-dashed border-border/60 bg-card/45 backdrop-blur-md rounded-2xl text-muted-foreground text-xs space-y-3 max-w-lg mx-auto shadow-sm">
+          <div className="text-3xl">💼</div>
+          <div className="font-bold text-foreground">No transactions yet today</div>
+          <div className="text-muted-foreground font-medium">Head to the Cashier Station to record payments</div>
+          <Button size="sm" className="mt-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl shadow-md transition-all duration-300" onClick={() => navigate("/payments")}>
+            Open Cashier Station
+          </Button>
         </div>
       )}
     </div>
