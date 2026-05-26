@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, decimal, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, date, decimal, boolean, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -28,6 +28,8 @@ export const winsEntriesTable = pgTable("wins_entries", {
   winsAmount: decimal("wins_amount", { precision: 12, scale: 2 }).notNull(),
   enteredBy: uuid("entered_by").notNull().references(() => usersTable.id),
   locked: boolean("locked").notNull().default(false),
+  oversight: boolean("oversight").notNull().default(false),
+  status: varchar("status", { length: 50 }).notNull().default("approved"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

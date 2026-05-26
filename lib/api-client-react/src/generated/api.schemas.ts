@@ -373,6 +373,7 @@ export interface SystemSettings {
   updatedAt: string;
   updatedBy?: string;
   folderColor?: string;
+  folderViewType?: string;
 }
 
 export interface SystemSettingsInput {
@@ -382,6 +383,7 @@ export interface SystemSettingsInput {
   reservePct: string;
   effectiveDate: string;
   folderColor?: string;
+  folderViewType?: string;
 }
 
 export interface TimeWindow {
@@ -461,6 +463,8 @@ export interface WinsEntry {
   winsAmount: string;
   enteredBy: string;
   locked: boolean;
+  oversight: boolean;
+  status: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -473,7 +477,9 @@ export interface WinsEntryInput {
 }
 
 export interface WinsEntryUpdate {
-  winsAmount: string;
+  winsAmount?: string;
+  status?: string;
+  locked?: boolean;
 }
 
 export interface ExpenseLineItem {

@@ -76,7 +76,11 @@ function AgentWinsView() {
   const { data: games } = useListGames();
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun));
+    const todayStr = new Date(getServerNow()).toISOString().split("T")[0];
+    return gameList.filter(g => {
+      const gameDateStr = g.closeAt ? g.closeAt.split("T")[0] : "";
+      return gameDateStr === todayStr;
+    });
   }, [gameList]);
 
   const { data: entries, isLoading } = useListWinsEntries({
@@ -276,8 +280,9 @@ function AgentWinsView() {
               return game ? !!(game as any).calculationsRun : false;
             })() : false;
             const isLocked = entry.locked || isCalculated;
+            const isPendingApproval = entry.status === "Request Approval";
             return (
-              <div key={entry.id} className={`bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3 ${isLocked ? "opacity-60" : ""}`}>
+              <div key={entry.id} className={`bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3 ${(isLocked && !isPendingApproval) ? "opacity-60" : ""}`}>
                 <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-white flex-shrink-0">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
                     <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
@@ -294,11 +299,13 @@ function AgentWinsView() {
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">{relDate(entry.entryDate ?? "")}</span>
                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                      isLocked
+                      isPendingApproval
+                        ? "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400"
+                        : isLocked
                         ? "bg-muted text-muted-foreground"
                         : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
                     }`}>
-                      {isLocked ? "Locked" : "Open"}
+                      {isPendingApproval ? "Request Approval" : isLocked ? "Locked" : "Open"}
                     </span>
                   </div>
                 </div>
@@ -306,7 +313,7 @@ function AgentWinsView() {
                   <div className="text-right">
                     <div className="text-sm font-bold tabular-nums">{fmtGHS(Number(entry.winsAmount ?? 0))}</div>
                   </div>
-                  {!isLocked ? (
+                  {!isLocked || isPendingApproval ? (
                     <button
                       onClick={() => { setEditEntry(entry); setEditForm({ winsAmount: entry.winsAmount }); }}
                       className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
@@ -535,16 +542,27 @@ function AdminWinsView() {
   });
   const writerList = Array.isArray(writers) ? writers : [];
 
-  const today = new Date(getServerNow()).toISOString().split("T")[0];
-  const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "" });
+  const { data: games } = useListGames();
+  const gameList = Array.isArray(games) ? games : [];
+  const liveGames = useMemo(() => {
+    const todayStr = new Date(getServerNow()).toISOString().split("T")[0];
+    return gameList.filter(g => {
+      const gameDateStr = g.closeAt ? g.closeAt.split("T")[0] : "";
+      return gameDateStr === todayStr;
+    });
+  }, [gameList]);
 
-  // Fetch all wins entries for the selected date to verify which writers have already been entered
+  const today = new Date(getServerNow()).toISOString().split("T")[0];
+  const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "", gameId: "" });
+
+  // Fetch all wins entries for the selected date and game to verify which writers have already been entered
   const { data: dateEntries } = useListWinsEntries({
     dateFrom: form.entryDate,
     dateTo: form.entryDate,
+    gameId: form.gameId || undefined,
   }, {
     query: {
-      queryKey: ["winsEntriesForDate", form.entryDate],
+      queryKey: ["winsEntriesForDate", form.entryDate, form.gameId],
       enabled: !!form.entryDate,
     }
   });
@@ -568,12 +586,23 @@ function AdminWinsView() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.gameId) {
+      toast.error("Please select a game event first.");
+      return;
+    }
     try {
-      await createMutation.mutateAsync({ data: { writerId: form.writerId, entryDate: form.entryDate, winsAmount: form.winsAmount } });
+      await createMutation.mutateAsync({
+        data: {
+          writerId: form.writerId,
+          entryDate: form.entryDate,
+          winsAmount: form.winsAmount,
+          gameId: form.gameId || undefined,
+        }
+      });
       toast.success("Entry created");
       setCreateOpen(false);
       setSelectedAgent("");
-      setForm({ writerId: "", entryDate: today, winsAmount: "" });
+      setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" });
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to create entry");
@@ -590,6 +619,16 @@ function AdminWinsView() {
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to update entry");
+    }
+  };
+
+  const handleApproveWinsEntry = async (id: string) => {
+    try {
+      await updateMutation.mutateAsync({ id, data: { status: "approved" } });
+      toast.success("Wins entry approved");
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to approve entry");
     }
   };
 
@@ -660,8 +699,9 @@ function AdminWinsView() {
             ) : entries.map(entry => {
               const writer = writerMap[entry.writerId];
               const ts = entry.createdAt ? new Date(entry.createdAt) : null;
+              const isPendingApproval = entry.status === "Request Approval";
               return (
-                <TableRow key={entry.id} className={entry.locked ? "opacity-60" : ""}>
+                <TableRow key={entry.id} className={(entry.locked && !isPendingApproval) ? "opacity-60" : ""}>
                   <TableCell className="text-sm">{entry.entryDate?.split("T")[0]}</TableCell>
                   <TableCell className="text-sm">
                     <span className="font-mono">{writer?.fullCode ?? entry.writerId.slice(0, 8) + "…"}</span>
@@ -671,11 +711,37 @@ function AdminWinsView() {
                   <TableCell className="text-sm tabular-nums pl-8">
                     {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>
-                  <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
                   <TableCell>
-                    {!entry.locked && (
-                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ winsAmount: entry.winsAmount }); }}>Edit</Button>
-                    )}
+                    <div className="flex flex-col gap-1">
+                      <Badge variant={entry.locked ? "secondary" : "default"} className="text-xs w-fit">
+                        {entry.locked ? "Locked" : "Open"}
+                      </Badge>
+                      {entry.oversight && (
+                        <Badge variant="outline" className={`text-xs w-fit ${
+                          isPendingApproval
+                            ? "border-purple-500 text-purple-600 dark:text-purple-400"
+                            : "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                        }`}>
+                          {entry.status}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      {(!entry.locked || isPendingApproval) && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ winsAmount: entry.winsAmount }); }}>Edit</Button>
+                      )}
+                      {entry.oversight && isPendingApproval && (
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                          onClick={() => handleApproveWinsEntry(entry.id)}
+                        >
+                          Approve
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               );
@@ -684,39 +750,105 @@ function AdminWinsView() {
         </Table>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm(f => ({ ...f, writerId: "" })); } setCreateOpen(o); }}>
-        <DialogContent>
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); } setCreateOpen(o); }}>
+        <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Agent</Label>
+              <Label className="text-xs font-medium">Agent *</Label>
               <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select agent..." /></SelectTrigger>
+                <SelectTrigger className="h-11 text-sm rounded-xl"><SelectValue placeholder="Select agent..." /></SelectTrigger>
                 <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
               </Select>
             </div>
+
             <div className="space-y-1.5">
-              <Label className="text-xs">Writer</Label>
-              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={!selectedAgent || availableWriters.length === 0}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder={!selectedAgent ? "Select agent..." : availableWriters.length === 0 ? "All writers entered for this date" : "Select writer..."} />
+              <Label className="text-xs font-medium">Draw Game *</Label>
+              <Select
+                value={form.gameId}
+                onValueChange={gameId => {
+                  const selectedGame = liveGames.find(g => g.id === gameId);
+                  if (selectedGame) {
+                    const drawDate = selectedGame.closeAt.split("T")[0];
+                    setForm(f => ({ ...f, gameId, entryDate: drawDate, writerId: "" }));
+                  } else {
+                    setForm(f => ({ ...f, gameId: "", entryDate: today, writerId: "" }));
+                  }
+                }}
+                disabled={!selectedAgent}
+              >
+                <SelectTrigger className="h-11 text-sm rounded-xl">
+                  <SelectValue placeholder={!selectedAgent ? "Choose agent first…" : liveGames.length === 0 ? "No active games available" : "Select game…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {liveGames.map(g => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name} (#{g.eventNumber})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Writer *</Label>
+                {form.gameId && usedWriterIds.size > 0 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {usedWriterIds.size}/{writerList.length} entered
+                  </span>
+                )}
+              </div>
+              <Select
+                value={form.writerId}
+                onValueChange={v => setForm(f => ({ ...f, writerId: v }))}
+                disabled={!form.gameId || availableWriters.length === 0}
+              >
+                <SelectTrigger className="h-11 text-sm rounded-xl">
+                  <SelectValue placeholder={!form.gameId ? "Choose game first…" : availableWriters.length === 0 ? "All writers entered for this draw" : "Select writer…"} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-1.5">
-              <Label className="text-xs">Date</Label>
-              <Input type="date" value={form.entryDate} onChange={e => setForm(f => ({ ...f, entryDate: e.target.value }))} required className="h-9 text-sm" />
+              <Label className="text-xs font-medium text-muted-foreground">Date (Locked)</Label>
+              <Input
+                type="date"
+                value={form.entryDate}
+                disabled
+                readOnly
+                className="h-11 text-sm rounded-xl bg-muted text-muted-foreground cursor-not-allowed opacity-80"
+              />
             </div>
+
             <div className="space-y-1.5">
-              <Label className="text-xs">Wins Amount (GH₵)</Label>
-              <Input type="number" step="0.01" min="0" value={form.winsAmount} onChange={e => setForm(f => ({ ...f, winsAmount: e.target.value }))} required className="h-9 text-sm" placeholder="0.00" />
+              <Label className="text-xs font-medium">Wins Amount (GH₵) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.winsAmount}
+                onChange={e => setForm(f => ({ ...f, winsAmount: e.target.value }))}
+                disabled={!form.gameId}
+                required
+                className="h-11 text-sm rounded-xl"
+                placeholder="0.00"
+                inputMode="decimal"
+              />
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={createMutation.isPending || !form.writerId}>Create</Button>
+
+            <DialogFooter className="gap-2 pt-2">
+              <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button
+                type="submit"
+                className="flex-1 h-11 rounded-xl font-semibold"
+                disabled={createMutation.isPending || !form.gameId || !form.writerId || !form.winsAmount}
+              >
+                {createMutation.isPending ? "Saving…" : "Add Entry"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

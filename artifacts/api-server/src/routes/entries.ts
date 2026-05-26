@@ -276,26 +276,34 @@ router.post(
         res.status(403).json({ error: "Writer does not belong to your agent account" });
         return;
       }
+    }
 
-      // Check if calculations have run for this game
-      if (!parse.data.gameId) {
-        res.status(400).json({ error: "gameId is required" });
-        return;
-      }
+    // Check if calculations have run for this game (applies to all roles)
+    if (parse.data.gameId) {
       const calculations = await db
         .select()
         .from(dailyCalculationsTable)
         .where(eq(dailyCalculationsTable.gameId, parse.data.gameId))
         .limit(1);
       if (calculations.length > 0) {
-        res.status(409).json({ error: "Cannot create wins entry: Calculations have already been run for this game" });
+        // Flag as oversight for approval instead of blocking completely
+        const [entry] = await db
+          .insert(winsEntriesTable)
+          .values({
+            ...parse.data,
+            enteredBy: req.user!.userId,
+            oversight: true,
+            status: "Request Approval",
+          })
+          .returning();
+        res.status(201).json(entry);
         return;
       }
     }
 
     const [entry] = await db
       .insert(winsEntriesTable)
-      .values({ ...parse.data, enteredBy: req.user!.userId })
+      .values({ ...parse.data, enteredBy: req.user!.userId, oversight: false, status: "approved" })
       .returning();
     res.status(201).json(entry);
   },
@@ -349,14 +357,29 @@ router.patch(
         .where(eq(dailyCalculationsTable.gameId, existing.gameId))
         .limit(1);
       if (calculations.length > 0) {
-        res.status(409).json({ error: "Cannot edit wins entry: Calculations have already been run for this game" });
-        return;
+        if (!existing.oversight || existing.status !== "Request Approval") {
+          res.status(409).json({ error: "Cannot edit wins entry: Calculations have already been run for this game" });
+          return;
+        }
+      }
+    }
+
+    const updates: Record<string, any> = {};
+    if (bodyResult.data.winsAmount !== undefined) {
+      updates.winsAmount = bodyResult.data.winsAmount;
+    }
+    if (req.user!.role === "director" || req.user!.role === "administrator") {
+      if (bodyResult.data.status !== undefined) {
+        updates.status = bodyResult.data.status;
+      }
+      if (bodyResult.data.locked !== undefined) {
+        updates.locked = bodyResult.data.locked;
       }
     }
 
     const [entry] = await db
       .update(winsEntriesTable)
-      .set({ winsAmount: bodyResult.data.winsAmount })
+      .set(updates)
       .where(eq(winsEntriesTable.id, paramsResult.data.id))
       .returning();
     res.json(entry);

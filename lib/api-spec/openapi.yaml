@@ -2549,6 +2549,8 @@ components:
           type: string
         folderColor:
           type: string
+        folderViewType:
+          type: string
 
     SystemSettingsInput:
       type: object
@@ -2565,6 +2567,8 @@ components:
         effectiveDate:
           type: string
         folderColor:
+          type: string
+        folderViewType:
           type: string
 
     TimeWindow:
@@ -2690,7 +2694,7 @@ components:
 
     WinsEntry:
       type: object
-      required: [id, writerId, entryDate, winsAmount, enteredBy, locked, createdAt, updatedAt]
+      required: [id, writerId, entryDate, winsAmount, enteredBy, locked, oversight, status, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2706,6 +2710,10 @@ components:
           type: string
         locked:
           type: boolean
+        oversight:
+          type: boolean
+        status:
+          type: string
         createdAt:
           type: string
         updatedAt:
@@ -2726,10 +2734,13 @@ components:
 
     WinsEntryUpdate:
       type: object
-      required: [winsAmount]
       properties:
         winsAmount:
           type: string
+        status:
+          type: string
+        locked:
+          type: boolean
 
     ExpenseLineItem:
       type: object

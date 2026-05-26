@@ -70,6 +70,17 @@ const RATES: { key: RateKey; label: string; description: string; color: string }
   { key: "reservePct", label: "Reserve", description: "Percentage of net gross set aside into the reserve fund.", color: "text-violet-600" },
 ];
 
+const VIEW_TYPES = [
+  { value: "extra_large", label: "Extra large icons" },
+  { value: "large", label: "Large icons" },
+  { value: "medium", label: "Medium-sized icons" },
+  { value: "small", label: "Small icons" },
+  { value: "list", label: "List" },
+  { value: "details", label: "Details" },
+  { value: "tiles", label: "Tiles" },
+  { value: "content", label: "Content" },
+];
+
 const EMPTY_EXPENSE = { name: "", description: "", defaultAmount: "", isActive: true };
 
 type RecurringExpenseRow = {
@@ -104,6 +115,13 @@ export function Settings() {
   const [ratesOpen, setRatesOpen] = useState(false);
   const [ratesForm, setRatesForm] = useState({
     commissionPct: "", agentCommissionPct: "", writerCommissionPct: "", reservePct: "", effectiveDate: "", folderColor: "#10b981",
+  });
+
+  // ── Folder settings state ──
+  const [folderSettingsOpen, setFolderSettingsOpen] = useState(false);
+  const [folderSettingsForm, setFolderSettingsForm] = useState({
+    folderColor: "#10b981",
+    folderViewType: "large",
   });
 
   // ── Time window state ──
@@ -165,7 +183,8 @@ export function Settings() {
           writerCommissionPct: pctToDecimal(ratesForm.writerCommissionPct),
           reservePct: pctToDecimal(ratesForm.reservePct),
           effectiveDate: ratesForm.effectiveDate,
-          folderColor: ratesForm.folderColor,
+          folderColor: settings?.folderColor ?? ratesForm.folderColor,
+          folderViewType: settings?.folderViewType ?? "large",
         },
       });
       toast({ title: "Commission rates updated" });
@@ -173,6 +192,36 @@ export function Settings() {
       qc.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
     } catch {
       toast({ title: "Failed to update rates", variant: "destructive" });
+    }
+  };
+
+  const openFolderSettingsDialog = () => {
+    setFolderSettingsForm({
+      folderColor: settings?.folderColor ?? "#10b981",
+      folderViewType: settings?.folderViewType ?? "large",
+    });
+    setFolderSettingsOpen(true);
+  };
+
+  const handleSaveFolderSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await createSettingsMutation.mutateAsync({
+        data: {
+          commissionPct: settings?.commissionPct ?? "0",
+          agentCommissionPct: settings?.agentCommissionPct ?? "0",
+          writerCommissionPct: settings?.writerCommissionPct ?? "0",
+          reservePct: settings?.reservePct ?? "0",
+          effectiveDate: settings?.effectiveDate?.split("T")[0] ?? new Date().toISOString().split("T")[0],
+          folderColor: folderSettingsForm.folderColor,
+          folderViewType: folderSettingsForm.folderViewType,
+        },
+      });
+      toast({ title: "Folder settings updated" });
+      setFolderSettingsOpen(false);
+      qc.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+    } catch {
+      toast({ title: "Failed to update folder settings", variant: "destructive" });
     }
   };
 
@@ -377,6 +426,7 @@ export function Settings() {
       <Tabs defaultValue="rates">
         <TabsList className="mb-4">
           <TabsTrigger value="rates">Commission Rates</TabsTrigger>
+          <TabsTrigger value="folders">Folder Settings</TabsTrigger>
           <TabsTrigger value="hours">Cashier Hours</TabsTrigger>
           <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
           <TabsTrigger value="templates">Game Templates</TabsTrigger>
@@ -415,11 +465,6 @@ export function Settings() {
                   <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-muted-foreground border-t">
                     <span>Effective from: <span className="font-medium text-foreground">{settings.effectiveDate?.split("T")[0]}</span></span>
                     <span>Overall commission: <span className="font-medium text-foreground">{pctDisplay(settings.commissionPct)}</span></span>
-                    <span className="flex items-center gap-1.5">
-                      Folder Color:
-                      <span className="inline-block w-3.5 h-3.5 rounded border border-border" style={{ backgroundColor: settings.folderColor ?? "#10b981" }} />
-                      <span className="font-mono text-[10px] text-foreground font-medium">{settings.folderColor ?? "#10b981"}</span>
-                    </span>
                     <span className="ml-auto">Last updated: <span className="font-medium text-foreground">{settings.updatedAt ? new Date(settings.updatedAt).toLocaleDateString() : "—"}</span></span>
                   </div>
                 </div>
@@ -429,6 +474,50 @@ export function Settings() {
           <p className="text-xs text-muted-foreground px-1">
             Each update creates a new record with the new effective date. The most recent record is always used for calculations.
           </p>
+        </TabsContent>
+
+        {/* ── Folder Settings ── */}
+        <TabsContent value="folders" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Folder Settings</CardTitle>
+                  <CardDescription className="text-xs mt-1">
+                    Configure the visual appearance and layout of archived games folders.
+                  </CardDescription>
+                </div>
+                <Button size="sm" onClick={openFolderSettingsDialog} disabled={loadingSettings}>
+                  {loadingSettings ? "Loading…" : "Update Folder Settings"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!settings ? (
+                <p className="text-sm text-muted-foreground">No settings configured yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
+                      <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Folder Color</div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="inline-block w-6 h-6 rounded border border-border" style={{ backgroundColor: settings.folderColor ?? "#10b981" }} />
+                        <span className="font-mono text-sm text-foreground font-semibold">{settings.folderColor ?? "#10b981"}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground leading-snug pt-1">The primary color used to draw past game archive folder icons.</div>
+                    </div>
+                    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
+                      <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Default View Type</div>
+                      <div className="text-lg font-bold text-primary capitalize pt-1">
+                        {VIEW_TYPES.find(v => v.value === settings.folderViewType)?.label ?? settings.folderViewType ?? "Large icons"}
+                      </div>
+                      <div className="text-xs text-muted-foreground leading-snug pt-1">The folder view style applied by default when inspecting folder content.</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ── Cashier Hours ── */}
@@ -715,17 +804,6 @@ export function Settings() {
                 </div>
               </div>
             </div>
-            <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Folder Appearance Settings</p>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Archive Folder Color</Label>
-                <div className="flex items-center gap-2">
-                  <Input type="color" value={ratesForm.folderColor} onChange={e => setRatesForm(f => ({ ...f, folderColor: e.target.value }))} required className="w-12 h-9 p-0.5 border cursor-pointer bg-transparent" />
-                  <Input type="text" value={ratesForm.folderColor} onChange={e => setRatesForm(f => ({ ...f, folderColor: e.target.value }))} required className="h-9 text-sm font-mono" placeholder="#10b981" />
-                </div>
-                <p className="text-[10px] text-muted-foreground">Select or enter a hex color code for the archived games monthly folders.</p>
-              </div>
-            </div>
             <div className="space-y-1">
               <Label className="text-xs">Effective Date</Label>
               <Input type="date" value={ratesForm.effectiveDate} onChange={e => setRatesForm(f => ({ ...f, effectiveDate: e.target.value }))} required className="h-9 text-sm" />
@@ -733,6 +811,73 @@ export function Settings() {
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setRatesOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createSettingsMutation.isPending}>{createSettingsMutation.isPending ? "Saving…" : "Save Rates"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={folderSettingsOpen} onOpenChange={setFolderSettingsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Update Folder Settings</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveFolderSettings} className="space-y-5">
+            <div className="space-y-2.5">
+              <Label className="text-xs font-semibold">Folder Color</Label>
+              <div className="flex flex-wrap gap-2 items-center">
+                {["#10b981", "#3b82f6", "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#f97316", "#f59e0b", "#64748b"].map(color => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`w-7 h-7 rounded-full border-2 transition-all ${
+                      folderSettingsForm.folderColor === color
+                        ? "border-primary scale-110 shadow-sm"
+                        : "border-transparent hover:scale-105"
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setFolderSettingsForm(f => ({ ...f, folderColor: color }))}
+                  />
+                ))}
+                <div className="flex items-center gap-2 ml-1">
+                  <Input
+                    type="color"
+                    value={folderSettingsForm.folderColor}
+                    onChange={e => setFolderSettingsForm(f => ({ ...f, folderColor: e.target.value }))}
+                    className="w-8 h-8 rounded-md p-0 border border-input cursor-pointer"
+                  />
+                  <Input
+                    type="text"
+                    value={folderSettingsForm.folderColor}
+                    onChange={e => setFolderSettingsForm(f => ({ ...f, folderColor: e.target.value }))}
+                    className="h-8 w-24 text-xs font-mono"
+                    placeholder="#000000"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Default Folder View Type</Label>
+              <select
+                value={folderSettingsForm.folderViewType}
+                onChange={e => setFolderSettingsForm(f => ({ ...f, folderViewType: e.target.value }))}
+                className="w-full h-9 rounded border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                {VIEW_TYPES.map(v => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setFolderSettingsOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={createSettingsMutation.isPending}>
+                {createSettingsMutation.isPending ? "Saving…" : "Save Settings"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

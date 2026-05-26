@@ -918,7 +918,8 @@ export const GetSettingsResponse = zod.object({
   "effectiveDate": zod.string(),
   "updatedAt": zod.string(),
   "updatedBy": zod.string().optional(),
-  "folderColor": zod.string().optional()
+  "folderColor": zod.string().optional(),
+  "folderViewType": zod.string().optional()
 })
 
 
@@ -931,7 +932,8 @@ export const CreateSettingsBody = zod.object({
   "writerCommissionPct": zod.string(),
   "reservePct": zod.string(),
   "effectiveDate": zod.string(),
-  "folderColor": zod.string().optional()
+  "folderColor": zod.string().optional(),
+  "folderViewType": zod.string().optional()
 })
 
 
@@ -1103,6 +1105,8 @@ export const ListWinsEntriesResponseItem = zod.object({
   "winsAmount": zod.string(),
   "enteredBy": zod.string(),
   "locked": zod.boolean(),
+  "oversight": zod.boolean(),
+  "status": zod.string(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1128,7 +1132,9 @@ export const UpdateWinsEntryParams = zod.object({
 })
 
 export const UpdateWinsEntryBody = zod.object({
-  "winsAmount": zod.string()
+  "winsAmount": zod.string().optional(),
+  "status": zod.string().optional(),
+  "locked": zod.boolean().optional()
 })
 
 export const UpdateWinsEntryResponse = zod.object({
@@ -1139,6 +1145,8 @@ export const UpdateWinsEntryResponse = zod.object({
   "winsAmount": zod.string(),
   "enteredBy": zod.string(),
   "locked": zod.boolean(),
+  "oversight": zod.boolean(),
+  "status": zod.string(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

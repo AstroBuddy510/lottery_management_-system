@@ -23,6 +23,7 @@ export const systemSettingsTable = pgTable("system_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   effectiveDate: date("effective_date").notNull(),
   folderColor: text("folder_color").notNull().default("#10b981"),
+  folderViewType: text("folder_view_type").notNull().default("large"),
 });
 
 export const cashierTimeWindowsTable = pgTable("cashier_time_windows", {

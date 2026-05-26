@@ -346,6 +346,9 @@ export function Games() {
   const [auditReport, setAuditReport] = useState<any | null>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
 
+  // Folder Explorer Dialog State for grid/icon views
+  const [selectedFolderForView, setSelectedFolderForView] = useState<any | null>(null);
+
   const handleOpenAudit = async (g: Game) => {
     if (!isAdminOrDirector) {
       toast.error("Access denied. Only Administrators and Directors can view audit ledgers.");
@@ -817,120 +820,205 @@ export function Games() {
                 );
               }
 
-              return (
-                <div className="space-y-4">
-                  {sortedGroupKeys.map((key) => {
-                    const group = monthlyGroups[key];
-                    const isExpanded = !!expandedFolders[key];
-                    return (
-                      <div key={key} className="border border-border/40 rounded-2xl bg-card/65 backdrop-blur-sm p-4 hover:shadow-md transition-all duration-300">
-                        <div
-                          onClick={() => toggleFolder(key)}
-                          className="flex items-center justify-between cursor-pointer select-none group"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="relative shrink-0">
-                              {/* Realistic SVG Folder mirroring uploaded green folder */}
-                              <svg viewBox="0 0 100 80" className="w-14 h-12 drop-shadow-sm transition-transform duration-300 group-hover:scale-105" xmlns="http://www.w3.org/2000/svg">
-                                <defs>
-                                  <linearGradient id={`frontGrad-${key}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.15" />
-                                    <stop offset="100%" stopColor="#000000" stopOpacity="0.15" />
-                                  </linearGradient>
-                                </defs>
-                                {/* Back Cover & Tab */}
-                                <path 
-                                  d="M 4,14 L 4,8 A 4,4 0 0 1 8,4 L 32,4 A 4,4 0 0 1 36,8 L 42,14 L 92,14 A 4,4 0 0 1 96,18 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" 
-                                  fill={folderColor} 
-                                />
-                                <path 
-                                  d="M 4,14 L 4,8 A 4,4 0 0 1 8,4 L 32,4 A 4,4 0 0 1 36,8 L 42,14 L 92,14 A 4,4 0 0 1 96,18 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" 
-                                  fill={`url(#frontGrad-${key})`} 
-                                  opacity="0.3"
-                                />
-                                {/* Front Cover */}
-                                <path 
-                                  d="M 4,20 A 4,4 0 0 1 8,16 L 92,16 A 4,4 0 0 1 96,20 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" 
-                                  fill={folderColor} 
-                                />
-                                <path 
-                                  d="M 4,20 A 4,4 0 0 1 8,16 L 92,16 A 4,4 0 0 1 96,20 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" 
-                                  fill={`url(#frontGrad-${key})`} 
-                                  opacity="0.2"
-                                />
-                                {/* Shadow Crease */}
-                                <rect x="4" y="66" width="92" height="3" fill="#000000" opacity="0.15" rx="0.5" />
-                              </svg>
+              const viewType = settings?.folderViewType ?? "large";
+
+              if (sortedGroupKeys.length === 0) {
+                return (
+                  <div className="text-center py-16 border rounded-xl text-muted-foreground bg-card">
+                    <div className="text-3xl mb-2">🔒</div>
+                    <div className="font-medium text-sm">No closed games found</div>
+                    <div className="text-xs mt-1">Adjust search terms, date filters, or toggle older games to find archived records.</div>
+                  </div>
+                );
+              }
+
+              if (viewType === "details" || viewType === "content") {
+                const isContentMode = viewType === "content";
+                return (
+                  <div className="space-y-4 animate-in fade-in-50 duration-200">
+                    {sortedGroupKeys.map((key) => {
+                      const group = monthlyGroups[key];
+                      const isExpanded = !!expandedFolders[key];
+                      return (
+                        <div key={key} className={`border border-border/40 rounded-2xl bg-card/65 backdrop-blur-sm hover:shadow-md transition-all duration-300 ${isContentMode ? "p-5" : "p-4"}`}>
+                          <div
+                            onClick={() => toggleFolder(key)}
+                            className="flex items-center justify-between cursor-pointer select-none group"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="relative shrink-0">
+                                <svg viewBox="0 0 100 80" className={`${isContentMode ? "w-16 h-14" : "w-14 h-12"} drop-shadow-sm transition-transform duration-300 group-hover:scale-105`} xmlns="http://www.w3.org/2000/svg">
+                                  <defs>
+                                    <linearGradient id={`frontGrad-${key}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.15" />
+                                      <stop offset="100%" stopColor="#000000" stopOpacity="0.15" />
+                                    </linearGradient>
+                                  </defs>
+                                  <path d="M 4,14 L 4,8 A 4,4 0 0 1 8,4 L 32,4 A 4,4 0 0 1 36,8 L 42,14 L 92,14 A 4,4 0 0 1 96,18 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={folderColor} />
+                                  <path d="M 4,14 L 4,8 A 4,4 0 0 1 8,4 L 32,4 A 4,4 0 0 1 36,8 L 42,14 L 92,14 A 4,4 0 0 1 96,18 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={`url(#frontGrad-${key})`} opacity="0.3" />
+                                  <path d="M 4,20 A 4,4 0 0 1 8,16 L 92,16 A 4,4 0 0 1 96,20 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={folderColor} />
+                                  <path d="M 4,20 A 4,4 0 0 1 8,16 L 92,16 A 4,4 0 0 1 96,20 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={`url(#frontGrad-${key})`} opacity="0.2" />
+                                  <rect x="4" y="66" width="92" height="3" fill="#000000" opacity="0.15" rx="0.5" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h3 className="font-bold text-sm tracking-tight text-foreground flex items-center gap-2">
+                                  {group.monthName}
+                                  <Badge variant="secondary" className="text-[10px] h-4.5 px-1.5 font-semibold">
+                                    {group.games.length} {group.games.length === 1 ? "game" : "games"}
+                                  </Badge>
+                                </h3>
+                                <p className="text-xs text-muted-foreground mt-0.5 font-medium">{group.rangeLabel}</p>
+                              </div>
                             </div>
-                            <div>
-                              <h3 className="font-bold text-sm tracking-tight text-foreground flex items-center gap-2">
-                                {group.monthName}
-                                <Badge variant="secondary" className="text-[10px] h-4.5 px-1.5 font-semibold">
-                                  {group.games.length} {group.games.length === 1 ? "game" : "games"}
-                                </Badge>
-                              </h3>
-                              <p className="text-xs text-muted-foreground mt-0.5 font-medium">{group.rangeLabel}</p>
+                            
+                            <div className="flex items-center gap-2 text-muted-foreground group-hover:text-foreground transition-colors">
+                              <span className="text-[11px] font-medium uppercase tracking-wider hidden sm:inline">
+                                {isExpanded ? "Collapse" : "Expand"}
+                              </span>
+                              <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? "rotate-90" : ""}`} />
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-2 text-muted-foreground group-hover:text-foreground transition-colors">
-                            <span className="text-[11px] font-medium uppercase tracking-wider hidden sm:inline">
-                              {isExpanded ? "Collapse" : "Expand"}
-                            </span>
-                            <ChevronRight className={`w-4 h-4 transition-transform duration-300 ${isExpanded ? "rotate-90" : ""}`} />
-                          </div>
-                        </div>
-                        
-                        {isExpanded && (
-                          <div className="mt-4 pl-4 sm:pl-8 border-l border-dashed border-border/80 ml-6 space-y-2 animate-in slide-in-from-top-2 duration-200">
-                            <div className="border border-border/40 rounded-xl overflow-hidden bg-background/30">
-                              <Table>
-                                <TableHeader className="bg-muted/30">
-                                  <TableRow>
-                                    <TableHead className="w-32 font-semibold text-xs">Event Number</TableHead>
-                                    <TableHead className="font-semibold text-xs">Game Name</TableHead>
-                                    <TableHead className="font-semibold text-xs">Close Date</TableHead>
-                                    <TableHead className="text-right font-semibold text-xs">Action</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {group.games.map((g) => (
-                                    <TableRow key={g.id} className="hover:bg-muted/15 border-b border-border/20 last:border-0">
-                                      <TableCell className="font-mono font-bold text-xs">
-                                        {isAdminOrDirector ? (
-                                          <button
-                                            onClick={() => handleOpenAudit(g)}
-                                            className="text-primary hover:underline hover:text-primary/95 text-left font-bold"
-                                          >
-                                            #{g.eventNumber}
-                                          </button>
-                                        ) : (
-                                          <span className="text-muted-foreground font-semibold">#{g.eventNumber}</span>
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="font-semibold text-xs sm:text-sm">{g.name}</TableCell>
-                                      <TableCell className="text-xs font-mono text-muted-foreground">{formatDateTime(g.closeAt)}</TableCell>
-                                      <TableCell className="text-right">
-                                        {isAdminOrDirector ? (
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-7 text-[11px] px-2.5 rounded-lg border-border/85"
-                                            onClick={() => handleOpenAudit(g)}
-                                          >
-                                            View Audit Ledger
-                                          </Button>
-                                        ) : (
-                                          <span className="text-[10px] text-muted-foreground italic font-medium">Restricted</span>
-                                        )}
-                                      </TableCell>
+                          {isExpanded && (
+                            <div className="mt-4 pl-4 sm:pl-8 border-l border-dashed border-border/80 ml-6 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                              <div className="border border-border/40 rounded-xl overflow-hidden bg-background/30">
+                                <Table>
+                                  <TableHeader className="bg-muted/30">
+                                    <TableRow>
+                                      <TableHead className="w-32 font-semibold text-xs">Event Number</TableHead>
+                                      <TableHead className="font-semibold text-xs">Game Name</TableHead>
+                                      <TableHead className="font-semibold text-xs">Close Date</TableHead>
+                                      <TableHead className="text-right font-semibold text-xs">Action</TableHead>
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {group.games.map((g) => (
+                                      <TableRow key={g.id} className="hover:bg-muted/15 border-b border-border/20 last:border-0">
+                                        <TableCell className="font-mono font-bold text-xs">
+                                          {isAdminOrDirector ? (
+                                            <button
+                                              onClick={() => handleOpenAudit(g)}
+                                              className="text-primary hover:underline hover:text-primary/95 text-left font-bold"
+                                            >
+                                              #{g.eventNumber}
+                                            </button>
+                                          ) : (
+                                            <span className="text-muted-foreground font-semibold">#{g.eventNumber}</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="font-semibold text-xs sm:text-sm">{g.name}</TableCell>
+                                        <TableCell className="text-xs font-mono text-muted-foreground">{formatDateTime(g.closeAt)}</TableCell>
+                                        <TableCell className="text-right">
+                                          {isAdminOrDirector ? (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              className="h-7 text-[11px] px-2.5 rounded-lg border-border/85"
+                                              onClick={() => handleOpenAudit(g)}
+                                            >
+                                              View Audit Ledger
+                                            </Button>
+                                          ) : (
+                                            <span className="text-[10px] text-muted-foreground italic font-medium">Restricted</span>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
                             </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              // Otherwise it's a grid/icon view (extra_large, large, medium, small, list, tiles)
+              let gridClass = "grid gap-4 ";
+              let svgClass = "drop-shadow-sm transition-transform duration-300 group-hover:scale-105 ";
+              let cardClass = "border border-border/40 rounded-xl bg-card/65 backdrop-blur-sm hover:shadow-md transition-all duration-300 p-4 flex cursor-pointer select-none group ";
+
+              if (viewType === "extra_large") {
+                gridClass += "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6";
+                svgClass += "w-20 h-16 mx-auto";
+                cardClass += "flex-col items-center text-center justify-center p-6";
+              } else if (viewType === "large") {
+                gridClass += "grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4";
+                svgClass += "w-16 h-13 mx-auto";
+                cardClass += "flex-col items-center text-center justify-center p-5";
+              } else if (viewType === "medium") {
+                gridClass += "grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3";
+                svgClass += "w-12 h-10 mx-auto";
+                cardClass += "flex-col items-center text-center justify-center p-3.5";
+              } else if (viewType === "small") {
+                gridClass += "grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2";
+                svgClass += "w-8 h-7";
+                cardClass += "flex-row items-center gap-2 p-2";
+              } else if (viewType === "list") {
+                gridClass += "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2";
+                svgClass += "w-6 h-5";
+                cardClass += "flex-row items-center gap-2 p-2";
+              } else if (viewType === "tiles") {
+                gridClass += "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4";
+                svgClass += "w-12 h-10";
+                cardClass += "flex-row items-center gap-4 p-4";
+              }
+
+              return (
+                <div className={`${gridClass} animate-in fade-in-50 duration-200`}>
+                  {sortedGroupKeys.map((key) => {
+                    const group = monthlyGroups[key];
+                    const isGridVertical = ["extra_large", "large", "medium"].includes(viewType);
+                    
+                    return (
+                      <div
+                        key={key}
+                        onClick={() => setSelectedFolderForView(group)}
+                        className={cardClass}
+                      >
+                        <div className="relative shrink-0">
+                          <svg viewBox="0 0 100 80" className={svgClass} xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id={`frontGrad-grid-${key}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.15" />
+                                <stop offset="100%" stopColor="#000000" stopOpacity="0.15" />
+                              </linearGradient>
+                            </defs>
+                            <path d="M 4,14 L 4,8 A 4,4 0 0 1 8,4 L 32,4 A 4,4 0 0 1 36,8 L 42,14 L 92,14 A 4,4 0 0 1 96,18 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={folderColor} />
+                            <path d="M 4,14 L 4,8 A 4,4 0 0 1 8,4 L 32,4 A 4,4 0 0 1 36,8 L 42,14 L 92,14 A 4,4 0 0 1 96,18 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={`url(#frontGrad-grid-${key})`} opacity="0.3" />
+                            <path d="M 4,20 A 4,4 0 0 1 8,16 L 92,16 A 4,4 0 0 1 96,20 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={folderColor} />
+                            <path d="M 4,20 A 4,4 0 0 1 8,16 L 92,16 A 4,4 0 0 1 96,20 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={`url(#frontGrad-grid-${key})`} opacity="0.2" />
+                            <rect x="4" y="66" width="92" height="3" fill="#000000" opacity="0.15" rx="0.5" />
+                          </svg>
+                          {!isGridVertical && viewType !== "tiles" && (
+                            <span className="absolute -top-1.5 -right-1.5 bg-secondary text-secondary-foreground text-[8px] font-bold h-4 px-1 rounded-full flex items-center justify-center">
+                              {group.games.length}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className={`flex flex-col min-w-0 ${isGridVertical ? "mt-3 w-full" : "text-left"}`}>
+                          <div className={`font-bold tracking-tight text-foreground truncate flex items-center justify-between ${
+                            viewType === "extra_large" ? "text-base" : "text-sm"
+                          }`}>
+                            <span className="truncate">{group.monthName}</span>
+                            {isGridVertical && (
+                              <Badge variant="secondary" className="text-[9px] h-4 px-1 ml-1 shrink-0 font-semibold">
+                                {group.games.length}
+                              </Badge>
+                            )}
                           </div>
-                        )}
+                          
+                          {(viewType === "extra_large" || viewType === "large" || viewType === "tiles") && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 font-medium truncate">
+                              {group.rangeLabel}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1163,6 +1251,83 @@ export function Games() {
               </Tabs>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Folder Contents Dialog (for grid/icon views) */}
+      <Dialog open={!!selectedFolderForView} onOpenChange={open => !open && setSelectedFolderForView(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <svg viewBox="0 0 100 80" className="w-6 h-5 shrink-0" xmlns="http://www.w3.org/2000/svg">
+                <path d="M 4,14 L 4,8 A 4,4 0 0 1 8,4 L 32,4 A 4,4 0 0 1 36,8 L 42,14 L 92,14 A 4,4 0 0 1 96,18 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={folderColor} />
+                <path d="M 4,20 A 4,4 0 0 1 8,16 L 92,16 A 4,4 0 0 1 96,20 L 96,72 A 4,4 0 0 1 92,76 L 8,76 A 4,4 0 0 1 4,72 Z" fill={folderColor} />
+              </svg>
+              <span>{selectedFolderForView?.monthName} Archive</span>
+              <Badge variant="secondary" className="text-xs">
+                {selectedFolderForView?.games.length} {selectedFolderForView?.games.length === 1 ? "game" : "games"}
+              </Badge>
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground font-medium mt-0.5">{selectedFolderForView?.rangeLabel}</p>
+          </DialogHeader>
+
+          <div className="mt-4 border border-border/40 rounded-xl overflow-hidden bg-background/30 max-h-[60vh] overflow-y-auto">
+            <Table>
+              <TableHeader className="bg-muted/30 sticky top-0 z-10">
+                <TableRow>
+                  <TableHead className="w-32 font-semibold text-xs bg-muted/80">Event Number</TableHead>
+                  <TableHead className="font-semibold text-xs bg-muted/80">Game Name</TableHead>
+                  <TableHead className="font-semibold text-xs bg-muted/80">Close Date</TableHead>
+                  <TableHead className="text-right font-semibold text-xs bg-muted/80">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedFolderForView?.games.map((g: Game) => (
+                  <TableRow key={g.id} className="hover:bg-muted/15 border-b border-border/20 last:border-0">
+                    <TableCell className="font-mono font-bold text-xs">
+                      {isAdminOrDirector ? (
+                        <button
+                          onClick={() => {
+                            setSelectedFolderForView(null);
+                            handleOpenAudit(g);
+                          }}
+                          className="text-primary hover:underline hover:text-primary/95 text-left font-bold"
+                        >
+                          #{g.eventNumber}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground font-semibold">#{g.eventNumber}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-semibold text-xs sm:text-sm">{g.name}</TableCell>
+                    <TableCell className="text-xs font-mono text-muted-foreground">{formatDateTime(g.closeAt)}</TableCell>
+                    <TableCell className="text-right">
+                      {isAdminOrDirector ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[11px] px-2.5 rounded-lg border-border/85"
+                          onClick={() => {
+                            setSelectedFolderForView(null);
+                            handleOpenAudit(g);
+                          }}
+                        >
+                          View Audit Ledger
+                        </Button>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground italic font-medium">Restricted</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter className="pt-2">
+            <Button size="sm" onClick={() => setSelectedFolderForView(null)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
