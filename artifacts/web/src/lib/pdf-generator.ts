@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 // Helper function to format currency as GHS
 function fmt(v: string | number | undefined | null) {
@@ -135,7 +135,7 @@ function drawSignatureBlock(doc: jsPDF, labelLeft: string, labelRight: string) {
 }
 
 // Helper to autoTable stylings
-const tableTheme = {
+const tableTheme: any = {
   headStyles: {
     fillColor: [0, 78, 152],
     textColor: [255, 255, 255],
@@ -196,7 +196,7 @@ export function generateWriterReportPDF(
     writerBalance: fmt(r.writerBalance),
   }));
 
-  doc.autoTable({
+  autoTable(doc, {
     columns,
     body: tableData,
     startY,
@@ -295,7 +295,7 @@ export function generateAgentReportPDF(
     writerBalance: fmt(w.totals.writerBalance),
   }));
 
-  doc.autoTable({
+  autoTable(doc, {
     columns,
     body: tableData,
     startY: startY + 4,
@@ -339,7 +339,7 @@ export function generateAgentReportPDF(
       notes: p.notes || "—",
     }));
 
-    doc.autoTable({
+    autoTable(doc, {
       columns: payCols,
       body: payData,
       startY: nextY + 4,
@@ -429,7 +429,7 @@ export function generateOrgReportPDF(
     writerBalance: fmt(a.totals.writerBalance),
   }));
 
-  doc.autoTable({
+  autoTable(doc, {
     columns,
     body: tableData,
     startY,
@@ -521,7 +521,7 @@ export function generateGameSalesReportPDF(
     pct: `${gt.pct.toFixed(1)}%`,
   }));
 
-  doc.autoTable({
+  autoTable(doc, {
     columns: gameCols,
     body: gameData,
     startY: startY + 4,
@@ -564,7 +564,7 @@ export function generateGameSalesReportPDF(
       pct: `${w.pct.toFixed(1)}%`,
     }));
 
-    doc.autoTable({
+    autoTable(doc, {
       columns: writerCols,
       body: writerData,
       startY: nextY + 4,
@@ -656,7 +656,7 @@ export function generateDailySettlementPDF(
     };
   });
 
-  doc.autoTable({
+  autoTable(doc, {
     columns,
     body: tableData,
     startY,
@@ -740,7 +740,7 @@ export function generatePayrollPDF(
     status: p.status.toUpperCase(),
   }));
 
-  doc.autoTable({
+  autoTable(doc, {
     columns,
     body: tableData,
     startY,
