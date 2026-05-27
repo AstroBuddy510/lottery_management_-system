@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import {
   useListCalculations, useRunCalculations, useListGames,
   getListCalculationsQueryKey,
@@ -16,7 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Calculator, History, Play, AlertCircle, TrendingUp, Trophy, Percent, Wallet, Shield, Coins, Search, Filter, X, RefreshCw
+  Calculator, History, Play, AlertCircle, TrendingUp, Trophy, Percent, Wallet, Shield, Coins, Search, Filter, X, RefreshCw,
+  ArrowUpDown
 } from "lucide-react";
 
 function fmtGHS(v: number, bold = true) {
@@ -56,6 +57,7 @@ export function Calculations() {
 
   const [historyGameId, setHistoryGameId] = useState("_all");
   const [filterAgentId, setFilterAgentId] = useState("");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
 
   const runMutation = useRunCalculations();
   const { data: gamesRaw } = useListGames();
@@ -181,6 +183,21 @@ export function Calculations() {
       : historyCalcs,
     [historyCalcs, filterAgentId, writerMap, agentList]
   );
+
+  const sortedCalcs = useMemo(() => {
+    const list = [...filteredCalcs];
+    list.sort((a, b) => {
+      const dateA = a.calcDate || "";
+      const dateB = b.calcDate || "";
+      if (dateA !== dateB) {
+        return sortOrder === "desc"
+          ? dateB.localeCompare(dateA)
+          : dateA.localeCompare(dateB);
+      }
+      return a.id.localeCompare(b.id);
+    });
+    return list;
+  }, [filteredCalcs, sortOrder]);
 
   const totals = useMemo(() => filteredCalcs.reduce(
     (acc, c) => ({
@@ -438,7 +455,7 @@ export function Calculations() {
               )}
             </CardHeader>
             <CardContent className="pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                     <Filter className="w-3.5 h-3.5" />
@@ -478,6 +495,21 @@ export function Calculations() {
                           {a.user?.fullName ?? a.fullCode} <span className="font-mono text-[10px] text-muted-foreground ml-1">({a.fullCode})</span>
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <ArrowUpDown className="w-3.5 h-3.5" />
+                    Sort Order
+                  </Label>
+                  <Select value={sortOrder} onValueChange={v => setSortOrder(v as "desc" | "asc")}>
+                    <SelectTrigger className="h-9 text-sm bg-background border-border/50 rounded-xl">
+                      <SelectValue placeholder="Newest first" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-border/55">
+                      <SelectItem value="desc" className="text-xs">Newest first (Descending)</SelectItem>
+                      <SelectItem value="asc" className="text-xs">Oldest first (Ascending)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -562,30 +594,63 @@ export function Calculations() {
                     </TableRow>
                   ) : (
                     <>
-                      {filteredCalcs.map(c => {
-                        const writer = writerMap[c.writerId];
-                        return (
-                          <TableRow key={c.id} className="hover:bg-muted/20 border-b border-border/40 transition-colors">
-                            <TableCell className="text-xs font-mono text-muted-foreground">{c.calcDate?.split("T")[0]}</TableCell>
-                            <TableCell className="text-xs">
-                              <span className="font-mono bg-muted/45 px-1.5 py-0.5 rounded text-foreground font-semibold border border-border/30">
-                                {writer?.fullCode ?? c.writerId.slice(0, 8) + "…"}
-                              </span>
-                              {writer && <span className="text-muted-foreground/80 ml-1.5 text-xs font-medium">{writer.fullName}</span>}
-                            </TableCell>
-                            <TableCell className="text-sm text-right font-mono">{fmtGHS(Number(c.grossSales), false)}</TableCell>
-                            <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(Number(c.commissionAmount), false)}</TableCell>
-                            <TableCell className="text-sm text-right font-mono">{fmtGHS(Number(c.netGross), false)}</TableCell>
-                            <TableCell className="text-sm text-right font-mono text-destructive">{fmtGHS(Number(c.winsAmount), false)}</TableCell>
-                            <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(Number(c.reserveAmount), false)}</TableCell>
-                            <TableCell className="text-sm text-right font-mono">
-                              <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${Number(c.writerBalance) < 0 ? "bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border border-rose-100/50" : "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100/50"}`}>
-                                {fmtGHS(Number(c.writerBalance), true)}
-                              </span>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {(() => {
+                        let lastDate = "";
+                        return sortedCalcs.map((c, idx) => {
+                          const currentDate = c.calcDate?.split("T")[0] ?? "Unknown Date";
+                          const showHeader = currentDate !== lastDate;
+                          lastDate = currentDate;
+                          const writer = writerMap[c.writerId];
+                          
+                          const dateFormatted = new Date(currentDate).toLocaleDateString("en-GH", {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          });
+
+                          return (
+                            <Fragment key={c.id}>
+                              {showHeader && (
+                                <>
+                                  {idx > 0 && (
+                                    <TableRow className="h-6 border-none hover:bg-transparent pointer-events-none">
+                                      <TableCell colSpan={8} className="p-0 border-none bg-transparent" />
+                                    </TableRow>
+                                  )}
+                                  <TableRow className="bg-indigo-50/30 dark:bg-indigo-950/15 hover:bg-indigo-50/40 border-y border-indigo-100/50 dark:border-indigo-900/30 border-l-4 border-l-indigo-600 dark:border-l-indigo-500">
+                                    <TableCell colSpan={8} className="py-2.5 px-4 font-bold text-xs text-indigo-900 dark:text-indigo-300">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                        <span>Calculations for {dateFormatted}</span>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                </>
+                              )}
+                              <TableRow className="hover:bg-muted/20 border-b border-border/40 transition-colors">
+                                <TableCell className="text-xs font-mono text-muted-foreground">{c.calcDate?.split("T")[0]}</TableCell>
+                                <TableCell className="text-xs">
+                                  <span className="font-mono bg-muted/45 px-1.5 py-0.5 rounded text-foreground font-semibold border border-border/30">
+                                    {writer?.fullCode ?? c.writerId.slice(0, 8) + "…"}
+                                  </span>
+                                  {writer && <span className="text-muted-foreground/80 ml-1.5 text-xs font-medium">{writer.fullName}</span>}
+                                </TableCell>
+                                <TableCell className="text-sm text-right font-mono">{fmtGHS(Number(c.grossSales), false)}</TableCell>
+                                <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(Number(c.commissionAmount), false)}</TableCell>
+                                <TableCell className="text-sm text-right font-mono">{fmtGHS(Number(c.netGross), false)}</TableCell>
+                                <TableCell className="text-sm text-right font-mono text-destructive">{fmtGHS(Number(c.winsAmount), false)}</TableCell>
+                                <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(Number(c.reserveAmount), false)}</TableCell>
+                                <TableCell className="text-sm text-right font-mono">
+                                  <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${Number(c.writerBalance) < 0 ? "bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border border-rose-100/50" : "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100/50"}`}>
+                                    {fmtGHS(Number(c.writerBalance), true)}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            </Fragment>
+                          );
+                        });
+                      })()}
                       {filteredCalcs.length > 1 && (
                         <TableRow className="bg-muted/30 font-semibold border-t border-border">
                           <TableCell className="text-xs text-muted-foreground" colSpan={2}>
