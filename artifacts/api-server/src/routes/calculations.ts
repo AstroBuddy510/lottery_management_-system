@@ -10,6 +10,7 @@ import {
   writersTable,
   agentsTable,
   agentDebtReductionsTable,
+  gamesTable,
 } from "@workspace/db";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { RunCalculationsBody } from "@workspace/api-zod";
@@ -32,6 +33,35 @@ router.post(
     }
     const calcDate = parse.data.date;
     const gameId = parse.data.gameId;
+    const winningNumbers = parse.data.winningNumbers;
+    const machineNumbers = parse.data.machineNumbers;
+
+    if (gameId && gameId !== "undefined" && gameId !== "null") {
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(eq(gamesTable.id, gameId))
+        .limit(1);
+
+      if (!game) {
+        res.status(404).json({ error: "Game not found" });
+        return;
+      }
+
+      if (!winningNumbers || !machineNumbers) {
+        res.status(400).json({ error: "Winning numbers and machine numbers are required to run calculations for this game event." });
+        return;
+      }
+
+      await db
+        .update(gamesTable)
+        .set({
+          winningNumbers,
+          machineNumbers,
+          status: "closed",
+        })
+        .where(eq(gamesTable.id, gameId));
+    }
 
     const [settings] = await db
       .select()
@@ -63,12 +93,15 @@ router.post(
       .from(winsEntriesTable)
       .where(and(...winsConditions));
 
-    const grossMap = new Map(
-      grossEntries.map((e) => [e.writerId, parseFloat(e.grossAmount)]),
-    );
-    const winsMap = new Map(
-      winsEntries.map((e) => [e.writerId, parseFloat(e.winsAmount)]),
-    );
+    const grossMap = new Map<string, number>();
+    for (const e of grossEntries) {
+      grossMap.set(e.writerId, (grossMap.get(e.writerId) ?? 0) + parseFloat(e.grossAmount));
+    }
+
+    const winsMap = new Map<string, number>();
+    for (const e of winsEntries) {
+      winsMap.set(e.writerId, (winsMap.get(e.writerId) ?? 0) + parseFloat(e.winsAmount));
+    }
 
     const allWriterIds = [...new Set([...grossMap.keys(), ...winsMap.keys()])];
 

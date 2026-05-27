@@ -51,6 +51,8 @@ export function Calculations() {
 
   const [selectedRunGameId, setSelectedRunGameId] = useState("_none");
   const [runDate, setRunDate] = useState(new Date().toISOString().split("T")[0]);
+  const [winningNumbers, setWinningNumbers] = useState<string[]>(["", "", "", "", ""]);
+  const [machineNumbers, setMachineNumbers] = useState<string[]>(["", "", "", "", ""]);
 
   const [historyGameId, setHistoryGameId] = useState("_all");
   const [filterAgentId, setFilterAgentId] = useState("");
@@ -67,8 +69,39 @@ export function Calculations() {
     return [...g].sort((a, b) => b.eventNumber.localeCompare(a.eventNumber));
   }, [gamesRaw]);
 
+  const handleNumberChange = (type: "winning" | "machine", index: number, value: string) => {
+    const cleanValue = value.replace(/\D/g, "").slice(0, 2);
+    if (cleanValue) {
+      const num = parseInt(cleanValue, 10);
+      if (num > 90) return;
+    }
+    if (type === "winning") {
+      const copy = [...winningNumbers];
+      copy[index] = cleanValue;
+      setWinningNumbers(copy);
+    } else {
+      const copy = [...machineNumbers];
+      copy[index] = cleanValue;
+      setMachineNumbers(copy);
+    }
+  };
+
+  const isDrawNumbersValid = useMemo(() => {
+    const isValid = (val: string) => {
+      const num = parseInt(val, 10);
+      return !isNaN(num) && num >= 1 && num <= 90 && /^\d+$/.test(val);
+    };
+    return winningNumbers.every(isValid) && machineNumbers.every(isValid);
+  }, [winningNumbers, machineNumbers]);
+
+  const gamesClosedOnDate = useMemo(() => {
+    return gameList.filter(g => gameCloseDate(g) === runDate);
+  }, [gameList, runDate]);
+
   const handleRunGameChange = (id: string) => {
     setSelectedRunGameId(id);
+    setWinningNumbers(["", "", "", "", ""]);
+    setMachineNumbers(["", "", "", "", ""]);
     if (id !== "_none") {
       const g = gameList.find(g => g.id === id);
       if (g) setRunDate(gameCloseDate(g));
@@ -78,13 +111,32 @@ export function Calculations() {
   const handleRun = async () => {
     if (!runDate) return;
     const game = selectedRunGameId !== "_none" ? gameList.find(g => g.id === selectedRunGameId) : null;
-    const label = game ? `${game.eventNumber} — ${game.name} (${runDate})` : runDate;
+    if (!game) {
+      toast({ title: "Please select a game event to run calculations", variant: "destructive" });
+      return;
+    }
+    if (!isDrawNumbersValid) {
+      toast({ title: "Please enter 5 winning and 5 machine numbers between 1 and 90", variant: "destructive" });
+      return;
+    }
+
+    const label = `${game.eventNumber} — ${game.name} (${runDate})`;
     if (!confirm(`Run calculations for ${label}?\n\nThis will lock all gross and wins entries for ${runDate}.`)) return;
     try {
-      const result = await runMutation.mutateAsync({ data: { date: runDate } });
+      const result = await runMutation.mutateAsync({
+        data: {
+          date: runDate,
+          gameId: game.id,
+          winningNumbers: winningNumbers.join(","),
+          machineNumbers: machineNumbers.join(","),
+        }
+      });
       const count = (result as { calculated?: number })?.calculated ?? 0;
       toast({ title: `Calculations complete — ${count} writer${count !== 1 ? "s" : ""} processed` });
       qc.invalidateQueries({ queryKey: getListCalculationsQueryKey({}) });
+      setWinningNumbers(["", "", "", "", ""]);
+      setMachineNumbers(["", "", "", "", ""]);
+      setSelectedRunGameId("_none");
     } catch {
       toast({ title: "Failed to run calculations", variant: "destructive" });
     }
@@ -188,9 +240,9 @@ export function Calculations() {
                       </SelectTrigger>
                       <SelectContent className="rounded-xl border-border/55">
                         <SelectItem value="_none" className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                          — No game selected (enter date manually) —
+                          — Select a game event closed on this date —
                         </SelectItem>
-                        {gamesYetToRun.map(g => (
+                        {gamesClosedOnDate.map(g => (
                           <SelectItem key={g.id} value={g.id} className="text-xs">
                             <span className="font-mono font-bold text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded mr-2">
                               {g.eventNumber}
@@ -207,17 +259,79 @@ export function Calculations() {
                     <Input
                       type="date"
                       value={runDate}
-                      onChange={e => { setRunDate(e.target.value); setSelectedRunGameId("_none"); }}
+                      onChange={e => {
+                        setRunDate(e.target.value);
+                        setSelectedRunGameId("_none");
+                        setWinningNumbers(["", "", "", "", ""]);
+                        setMachineNumbers(["", "", "", "", ""]);
+                      }}
                       className="h-10 text-sm bg-background border-border/50 focus:ring-2 focus:ring-primary/20 rounded-xl"
                     />
                   </div>
                 </div>
 
+                {selectedRunGame && (
+                  <div className="space-y-5 border-t border-border/40 pt-5 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div>
+                      <h4 className="text-xs font-bold text-indigo-950 dark:text-indigo-300 uppercase tracking-wide flex items-center gap-1.5">
+                        NLA Declared Draw Entry
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Please enter the declared winning and machine numbers drawn by the NLA for this event to proceed.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2.5">
+                        <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                          Winning Numbers (Top 5)
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          {winningNumbers.map((num, idx) => (
+                            <Input
+                              key={`winning-${idx}`}
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={2}
+                              placeholder={`#${idx + 1}`}
+                              value={num}
+                              onChange={e => handleNumberChange("winning", idx, e.target.value)}
+                              className="h-10 w-12 text-center font-bold text-sm bg-background border-border/50 focus:ring-2 focus:ring-primary/20 focus:border-primary rounded-xl"
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <Calculator className="w-3.5 h-3.5 text-indigo-500" />
+                          Machine Numbers (Bottom 5)
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          {machineNumbers.map((num, idx) => (
+                            <Input
+                              key={`machine-${idx}`}
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={2}
+                              placeholder={`#${idx + 1}`}
+                              value={num}
+                              onChange={e => handleNumberChange("machine", idx, e.target.value)}
+                              className="h-10 w-12 text-center font-bold text-sm bg-background border-border/50 focus:ring-2 focus:ring-primary/20 focus:border-primary rounded-xl"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-4 pt-3 border-t border-border/40">
                   <Button
                     onClick={handleRun}
-                    disabled={runMutation.isPending || !runDate}
-                    className="h-10 rounded-xl px-5 font-semibold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-600/90 hover:to-violet-600/90 text-white shadow-md shadow-indigo-200 dark:shadow-none hover:shadow-lg transition-all duration-200"
+                    disabled={runMutation.isPending || selectedRunGameId === "_none" || !runDate || !isDrawNumbersValid}
+                    className="h-10 rounded-xl px-5 font-semibold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-600/90 hover:to-violet-600/90 text-white shadow-md shadow-indigo-200 dark:shadow-none hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none"
                   >
                     {runMutation.isPending ? (
                       <span className="flex items-center gap-1.5">

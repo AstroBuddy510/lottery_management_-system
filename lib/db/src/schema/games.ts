@@ -30,6 +30,8 @@ export const gamesTable = pgTable("games", {
   createdBy: uuid("created_by")
     .notNull()
     .references(() => usersTable.id),
+  winningNumbers: varchar("winning_numbers", { length: 50 }),
+  machineNumbers: varchar("machine_numbers", { length: 50 }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

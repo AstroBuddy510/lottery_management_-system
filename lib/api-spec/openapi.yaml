@@ -2966,6 +2966,10 @@ components:
           type: string
         gameId:
           type: string
+        winningNumbers:
+          type: string
+        machineNumbers:
+          type: string
 
     CalcRunResult:
       type: object
@@ -3333,6 +3337,10 @@ components:
         status:
           type: string
           enum: [offline, live, closed]
+        winningNumbers:
+          type: ["string", "null"]
+        machineNumbers:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:

@@ -5,7 +5,7 @@ import {
   useGetMyAgent, getGetMyAgentQueryKey,
   getListSalesQueryKey, getListWritersQueryKey,
   useListGrossEntries, useListWinsEntries,
-  useGetSettings,
+  useGetSettings, useListGames,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useAuth } from "@/lib/auth";
@@ -52,6 +52,7 @@ function AgentSalesView() {
   const [filterTo, setFilterTo] = useState("");
   const [showFilter, setShowFilter] = useState(false);
   const [open, setOpen] = useState(false);
+  const [selectedGameId, setSelectedGameId] = useState("_all");
 
   const { data: myAgent } = useGetMyAgent({ query: { queryKey: getGetMyAgentQueryKey() } });
   const { data: allWriters } = useListWriters(myAgent?.id ?? "", {}, {
@@ -65,6 +66,17 @@ function AgentSalesView() {
     dateTo: filterTo || undefined,
   });
   const salesList = Array.isArray(sales) ? sales : [];
+
+  const { data: games } = useListGames();
+  const gameList = useMemo(() => {
+    const g = Array.isArray(games) ? games : [];
+    return [...g].sort((a, b) => b.eventNumber.localeCompare(a.eventNumber));
+  }, [games]);
+
+  const displayGame = useMemo(() => {
+    if (!selectedGameId || selectedGameId === "_all") return null;
+    return gameList.find(g => g.id === selectedGameId) ?? null;
+  }, [selectedGameId, gameList]);
 
   const createMutation = useCreateSale();
   const today = useMemo(() => new Date(getServerNow()).toISOString().split("T")[0], []);
@@ -108,13 +120,23 @@ function AgentSalesView() {
   const grossList = Array.isArray(grossEntries) ? grossEntries : [];
   const winsList = Array.isArray(winsEntries) ? winsEntries : [];
 
+  const filteredGrossList = useMemo(() => {
+    if (!displayGame) return grossList;
+    return grossList.filter(e => e.gameId === displayGame.id);
+  }, [grossList, displayGame]);
+
+  const filteredWinsList = useMemo(() => {
+    if (!displayGame) return winsList;
+    return winsList.filter(e => e.gameId === displayGame.id);
+  }, [winsList, displayGame]);
+
   const grossSum = useMemo(() => {
-    return grossList.reduce((s, e) => s + Number(e.grossAmount ?? 0), 0);
-  }, [grossList]);
+    return filteredGrossList.reduce((s, e) => s + Number(e.grossAmount ?? 0), 0);
+  }, [filteredGrossList]);
 
   const winsSum = useMemo(() => {
-    return winsList.reduce((s, e) => s + Number(e.winsAmount ?? 0), 0);
-  }, [winsList]);
+    return filteredWinsList.reduce((s, e) => s + Number(e.winsAmount ?? 0), 0);
+  }, [filteredWinsList]);
 
   const commissionSum = useMemo(() => {
     return grossSum * commPct;
@@ -133,8 +155,8 @@ function AgentSalesView() {
   }, [netGrossSum, winsSum, reserveSum]);
 
   const submittedWritersCount = useMemo(() => {
-    return new Set(grossList.map(e => e.writerId)).size;
-  }, [grossList]);
+    return new Set(filteredGrossList.map(e => e.writerId)).size;
+  }, [filteredGrossList]);
 
   const totalWritersCount = useMemo(() => {
     return agentWriters.filter(w => w.isActive).length;
@@ -245,6 +267,25 @@ function AgentSalesView() {
               LIVE
             </span>
           </div>
+
+          {gameList.length > 0 && (
+            <div className="px-5 py-3 border-b border-border/45 bg-muted/5 flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Game Event</span>
+              <Select value={selectedGameId} onValueChange={setSelectedGameId}>
+                <SelectTrigger className="h-8 text-xs w-48 bg-background border-border/50 rounded-lg">
+                  <SelectValue placeholder="All Games" />
+                </SelectTrigger>
+                <SelectContent className="rounded-lg border-border/50">
+                  <SelectItem value="_all" className="text-xs">All Games (Combined)</SelectItem>
+                  {gameList.map(g => (
+                    <SelectItem key={g.id} value={g.id} className="text-xs">
+                      {g.name} <span className="font-mono text-[9px] text-muted-foreground">({g.eventNumber})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="px-5 py-5 grid grid-cols-2 sm:grid-cols-3 gap-x-5 gap-y-4">
             {[

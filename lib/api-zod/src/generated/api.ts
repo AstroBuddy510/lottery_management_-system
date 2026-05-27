@@ -20,6 +20,8 @@ export const ListGamesResponseItem = zod.object({
   "goLiveAt": zod.string(),
   "closeAt": zod.string(),
   "status": zod.enum(['offline', 'live', 'closed']),
+  "winningNumbers": zod.string().nullish(),
+  "machineNumbers": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })
@@ -63,6 +65,8 @@ export const UpdateGameResponse = zod.object({
   "goLiveAt": zod.string(),
   "closeAt": zod.string(),
   "status": zod.enum(['offline', 'live', 'closed']),
+  "winningNumbers": zod.string().nullish(),
+  "machineNumbers": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })
@@ -1547,7 +1551,9 @@ export const VoidPaymentResponse = zod.object({
  */
 export const RunCalculationsBody = zod.object({
   "date": zod.string(),
-  "gameId": zod.string().optional()
+  "gameId": zod.string().optional(),
+  "winningNumbers": zod.string().optional(),
+  "machineNumbers": zod.string().optional()
 })
 
 export const RunCalculationsResponse = zod.object({

@@ -658,6 +658,8 @@ export interface DailyCalculation {
 export interface CalcRunInput {
   date: string;
   gameId?: string;
+  winningNumbers?: string;
+  machineNumbers?: string;
 }
 
 export interface CalcRunResult {
@@ -943,6 +945,10 @@ export interface Game {
   goLiveAt: string;
   closeAt: string;
   status: GameStatus;
+  /** @nullable */
+  winningNumbers?: string | null;
+  /** @nullable */
+  machineNumbers?: string | null;
   createdAt: string;
   updatedAt?: string;
 }
