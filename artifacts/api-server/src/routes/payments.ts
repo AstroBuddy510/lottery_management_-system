@@ -98,27 +98,8 @@ router.post(
     const netAmountVal = gross - expenseTotal;
     const netAmount = netAmountVal.toFixed(2);
 
-    // Accountant Validations
-    if (parse.data.transactionType === "pay_out") {
-      if (currentDebt <= 0) {
-        res.status(400).json({ error: `Cannot payout. Company does not owe any money to agent ${agentRow.fullCode} (Outstanding Balance: GH₵ ${currentDebt.toFixed(2)})` });
-        return;
-      }
-      if (netAmountVal > currentDebt) {
-        res.status(400).json({ error: `Cannot payout. Payout amount GH₵ ${netAmountVal.toFixed(2)} exceeds what the company owes the agent (GH₵ ${currentDebt.toFixed(2)})` });
-        return;
-      }
-    } else if (parse.data.transactionType === "pay_in") {
-      if (currentDebt >= 0) {
-        res.status(400).json({ error: `Cannot accept pay-in. Agent ${agentRow.fullCode} does not owe the company any debt (Outstanding Balance: GH₵ ${currentDebt.toFixed(2)})` });
-        return;
-      }
-      const absoluteDebt = Math.abs(currentDebt);
-      if (netAmountVal > absoluteDebt) {
-        res.status(400).json({ error: `Cannot accept pay-in. Pay-in amount GH₵ ${netAmountVal.toFixed(2)} exceeds what the agent owes the company (GH₵ ${absoluteDebt.toFixed(2)})` });
-        return;
-      }
-    }
+    // Accountant Validations removed to allow flexible payouts and prepayments
+
 
     const receiptNumber = await generateReceiptNumber();
 
@@ -282,18 +263,8 @@ router.post(
       return;
     }
 
-    // Accountant Validations for Agent Cash Requests (they are always pay_in)
-    if (parse.data.paymentMethod === "cash") {
-      if (currentDebt >= 0) {
-        res.status(400).json({ error: `Cannot request cash payment. You do not owe the company any debt (Outstanding Balance: GH₵ ${currentDebt.toFixed(2)})` });
-        return;
-      }
-      const absoluteDebt = Math.abs(currentDebt);
-      if (amount > absoluteDebt) {
-        res.status(400).json({ error: `Cannot request cash payment. Amount GH₵ ${amount.toFixed(2)} exceeds your outstanding debt to the company (GH₵ ${absoluteDebt.toFixed(2)})` });
-        return;
-      }
-    }
+    // Accountant Validations for Agent Cash Requests removed to allow flexible prepayments
+
 
     const todayStr = new Date().toISOString().split("T")[0];
 
@@ -357,18 +328,8 @@ router.post(
     const currentDebt = parseFloat(agentRow.outstandingDebt || "0");
     const pmtAmount = parseFloat(existing.amount);
 
-    // Accountant Validations on Approval (they are always pay_in)
-    if (existing.transactionType === "pay_in") {
-      if (currentDebt >= 0) {
-        res.status(400).json({ error: `Cannot approve. Agent ${agentRow.fullCode} does not owe the company any debt (Outstanding Balance: GH₵ ${currentDebt.toFixed(2)})` });
-        return;
-      }
-      const absoluteDebt = Math.abs(currentDebt);
-      if (pmtAmount > absoluteDebt) {
-        res.status(400).json({ error: `Cannot approve. Pay-in amount GH₵ ${pmtAmount.toFixed(2)} exceeds what the agent owes the company (GH₵ ${absoluteDebt.toFixed(2)})` });
-        return;
-      }
-    }
+    // Accountant Validations on Approval removed to allow flexible prepayments
+
 
     const receiptNumber = await generateReceiptNumber();
     const todayStr = new Date().toISOString().split("T")[0];

@@ -98,7 +98,7 @@ export function Settings() {
   const { toast } = useToast();
 
   // ── Settings data ──
-  const { data: settings, isLoading: loadingSettings } = useGetSettings();
+  const { data: settings, isLoading: loadingSettings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey(), staleTime: 0 } });
   const { data: windows, isLoading: loadingWindows } = useListTimeWindows();
   const { data: recurringExpenses, isLoading: loadingExpenses } = useListRecurringExpenses();
 

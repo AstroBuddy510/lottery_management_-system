@@ -253,8 +253,8 @@ export function CompanyExpenses() {
 
       {/* Date Filter Card */}
       <Card className="border border-border/40 bg-card/45 backdrop-blur-md shadow-sm rounded-2xl relative z-10">
-        <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-border/40 backdrop-blur-sm">
+        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-border/40 backdrop-blur-sm self-start sm:self-auto">
             {(["today", "week", "month", "custom"] as const).map(f => (
               <button
                 key={f}
@@ -271,23 +271,23 @@ export function CompanyExpenses() {
           </div>
 
           {dateFilter === "custom" && (
-            <div className="flex items-center gap-3 animate-in fade-in duration-200">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs font-semibold text-muted-foreground">From</Label>
+            <div className="flex flex-wrap items-center gap-4 animate-in fade-in duration-200 w-full sm:w-auto">
+              <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">From</Label>
                 <Input
                   type="date"
                   value={customStart}
                   onChange={e => setCustomStart(e.target.value)}
-                  className="h-8 text-xs w-36 bg-background/60 border-border/60 rounded-lg"
+                  className="h-9 text-xs w-full sm:w-40 bg-background/60 border-border/60 rounded-lg"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs font-semibold text-muted-foreground">To</Label>
+              <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">To</Label>
                 <Input
                   type="date"
                   value={customEnd}
                   onChange={e => setCustomEnd(e.target.value)}
-                  className="h-8 text-xs w-36 bg-background/60 border-border/60 rounded-lg"
+                  className="h-9 text-xs w-full sm:w-40 bg-background/60 border-border/60 rounded-lg"
                 />
               </div>
             </div>

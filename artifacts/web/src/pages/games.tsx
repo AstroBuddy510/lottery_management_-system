@@ -9,6 +9,7 @@ import {
   getListGamesQueryKey,
   useGetSettings,
   customFetch,
+  getGetSettingsQueryKey,
 } from "@workspace/api-client-react";
 import type { Game, GameTemplate } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -313,7 +314,7 @@ function StatPill({ label, count, activeColor, bgClass, icon }: { label: string;
 export function Games() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  const { data: settings } = useGetSettings();
+  const { data: settings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey(), staleTime: 0 } });
   const folderColor = settings?.folderColor ?? "#10b981";
   const isAdminOrDirector = user?.role === "administrator" || user?.role === "director";
 

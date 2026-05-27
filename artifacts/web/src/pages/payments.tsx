@@ -292,8 +292,12 @@ export function Payments() {
       const result = await approveMutation.mutateAsync({ id });
       toast({ title: `Payment request approved — ${result.receiptNumber ?? ""}` });
       invalidate();
-    } catch {
-      toast({ title: "Failed to approve payment request", variant: "destructive" });
+    } catch (err: any) {
+      toast({ 
+        title: "Failed to approve payment request", 
+        description: err?.data?.error || err?.message || "Check network and try again",
+        variant: "destructive" 
+      });
     }
   };
 
@@ -303,8 +307,12 @@ export function Payments() {
       await rejectMutation.mutateAsync({ id });
       toast({ title: "Payment request rejected" });
       invalidate();
-    } catch {
-      toast({ title: "Failed to reject payment request", variant: "destructive" });
+    } catch (err: any) {
+      toast({ 
+        title: "Failed to reject payment request", 
+        description: err?.data?.error || err?.message || "Check network and try again",
+        variant: "destructive" 
+      });
     }
   };
 
@@ -329,12 +337,13 @@ export function Payments() {
       resetForm();
       invalidate();
       setReceiptPayment(result as CreatedPayment);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "";
+    } catch (err: any) {
+      const backendError = err?.data?.error;
+      const msg = backendError || (err instanceof Error ? err.message : "");
       if (msg.toLowerCase().includes("window") || msg.toLowerCase().includes("outside") || msg.toLowerCase().includes("time")) {
         toast({ title: "Outside payment window", description: "Payments are not allowed at this time.", variant: "destructive" });
       } else {
-        toast({ title: "Failed to record payment", variant: "destructive" });
+        toast({ title: "Failed to record payment", description: msg || "Check inputs and try again", variant: "destructive" });
       }
     }
   };
@@ -345,8 +354,12 @@ export function Payments() {
       await voidMutation.mutateAsync({ id, data: { reason: "Voided by administrator" } });
       toast({ title: "Payment voided" });
       invalidate();
-    } catch {
-      toast({ title: "Failed to void payment", variant: "destructive" });
+    } catch (err: any) {
+      toast({ 
+        title: "Failed to void payment", 
+        description: err?.data?.error || err?.message || "Check permissions and try again",
+        variant: "destructive" 
+      });
     }
   };
 
