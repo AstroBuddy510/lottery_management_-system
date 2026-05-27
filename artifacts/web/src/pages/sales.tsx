@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -73,6 +73,12 @@ function AgentSalesView() {
     return [...g].sort((a, b) => b.eventNumber.localeCompare(a.eventNumber));
   }, [games]);
 
+  const { liveGames, otherGames } = useMemo(() => {
+    const live = gameList.filter(x => x.status === "live");
+    const other = gameList.filter(x => x.status !== "live");
+    return { liveGames: live, otherGames: other };
+  }, [gameList]);
+
   const displayGame = useMemo(() => {
     if (!selectedGameId || selectedGameId === "_all") return null;
     return gameList.find(g => g.id === selectedGameId) ?? null;
@@ -105,17 +111,24 @@ function AgentSalesView() {
   const commPct = Number(settings?.commissionPct ?? 0);
   const resvPct = Number(settings?.reservePct ?? 0);
 
-  const { data: grossEntries } = useListGrossEntries({
-    writerId: filterWriterId || undefined,
-    dateFrom: filterFrom || today,
-    dateTo: filterTo || today,
-  });
+  const entriesParams = useMemo(() => {
+    if (displayGame) {
+      return {
+        writerId: filterWriterId || undefined,
+        dateFrom: displayGame.goLiveAt.split("T")[0],
+        dateTo: displayGame.closeAt.split("T")[0],
+        gameId: displayGame.id,
+      };
+    }
+    return {
+      writerId: filterWriterId || undefined,
+      dateFrom: filterFrom || today,
+      dateTo: filterTo || today,
+    };
+  }, [displayGame, filterWriterId, filterFrom, filterTo, today]);
 
-  const { data: winsEntries } = useListWinsEntries({
-    writerId: filterWriterId || undefined,
-    dateFrom: filterFrom || today,
-    dateTo: filterTo || today,
-  });
+  const { data: grossEntries } = useListGrossEntries(entriesParams);
+  const { data: winsEntries } = useListWinsEntries(entriesParams);
 
   const grossList = Array.isArray(grossEntries) ? grossEntries : [];
   const winsList = Array.isArray(winsEntries) ? winsEntries : [];
@@ -256,7 +269,9 @@ function AgentSalesView() {
               <div>
                 <h2 className="text-sm font-extrabold text-foreground">Real-time Transaction Summary</h2>
                 <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
-                  {filterFrom || filterTo
+                  {displayGame
+                    ? `${displayGame.name} (Live: ${displayGame.goLiveAt.split("T")[0]} to Close: ${displayGame.closeAt.split("T")[0]})`
+                    : filterFrom || filterTo
                     ? `${filterFrom || "Start"} to ${filterTo || "End"}`
                     : "Today's Live Progress"}
                 </p>
@@ -275,13 +290,35 @@ function AgentSalesView() {
                 <SelectTrigger className="h-8 text-xs w-48 bg-background border-border/50 rounded-lg">
                   <SelectValue placeholder="All Games" />
                 </SelectTrigger>
-                <SelectContent className="rounded-lg border-border/50">
-                  <SelectItem value="_all" className="text-xs">All Games (Combined)</SelectItem>
-                  {gameList.map(g => (
-                    <SelectItem key={g.id} value={g.id} className="text-xs">
-                      {g.name} <span className="font-mono text-[9px] text-muted-foreground">({g.eventNumber})</span>
-                    </SelectItem>
-                  ))}
+                <SelectContent className="rounded-lg border-border/50 max-h-[300px] overflow-y-auto">
+                  <SelectItem value="_all" className="text-xs font-semibold">All Games (Combined)</SelectItem>
+                  
+                  {liveGames.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest px-2 py-1 bg-emerald-500/5 dark:bg-emerald-500/10 rounded my-1 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                        Running / Live Games
+                      </SelectLabel>
+                      {liveGames.map(g => (
+                        <SelectItem key={g.id} value={g.id} className="text-xs pl-3">
+                          🟢 {g.name} <span className="font-mono text-[9px] text-muted-foreground">({g.eventNumber})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+
+                  {otherGames.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-2 py-1 bg-muted/50 rounded my-1">
+                        Closed / Offline Games
+                      </SelectLabel>
+                      {otherGames.map(g => (
+                        <SelectItem key={g.id} value={g.id} className="text-xs pl-3">
+                          ⚫ {g.name} <span className="font-mono text-[9px] text-muted-foreground">({g.eventNumber})</span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                 </SelectContent>
               </Select>
             </div>
