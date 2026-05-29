@@ -786,6 +786,20 @@ function GameSalesView() {
     return groups;
   }, [r?.gameFinancials]);
 
+  const grandTotals = useMemo(() => {
+    if (!r?.gameFinancials) return { gross: 0, commission: 0, netGross: 0, wins: 0, reserve: 0, balance: 0 };
+    let gross = 0, commission = 0, netGross = 0, wins = 0, reserve = 0, balance = 0;
+    for (const item of r.gameFinancials) {
+      gross += Number(item.grossSales);
+      commission += Number(item.commission);
+      netGross += Number(item.netGross);
+      wins += Number(item.wins);
+      reserve += Number(item.reserve);
+      balance += Number(item.balance);
+    }
+    return { gross, commission, netGross, wins, reserve, balance };
+  }, [r?.gameFinancials]);
+
   return (
     <div className="space-y-4 pt-4">
       <ParamPanel onRun={() => void refetch()} disabled={!agentId} loading={isLoading} buttonLabel="Refresh" hint="Select an agent — data loads automatically. Use Refresh to reload.">
@@ -847,20 +861,18 @@ function GameSalesView() {
           {/* Summary strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "Total Sales", value: `GH₵ ${Number(r.summary.totalAmount).toFixed(2)}`, sub: `${r.summary.totalEntries} ticket entries` },
-              { label: "Game Types", value: String(r.summary.gameTypeCount), sub: "distinct games" },
-              { label: "Active Writers", value: String(r.summary.writerCount), sub: "logged sales" },
+              { label: "Total Gross Sales", value: `GH₵ ${grandTotals.gross.toFixed(2)}`, sub: "Revenue from game events" },
+              { label: "Total Wins Deduct", value: `GH₵ ${grandTotals.wins.toFixed(2)}`, sub: "Wins claimed by writers" },
+              { label: "Total Reserve", value: `GH₵ ${grandTotals.reserve.toFixed(2)}`, sub: "Allocations to reserve fund" },
               {
-                label: "Avg per Entry",
-                value: r.summary.totalEntries > 0
-                  ? `GH₵ ${(Number(r.summary.totalAmount) / r.summary.totalEntries).toFixed(2)}`
-                  : "—",
-                sub: "per ticket entry",
+                label: "Consolidated Net Balance",
+                value: `GH₵ ${grandTotals.balance.toFixed(2)}`,
+                sub: "Combined writer balance yield",
               },
             ].map(({ label, value, sub }) => (
               <div key={label} className="rounded-xl border bg-card px-4 py-3">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</div>
-                <div className="font-mono font-bold text-base">{value}</div>
+                <div className={`font-mono font-bold text-base ${label === "Consolidated Net Balance" ? (grandTotals.balance < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400") : ""}`}>{value}</div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
               </div>
             ))}
@@ -920,6 +932,35 @@ function GameSalesView() {
                   </Table>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Consolidated Grand Totals */}
+          {Object.keys(groupedFinancials).length > 0 && (
+            <div className="rounded-xl border bg-gradient-to-r from-muted/50 via-muted/30 to-muted/50 p-5 mt-6 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-1.5 h-4 bg-primary rounded-full" />
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Consolidated Grand Totals</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6">
+                {[
+                  { label: "Total Gross Sales", value: `GH₵ ${grandTotals.gross.toFixed(2)}`, valueClass: "text-foreground" },
+                  { label: "Total Commission", value: `GH₵ ${grandTotals.commission.toFixed(2)}`, valueClass: "text-amber-600 dark:text-amber-400" },
+                  { label: "Total Net Gross", value: `GH₵ ${grandTotals.netGross.toFixed(2)}`, valueClass: "text-teal-600 dark:text-teal-400" },
+                  { label: "Total Wins", value: `GH₵ ${grandTotals.wins.toFixed(2)}`, valueClass: "text-rose-600 dark:text-rose-400" },
+                  { label: "Total Reserve", value: `GH₵ ${grandTotals.reserve.toFixed(2)}`, valueClass: "text-indigo-600 dark:text-indigo-400" },
+                  { 
+                    label: "Grand Net Balance", 
+                    value: `GH₵ ${grandTotals.balance.toFixed(2)}`, 
+                    valueClass: `font-extrabold ${grandTotals.balance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}` 
+                  },
+                ].map(({ label, value, valueClass }) => (
+                  <div key={label} className="space-y-1">
+                    <div className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">{label}</div>
+                    <div className={`font-mono text-sm font-bold ${valueClass}`}>{value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

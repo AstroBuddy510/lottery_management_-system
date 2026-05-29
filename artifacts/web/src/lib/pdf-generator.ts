@@ -670,26 +670,42 @@ export async function generateGameSalesReportPDF(
     }
   }
 
+  // Calculate grand aggregates from gameFinancials
+  let totalGrossSales = 0;
+  let grandNetBalance = 0;
+  if (gameFinancials && gameFinancials.length > 0) {
+    for (const item of gameFinancials) {
+      totalGrossSales += parseFloat(item.grossSales ?? "0");
+      grandNetBalance += parseFloat(item.balance ?? "0");
+    }
+  }
+
   // Summary footer panel
-  if (nextY > 230) {
+  if (nextY > 210) {
     doc.addPage();
     nextY = 20;
   }
 
   const pageWidth = doc.internal.pageSize.width;
   doc.setFillColor(241, 245, 249);
-  doc.rect(pageWidth - 95, nextY, 80, 24, "F");
+  doc.rect(pageWidth - 95, nextY, 80, 32, "F");
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
   doc.text("Total Ticket Entries:", pageWidth - 90, nextY + 7);
-  doc.text("Total Sales Revenue:", pageWidth - 90, nextY + 14);
+  doc.text("Total Revenue (Sales):", pageWidth - 90, nextY + 14);
+  doc.text("Grand Net Balance:", pageWidth - 90, nextY + 24);
 
   doc.setFont("helvetica", "bold");
   doc.setTextColor(40, 40, 40);
   doc.text(String(summary.totalEntries), pageWidth - 20, nextY + 7, { align: "right" });
-  doc.text(fmt(summary.totalAmount), pageWidth - 20, nextY + 14, { align: "right" });
+  doc.text(fmt(totalGrossSales), pageWidth - 20, nextY + 14, { align: "right" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(grandNetBalance < 0 ? 220 : 16, grandNetBalance < 0 ? 38 : 124, grandNetBalance < 0 ? 38 : 65);
+  doc.text(fmt(grandNetBalance), pageWidth - 20, nextY + 25, { align: "right" });
 
   drawSignatureBlock(doc, "Audited By (Administrator)", "Billed Authorized Sign");
   doc.save(`game_sales_report_${agentCode}.pdf`);
