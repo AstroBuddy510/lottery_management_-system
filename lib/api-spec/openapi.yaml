@@ -4169,11 +4169,13 @@ components:
 
     Padlock:
       type: object
-      required: [id, serialNumber, status, condition, createdAt]
+      required: [id, serialNumber, brandName, status, condition, createdAt]
       properties:
         id:
           type: string
         serialNumber:
+          type: string
+        brandName:
           type: string
         status:
           type: string
@@ -4184,9 +4186,11 @@ components:
 
     PadlockInput:
       type: object
-      required: [serialNumber]
+      required: [serialNumber, brandName]
       properties:
         serialNumber:
+          type: string
+        brandName:
           type: string
         condition:
           type: string

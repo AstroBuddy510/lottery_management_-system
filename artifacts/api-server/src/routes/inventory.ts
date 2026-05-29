@@ -300,7 +300,7 @@ router.post(
       return;
     }
 
-    const { serialNumber, condition } = parse.data;
+    const { serialNumber, brandName, condition } = parse.data;
 
     try {
       // Check unique serial number
@@ -319,6 +319,7 @@ router.post(
         .insert(padlocksTable)
         .values({
           serialNumber,
+          brandName,
           condition: condition || "good",
           status: "available",
         })

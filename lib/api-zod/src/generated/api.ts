@@ -2140,6 +2140,7 @@ export const ListBookletAgentBalancesResponse = zod.array(ListBookletAgentBalanc
 export const ListPadlocksResponseItem = zod.object({
   "id": zod.string(),
   "serialNumber": zod.string(),
+  "brandName": zod.string(),
   "status": zod.string(),
   "condition": zod.string(),
   "createdAt": zod.string()
@@ -2152,6 +2153,7 @@ export const ListPadlocksResponse = zod.array(ListPadlocksResponseItem)
  */
 export const CreatePadlockBody = zod.object({
   "serialNumber": zod.string(),
+  "brandName": zod.string(),
   "condition": zod.string().optional()
 })
 

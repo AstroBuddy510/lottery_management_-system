@@ -7,7 +7,8 @@ import {
   getListAgentsQueryKey, 
   useListPayments, 
   Payment,
-  getListPaymentsQueryKey
+  getListPaymentsQueryKey,
+  useListPadlockAssignments
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -164,10 +165,11 @@ function fitBounds(lats: number[], lngs: number[]): { center: [number, number]; 
 /* ─── custom map pin ──────────────────────────────────────────────────────── */
 
 function PinMarker({
-  color, label, code, photo, name, onClick,
+  color, label, code, photo, name, onClick, activePadlock,
 }: {
   color: string; label: string; code: string;
   photo?: string | null; name: string; onClick: () => void;
+  activePadlock?: { padlockSerialNumber: string; destination: string };
 }) {
   const initials = name.split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase();
   return (
@@ -176,25 +178,58 @@ function PinMarker({
       className="cursor-pointer group"
       style={{ transform: "translate(-50%, -100%)", display: "inline-flex", flexDirection: "column", alignItems: "center" }}
     >
+      <style>{`
+        @keyframes neon-pulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.85);
+            border-color: rgba(34, 197, 94, 1);
+          }
+          70% {
+            box-shadow: 0 0 16px 8px rgba(34, 197, 94, 0.4);
+            border-color: rgba(34, 197, 94, 1);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.85);
+            border-color: rgba(34, 197, 94, 1);
+          }
+        }
+        .neon-pulsing-active {
+          animation: neon-pulse 1.8s infinite ease-in-out;
+          border-color: #22c55e !important;
+          background-color: #f0fdf4 !important;
+        }
+      `}</style>
+
       {/* Bubble card */}
-      <div className="flex items-center gap-2 bg-white rounded-2xl shadow-xl border border-slate-200 px-2.5 py-1.5 group-hover:shadow-2xl group-hover:-translate-y-0.5 transition-all duration-150 whitespace-nowrap">
+      <div className={`flex items-center gap-2 bg-white rounded-2xl shadow-xl border border-slate-200 px-2.5 py-1.5 group-hover:shadow-2xl group-hover:-translate-y-0.5 transition-all duration-150 whitespace-nowrap ${activePadlock ? "neon-pulsing-active" : ""}`}>
         {/* Avatar — photo or coloured initials */}
         <div
           className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-white font-bold text-xs"
-          style={{ boxShadow: `0 0 0 2px ${color}` }}
+          style={{ boxShadow: `0 0 0 2px ${activePadlock ? "#22c55e" : color}` }}
         >
           {photo ? (
             <img src={photo} alt={name} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center" style={{ background: color }}>
+            <div className="w-full h-full flex items-center justify-center" style={{ background: activePadlock ? "#22c55e" : color }}>
               {initials || "?"}
             </div>
           )}
         </div>
         {/* Text */}
-        <div style={{ maxWidth: 120 }}>
+        <div style={{ maxWidth: 140 }}>
           <div className="text-[11px] font-bold text-slate-800 leading-tight truncate">{label}</div>
           <div className="text-[9px] font-mono text-slate-400 leading-tight">{code}</div>
+          {activePadlock && (
+            <div className="mt-1.5 border-t pt-1 border-emerald-100 flex flex-col gap-0.5 text-[9px] font-bold text-emerald-600">
+              <div className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping inline-block" />
+                <span>🔒 Padlock: {activePadlock.padlockSerialNumber}</span>
+              </div>
+              <div className="text-slate-500 font-medium truncate max-w-[120px]" title={activePadlock.destination}>
+                📍 Dest: {activePadlock.destination}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       {/* Arrow tip pointing down to the exact location */}
@@ -202,7 +237,7 @@ function PinMarker({
         width: 0, height: 0,
         borderLeft: "7px solid transparent",
         borderRight: "7px solid transparent",
-        borderTop: "8px solid white",
+        borderTop: `8px solid ${activePadlock ? "#f0fdf4" : "white"}`,
         filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.15))",
         marginTop: -1,
       }} />
@@ -695,7 +730,15 @@ function Pagination({
 
 /* ─── map view ────────────────────────────────────────────────────────────── */
 
-function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: AgentWithUser) => void }) {
+function MapView({
+  agents,
+  onSelect,
+  activeAssignmentsMap = {},
+}: {
+  agents: AgentWithUser[];
+  onSelect: (a: AgentWithUser) => void;
+  activeAssignmentsMap?: Record<string, any>;
+}) {
   const mapped   = agents.filter(a => a.lat && a.lng);
   const unmapped = agents.filter(a => !a.lat || !a.lng);
 
@@ -745,6 +788,7 @@ function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: 
             const color = STATUS_CFG[status].pin;
             const photo = (a.user as { profilePicture?: string | null }).profilePicture;
             const label = a.agencyName ?? a.user.fullName;
+            const activePadlock = activeAssignmentsMap[a.id];
             return (
               <Overlay
                 key={a.id}
@@ -757,6 +801,7 @@ function MapView({ agents, onSelect }: { agents: AgentWithUser[]; onSelect: (a: 
                   photo={photo}
                   name={a.user.fullName}
                   onClick={() => onSelect(a)}
+                  activePadlock={activePadlock}
                 />
               </Overlay>
             );
@@ -846,6 +891,22 @@ export function AgencyDashboard() {
     {},
     { query: { queryKey: getListPaymentsQueryKey({}), refetchInterval: 60_000 } }
   );
+
+  const { data: padlockAssignments } = useListPadlockAssignments();
+
+  const activeAssignmentsMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    if (!Array.isArray(padlockAssignments)) return map;
+    const sorted = [...padlockAssignments].sort(
+      (a, b) => new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime()
+    );
+    for (const a of sorted) {
+      if (!a.openedAt && !map[a.agentId]) {
+        map[a.agentId] = a;
+      }
+    }
+    return map;
+  }, [padlockAssignments]);
 
   const updateUserMutation = useUpdateUser();
 
@@ -1147,7 +1208,7 @@ export function AgencyDashboard() {
             <Pagination page={page} totalPages={totalPages} onPage={setPage} />
           </>
         ) : (
-          <MapView agents={filteredAndSorted} onSelect={setSelected} />
+          <MapView agents={filteredAndSorted} onSelect={setSelected} activeAssignmentsMap={activeAssignmentsMap} />
         )}
       </div>
 

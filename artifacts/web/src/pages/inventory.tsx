@@ -61,7 +61,7 @@ export function Inventory() {
   const [allocationForm, setAllocationForm] = useState({ agentId: "", allocatedDate: new Date().toISOString().split("T")[0], quantity: "", notes: "" });
 
   const [padlockOpen, setPadlockOpen] = useState(false);
-  const [padlockForm, setPadlockForm] = useState({ serialNumber: "", condition: "good" });
+  const [padlockForm, setPadlockForm] = useState({ serialNumber: "", brandName: "", condition: "good" });
 
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignForm, setAssignForm] = useState({ agentId: "", destination: "", conditionBefore: "good" });
@@ -127,12 +127,13 @@ export function Inventory() {
       await createPadlockMutation.mutateAsync({
         data: {
           serialNumber: padlockForm.serialNumber,
+          brandName: padlockForm.brandName,
           condition: padlockForm.condition,
         },
       });
       toast.success("Digital padlock registered");
       setPadlockOpen(false);
-      setPadlockForm({ serialNumber: "", condition: "good" });
+      setPadlockForm({ serialNumber: "", brandName: "", condition: "good" });
       invalidateAll();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to register padlock");
@@ -491,6 +492,7 @@ export function Inventory() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Serial Number</TableHead>
+                    <TableHead>Brand Name</TableHead>
                     <TableHead>Registry Status</TableHead>
                     <TableHead>Physical Condition</TableHead>
                     <TableHead>Registered Date</TableHead>
@@ -498,13 +500,14 @@ export function Inventory() {
                 </TableHeader>
                 <TableBody>
                   {loadingPadlocks ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8">Loading...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-8">Loading...</TableCell></TableRow>
                   ) : !padlocks || padlocks.length === 0 ? (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-sm">No padlocks registered in inventory.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No padlocks registered in inventory.</TableCell></TableRow>
                   ) : (
                     padlocks.map(p => (
                       <TableRow key={p.id}>
                         <TableCell className="text-sm font-mono font-bold">{p.serialNumber}</TableCell>
+                        <TableCell className="text-sm">{p.brandName || "—"}</TableCell>
                         <TableCell>
                           <Badge
                             variant={
@@ -770,6 +773,15 @@ export function Inventory() {
                 placeholder="e.g. PDL-9981-A"
                 value={padlockForm.serialNumber}
                 onChange={e => setPadlockForm(prev => ({ ...prev, serialNumber: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Brand's Name</Label>
+              <Input
+                placeholder="e.g. Master Lock, Abloy"
+                value={padlockForm.brandName}
+                onChange={e => setPadlockForm(prev => ({ ...prev, brandName: e.target.value }))}
                 required
               />
             </div>

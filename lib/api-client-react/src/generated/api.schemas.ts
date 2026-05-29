@@ -1382,6 +1382,7 @@ export interface BookletAgentBalance {
 export interface Padlock {
   id: string;
   serialNumber: string;
+  brandName: string;
   status: string;
   condition: string;
   createdAt: string;
@@ -1389,6 +1390,7 @@ export interface Padlock {
 
 export interface PadlockInput {
   serialNumber: string;
+  brandName: string;
   condition?: string;
 }
 
