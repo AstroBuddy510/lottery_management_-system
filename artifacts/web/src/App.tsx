@@ -31,6 +31,7 @@ import { OnlinePayment } from "@/pages/online-payment";
 import { AgencyStaffExpenses } from "@/pages/agency-staff-expenses";
 import { StaffsEmployees } from "@/pages/staffs-employees";
 import { CompanyExpenses } from "@/pages/company-expenses";
+import { Inventory } from "@/pages/inventory";
 
 import { Layout } from "@/components/layout";
 
@@ -138,6 +139,10 @@ function Router() {
 
       <Route path="/reserve">
         {() => <ProtectedRoute component={Reserve} roles={['director', 'administrator']} />}
+      </Route>
+
+      <Route path="/inventory">
+        {() => <ProtectedRoute component={Inventory} roles={['cashier', 'administrator', 'director']} />}
       </Route>
 
       <Route path="/reserve-receipts">

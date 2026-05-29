@@ -5,7 +5,7 @@ import {
   useListWriters, getListGrossEntriesQueryKey, getListWritersQueryKey,
   useGetMyAgent, getGetMyAgentQueryKey, GrossEntry,
   useCreateEntryChangeRequest, getListEntryChangeRequestsQueryKey,
-  useListGames,
+  useListGames, useListBookletAgentBalances,
 } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useAuth } from "@/lib/auth";
@@ -61,6 +61,12 @@ function AgentGrossView() {
   const today = new Date(getServerNow()).toISOString().split("T")[0];
   const { data: myAgent } = useGetMyAgent({ query: { queryKey: getGetMyAgentQueryKey() } });
 
+  const { data: bookletBalances } = useListBookletAgentBalances();
+  const agentBookletBalance = useMemo(() => {
+    if (!bookletBalances || bookletBalances.length === 0) return null;
+    return bookletBalances[0];
+  }, [bookletBalances]);
+
   const [filterWriterId, setFilterWriterId] = useState("");
   const [filterFrom, setFilterFrom] = useState(today);
   const [filterTo, setFilterTo] = useState(today);
@@ -106,8 +112,8 @@ function AgentGrossView() {
   const createMutation = useCreateGrossEntry();
   const updateMutation = useUpdateGrossEntry();
   const changeRequestMutation = useCreateEntryChangeRequest();
-  const [form, setForm] = useState({ writerId: "", entryDate: today, grossAmount: "", gameId: "" });
-  const [editForm, setEditForm] = useState({ grossAmount: "" });
+  const [form, setForm] = useState({ writerId: "", entryDate: today, grossAmount: "", bookletsCount: "", gameId: "" });
+  const [editForm, setEditForm] = useState({ grossAmount: "", bookletsCount: "" });
   const [changeReqEntry, setChangeReqEntry] = useState<GrossEntry | null>(null);
   const [changeReqForm, setChangeReqForm] = useState({ requestedAmount: "", reason: "" });
 
@@ -135,6 +141,8 @@ function AgentGrossView() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["/api/entries/gross"] });
     qc.invalidateQueries({ queryKey: ["grossEntriesForDate"] });
+    qc.invalidateQueries({ queryKey: ["/api/inventory/booklets/agent-balances"] });
+    qc.invalidateQueries({ queryKey: ["/api/inventory/booklets/summary"] });
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -149,12 +157,13 @@ function AgentGrossView() {
           writerId: form.writerId,
           entryDate: form.entryDate,
           grossAmount: form.grossAmount,
+          bookletsCount: form.bookletsCount ? parseInt(form.bookletsCount) : 0,
           gameId: form.gameId || undefined,
         }
       });
       toast.success("Gross entry created");
       setCreateOpen(false);
-      setForm({ writerId: "", entryDate: today, grossAmount: "", gameId: "" });
+      setForm({ writerId: "", entryDate: today, grossAmount: "", bookletsCount: "", gameId: "" });
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to create entry");
@@ -165,7 +174,13 @@ function AgentGrossView() {
     e.preventDefault();
     if (!editEntry) return;
     try {
-      await updateMutation.mutateAsync({ id: editEntry.id, data: { grossAmount: editForm.grossAmount } });
+      await updateMutation.mutateAsync({
+        id: editEntry.id,
+        data: {
+          grossAmount: editForm.grossAmount,
+          bookletsCount: editForm.bookletsCount ? parseInt(editForm.bookletsCount) : 0,
+        }
+      });
       toast.success("Entry updated");
       setEditEntry(null);
       invalidate();
@@ -252,18 +267,28 @@ function AgentGrossView() {
 
         {/* Today summary */}
         {isDefaultFilter && (
-          <div className="mt-4 flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl px-4 py-3">
-            <div className="flex-1">
-              <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Today's Gross</div>
-              <div className="text-lg font-bold text-emerald-900 dark:text-emerald-100 tabular-nums">{todayTotal > 0 ? fmtGHS(todayTotal) : "—"}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">All-time</div>
-              <div className="text-sm font-bold text-emerald-900 dark:text-emerald-100 tabular-nums">
-                {fmtGHS(entryList.reduce((s, e) => s + Number(e.grossAmount ?? 0), 0))}
+          <>
+            <div className="mt-4 flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl px-4 py-3">
+              <div className="flex-1">
+                <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Today's Gross</div>
+                <div className="text-lg font-bold text-emerald-900 dark:text-emerald-100 tabular-nums">{todayTotal > 0 ? fmtGHS(todayTotal) : "—"}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">All-time</div>
+                <div className="text-sm font-bold text-emerald-900 dark:text-emerald-100 tabular-nums">
+                  {fmtGHS(entryList.reduce((s, e) => s + Number(e.grossAmount ?? 0), 0))}
+                </div>
               </div>
             </div>
-          </div>
+            {agentBookletBalance && (
+              <div className="mt-2.5 flex items-center justify-between bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-2xl px-4 py-2.5 text-xs text-blue-800 dark:text-blue-200 shadow-sm animate-fade-in">
+                <span className="font-semibold">Booklet Balance:</span>
+                <span className="font-bold font-mono text-[11px]">
+                  {agentBookletBalance.balance} remaining (Allocated: {agentBookletBalance.totalAllocated} · Used: {agentBookletBalance.totalUsed})
+                </span>
+              </div>
+            )}
+          </>
         )}
 
         {/* Entry cards */}
@@ -293,6 +318,8 @@ function AgentGrossView() {
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">{relDate(entry.entryDate ?? "")}</span>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <span className="text-xs text-muted-foreground font-medium">{entry.bookletsCount ?? 0} booklets</span>
                     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
                       isLocked
                         ? "bg-muted text-muted-foreground"
@@ -308,7 +335,7 @@ function AgentGrossView() {
                   </div>
                   {!isLocked ? (
                     <button
-                      onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount }); }}
+                      onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount, bookletsCount: String(entry.bookletsCount ?? 0) }); }}
                       className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
                     >
                       <EditIcon />
@@ -329,7 +356,7 @@ function AgentGrossView() {
       </div>
 
       {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={o => { if (!o) setForm({ writerId: "", entryDate: today, grossAmount: "", gameId: "" }); setCreateOpen(o); }}>
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) setForm({ writerId: "", entryDate: today, grossAmount: "", bookletsCount: "", gameId: "" }); setCreateOpen(o); }}>
         <DialogContent className="max-w-sm mx-4 rounded-2xl">
           <DialogHeader><DialogTitle>Add Gross Entry</DialogTitle></DialogHeader>
           {myAgent && (
@@ -416,6 +443,20 @@ function AgentGrossView() {
               />
             </div>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Booklets Used *</Label>
+              <Input
+                type="number"
+                min="0"
+                value={form.bookletsCount}
+                onChange={e => setForm(f => ({ ...f, bookletsCount: e.target.value }))}
+                disabled={!form.gameId}
+                required
+                className="h-11 text-sm rounded-xl"
+                placeholder="0"
+              />
+            </div>
+
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button
@@ -443,7 +484,11 @@ function AgentGrossView() {
           <form onSubmit={handleEdit} className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Gross Amount (GH₵)</Label>
-              <Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={e => setEditForm({ grossAmount: e.target.value })} required className="h-11 text-sm rounded-xl" inputMode="decimal" />
+              <Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={e => setEditForm(prev => ({ ...prev, grossAmount: e.target.value }))} required className="h-11 text-sm rounded-xl" inputMode="decimal" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Booklets Used</Label>
+              <Input type="number" min="0" value={editForm.bookletsCount} onChange={e => setEditForm(prev => ({ ...prev, bookletsCount: e.target.value }))} required className="h-11 text-sm rounded-xl" />
             </div>
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setEditEntry(null)}>Cancel</Button>
@@ -537,7 +582,7 @@ function AdminGrossView() {
   const writerList = Array.isArray(writers) ? writers : [];
 
   const today = new Date(getServerNow()).toISOString().split("T")[0];
-  const [form, setForm] = useState({ writerId: "", entryDate: today, grossAmount: "" });
+  const [form, setForm] = useState({ writerId: "", entryDate: today, grossAmount: "", bookletsCount: "" });
 
   // Fetch all gross entries for the selected date to verify which writers have already been entered
   const { data: dateEntries } = useListGrossEntries({
@@ -563,18 +608,25 @@ function AdminGrossView() {
   const updateMutation = useUpdateGrossEntry();
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<GrossEntry | null>(null);
-  const [editForm, setEditForm] = useState({ grossAmount: "" });
+  const [editForm, setEditForm] = useState({ grossAmount: "", bookletsCount: "" });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/entries/gross"] });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await createMutation.mutateAsync({ data: { writerId: form.writerId, entryDate: form.entryDate, grossAmount: form.grossAmount } });
+      await createMutation.mutateAsync({
+        data: {
+          writerId: form.writerId,
+          entryDate: form.entryDate,
+          grossAmount: form.grossAmount,
+          bookletsCount: form.bookletsCount ? parseInt(form.bookletsCount) : 0,
+        }
+      });
       toast.success("Entry created");
       setCreateOpen(false);
       setSelectedAgent("");
-      setForm({ writerId: "", entryDate: today, grossAmount: "" });
+      setForm({ writerId: "", entryDate: today, grossAmount: "", bookletsCount: "" });
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to create entry");
@@ -585,7 +637,13 @@ function AdminGrossView() {
     e.preventDefault();
     if (!editEntry) return;
     try {
-      await updateMutation.mutateAsync({ id: editEntry.id, data: { grossAmount: editForm.grossAmount } });
+      await updateMutation.mutateAsync({
+        id: editEntry.id,
+        data: {
+          grossAmount: editForm.grossAmount,
+          bookletsCount: editForm.bookletsCount ? parseInt(editForm.bookletsCount) : 0,
+        }
+      });
       toast.success("Entry updated");
       setEditEntry(null);
       invalidate();
@@ -649,6 +707,7 @@ function AdminGrossView() {
             <TableRow>
               <TableHead>Entry Date</TableHead><TableHead>Writer</TableHead>
               <TableHead className="text-right">Gross Amount</TableHead>
+              <TableHead className="text-right">Booklets Used</TableHead>
               <TableHead className="pl-8">Recorded At</TableHead>
               <TableHead>Status</TableHead><TableHead className="w-24">Action</TableHead>
             </TableRow>
@@ -669,13 +728,14 @@ function AdminGrossView() {
                     {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                   </TableCell>
                   <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.grossAmount).toFixed(2)}</TableCell>
+                  <TableCell className="text-sm text-right font-mono">{entry.bookletsCount ?? 0}</TableCell>
                   <TableCell className="text-sm tabular-nums pl-8">
                     {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>
                   <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
                   <TableCell>
                     {!entry.locked && (
-                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount }); }}>Edit</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount, bookletsCount: String(entry.bookletsCount ?? 0) }); }}>Edit</Button>
                     )}
                   </TableCell>
                 </TableRow>
@@ -715,6 +775,10 @@ function AdminGrossView() {
               <Label className="text-xs">Gross Amount (GH₵)</Label>
               <Input type="number" step="0.01" min="0" value={form.grossAmount} onChange={e => setForm(f => ({ ...f, grossAmount: e.target.value }))} required className="h-9 text-sm" placeholder="0.00" />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Booklets Used</Label>
+              <Input type="number" min="0" value={form.bookletsCount} onChange={e => setForm(f => ({ ...f, bookletsCount: e.target.value }))} required className="h-9 text-sm" placeholder="0" />
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createMutation.isPending || !form.writerId}>Create</Button>
@@ -735,7 +799,11 @@ function AdminGrossView() {
           <form onSubmit={handleEdit} className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Gross Amount (GH₵)</Label>
-              <Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={e => setEditForm({ grossAmount: e.target.value })} required className="h-9 text-sm" />
+              <Input type="number" step="0.01" min="0" value={editForm.grossAmount} onChange={e => setEditForm(prev => ({ ...prev, grossAmount: e.target.value }))} required className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Booklets Used</Label>
+              <Input type="number" min="0" value={editForm.bookletsCount} onChange={e => setEditForm(prev => ({ ...prev, bookletsCount: e.target.value }))} required className="h-9 text-sm" />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditEntry(null)}>Cancel</Button>

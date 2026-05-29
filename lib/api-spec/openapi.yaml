@@ -2144,6 +2144,238 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnreadCount"
 
+  /inventory/booklets/batches:
+    get:
+      operationId: listBookletBatches
+      tags: [inventory]
+      summary: List all booklet batches
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookletBatch"
+    post:
+      operationId: createBookletBatch
+      tags: [inventory]
+      summary: Record booklet printing batch restock
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookletBatchInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookletBatch"
+
+  /inventory/booklets/allocations:
+    get:
+      operationId: listBookletAllocations
+      tags: [inventory]
+      summary: List booklet allocations to agents
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookletAllocation"
+    post:
+      operationId: createBookletAllocation
+      tags: [inventory]
+      summary: Allocate booklets to an agent
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookletAllocationInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookletAllocation"
+
+  /inventory/booklets/summary:
+    get:
+      operationId: getBookletSummary
+      tags: [inventory]
+      summary: Summary of booklets stock, allocations, usage
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookletSummary"
+
+  /inventory/booklets/agent-balances:
+    get:
+      operationId: listBookletAgentBalances
+      tags: [inventory]
+      summary: Booklet balances per agent
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookletAgentBalance"
+
+  /inventory/padlocks:
+    get:
+      operationId: listPadlocks
+      tags: [inventory]
+      summary: List all registered padlocks
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Padlock"
+    post:
+      operationId: createPadlock
+      tags: [inventory]
+      summary: Register a digital padlock
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PadlockInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Padlock"
+
+  /inventory/padlocks/assign:
+    post:
+      operationId: assignPadlock
+      tags: [inventory]
+      summary: Assign a padlock randomly to an agent
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PadlockAssignInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PadlockAssignment"
+
+  /inventory/padlock-assignments:
+    get:
+      operationId: listPadlockAssignments
+      tags: [inventory]
+      summary: List padlock assignments log
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PadlockAssignment"
+
+  /inventory/padlock-assignments/{id}/open:
+    post:
+      operationId: openPadlockAssignment
+      tags: [inventory]
+      summary: Mark padlock assignment as opened
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PadlockOpenInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PadlockAssignment"
+
+  /inventory/padlock-assignments/{id}/return:
+    post:
+      operationId: returnPadlockAssignment
+      tags: [inventory]
+      summary: Mark padlock assignment as returned
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PadlockReturnInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PadlockAssignment"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2651,7 +2883,7 @@ components:
 
     GrossEntry:
       type: object
-      required: [id, writerId, entryDate, grossAmount, enteredBy, locked, createdAt, updatedAt]
+      required: [id, writerId, entryDate, grossAmount, enteredBy, locked, bookletsCount, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2663,6 +2895,8 @@ components:
           type: string
         grossAmount:
           type: string
+        bookletsCount:
+          type: integer
         enteredBy:
           type: string
         locked:
@@ -2684,6 +2918,10 @@ components:
           type: string
         gameId:
           type: string
+        bookletsCount:
+          type: integer
+          nullable: true
+
 
     GrossEntryUpdate:
       type: object
@@ -2691,6 +2929,10 @@ components:
       properties:
         grossAmount:
           type: string
+        bookletsCount:
+          type: integer
+          nullable: true
+
 
     WinsEntry:
       type: object
@@ -3826,3 +4068,180 @@ components:
           type: ["string", "null"]
         createdAt:
           type: string
+
+    BookletBatch:
+      type: object
+      required: [id, batchDate, quantity, totalCost, costPerBooklet, enteredBy, createdAt]
+      properties:
+        id:
+          type: string
+        batchDate:
+          type: string
+        quantity:
+          type: integer
+        totalCost:
+          type: string
+        costPerBooklet:
+          type: string
+        description:
+          type: ["string", "null"]
+        enteredBy:
+          type: string
+        createdAt:
+          type: string
+
+    BookletBatchInput:
+      type: object
+      required: [batchDate, quantity, totalCost]
+      properties:
+        batchDate:
+          type: string
+        quantity:
+          type: integer
+        totalCost:
+          type: string
+        description:
+          type: string
+
+    BookletAllocation:
+      type: object
+      required: [id, agentId, allocatedDate, quantity, enteredBy, createdAt]
+      properties:
+        id:
+          type: string
+        agentId:
+          type: string
+        allocatedDate:
+          type: string
+        quantity:
+          type: integer
+        notes:
+          type: ["string", "null"]
+        enteredBy:
+          type: string
+        createdAt:
+          type: string
+
+    BookletAllocationInput:
+      type: object
+      required: [agentId, allocatedDate, quantity]
+      properties:
+        agentId:
+          type: string
+        allocatedDate:
+          type: string
+        quantity:
+          type: integer
+        notes:
+          type: string
+
+    BookletSummary:
+      type: object
+      required: [totalStocked, totalAllocated, cashierStockRemaining, totalUsedByAgents, agentStockRemaining]
+      properties:
+        totalStocked:
+          type: integer
+        totalAllocated:
+          type: integer
+        cashierStockRemaining:
+          type: integer
+        totalUsedByAgents:
+          type: integer
+        agentStockRemaining:
+          type: integer
+
+    BookletAgentBalance:
+      type: object
+      required: [agentId, agentCode, agencyName, totalAllocated, totalUsed, balance]
+      properties:
+        agentId:
+          type: string
+        agentCode:
+          type: string
+        agencyName:
+          type: ["string", "null"]
+        totalAllocated:
+          type: integer
+        totalUsed:
+          type: integer
+        balance:
+          type: integer
+
+    Padlock:
+      type: object
+      required: [id, serialNumber, status, condition, createdAt]
+      properties:
+        id:
+          type: string
+        serialNumber:
+          type: string
+        status:
+          type: string
+        condition:
+          type: string
+        createdAt:
+          type: string
+
+    PadlockInput:
+      type: object
+      required: [serialNumber]
+      properties:
+        serialNumber:
+          type: string
+        condition:
+          type: string
+
+    PadlockAssignment:
+      type: object
+      required: [id, padlockId, padlockSerialNumber, agentId, agentCode, destination, conditionBefore, assignedAt, enteredBy, createdAt]
+      properties:
+        id:
+          type: string
+        padlockId:
+          type: string
+        padlockSerialNumber:
+          type: string
+        agentId:
+          type: string
+        agentCode:
+          type: string
+        agencyName:
+          type: ["string", "null"]
+        destination:
+          type: string
+        conditionBefore:
+          type: string
+        conditionAfter:
+          type: ["string", "null"]
+        assignedAt:
+          type: string
+        openedAt:
+          type: ["string", "null"]
+        returnedAt:
+          type: ["string", "null"]
+        enteredBy:
+          type: string
+        createdAt:
+          type: string
+
+    PadlockAssignInput:
+      type: object
+      required: [agentId, destination, conditionBefore]
+      properties:
+        agentId:
+          type: string
+        destination:
+          type: string
+        conditionBefore:
+          type: string
+
+    PadlockReturnInput:
+      type: object
+      required: [conditionAfter]
+      properties:
+        conditionAfter:
+          type: string
+
+    PadlockOpenInput:
+      type: object
+      properties: {}

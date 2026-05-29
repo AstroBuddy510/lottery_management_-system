@@ -34,6 +34,12 @@ import type {
   AllocateReserveBody,
   AllocateReserveResult,
   AuthTokens,
+  BookletAgentBalance,
+  BookletAllocation,
+  BookletAllocationInput,
+  BookletBatch,
+  BookletBatchInput,
+  BookletSummary,
   CalcRunInput,
   CalcRunResult,
   CompanyExpense,
@@ -84,6 +90,12 @@ import type {
   NotificationInput,
   NotificationWithReceipt,
   OrgReport,
+  Padlock,
+  PadlockAssignInput,
+  PadlockAssignment,
+  PadlockInput,
+  PadlockOpenInput,
+  PadlockReturnInput,
   PaySalaryInput,
   Payment,
   PaymentInput,
@@ -7262,4 +7274,894 @@ export function useGetUnreadCount<TData = Awaited<ReturnType<typeof getUnreadCou
 
 
 
+
+export const getListBookletBatchesUrl = () => {
+
+
+
+
+  return `/api/inventory/booklets/batches`
+}
+
+/**
+ * @summary List all booklet batches
+ */
+export const listBookletBatches = async ( options?: RequestInit): Promise<BookletBatch[]> => {
+
+  return customFetch<BookletBatch[]>(getListBookletBatchesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBookletBatchesQueryKey = () => {
+    return [
+    `/api/inventory/booklets/batches`
+    ] as const;
+    }
+
+
+export const getListBookletBatchesQueryOptions = <TData = Awaited<ReturnType<typeof listBookletBatches>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookletBatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBookletBatchesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBookletBatches>>> = ({ signal }) => listBookletBatches({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBookletBatches>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBookletBatchesQueryResult = NonNullable<Awaited<ReturnType<typeof listBookletBatches>>>
+export type ListBookletBatchesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all booklet batches
+ */
+
+export function useListBookletBatches<TData = Awaited<ReturnType<typeof listBookletBatches>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookletBatches>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBookletBatchesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateBookletBatchUrl = () => {
+
+
+
+
+  return `/api/inventory/booklets/batches`
+}
+
+/**
+ * @summary Record booklet printing batch restock
+ */
+export const createBookletBatch = async (bookletBatchInput: BookletBatchInput, options?: RequestInit): Promise<BookletBatch> => {
+
+  return customFetch<BookletBatch>(getCreateBookletBatchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookletBatchInput,)
+  }
+);}
+
+
+
+
+export const getCreateBookletBatchMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBookletBatch>>, TError,{data: BodyType<BookletBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createBookletBatch>>, TError,{data: BodyType<BookletBatchInput>}, TContext> => {
+
+const mutationKey = ['createBookletBatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBookletBatch>>, {data: BodyType<BookletBatchInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createBookletBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateBookletBatchMutationResult = NonNullable<Awaited<ReturnType<typeof createBookletBatch>>>
+    export type CreateBookletBatchMutationBody = BodyType<BookletBatchInput>
+    export type CreateBookletBatchMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record booklet printing batch restock
+ */
+export const useCreateBookletBatch = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBookletBatch>>, TError,{data: BodyType<BookletBatchInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createBookletBatch>>,
+        TError,
+        {data: BodyType<BookletBatchInput>},
+        TContext
+      > => {
+      return useMutation(getCreateBookletBatchMutationOptions(options));
+    }
+
+export const getListBookletAllocationsUrl = () => {
+
+
+
+
+  return `/api/inventory/booklets/allocations`
+}
+
+/**
+ * @summary List booklet allocations to agents
+ */
+export const listBookletAllocations = async ( options?: RequestInit): Promise<BookletAllocation[]> => {
+
+  return customFetch<BookletAllocation[]>(getListBookletAllocationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBookletAllocationsQueryKey = () => {
+    return [
+    `/api/inventory/booklets/allocations`
+    ] as const;
+    }
+
+
+export const getListBookletAllocationsQueryOptions = <TData = Awaited<ReturnType<typeof listBookletAllocations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookletAllocations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBookletAllocationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBookletAllocations>>> = ({ signal }) => listBookletAllocations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBookletAllocations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBookletAllocationsQueryResult = NonNullable<Awaited<ReturnType<typeof listBookletAllocations>>>
+export type ListBookletAllocationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List booklet allocations to agents
+ */
+
+export function useListBookletAllocations<TData = Awaited<ReturnType<typeof listBookletAllocations>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookletAllocations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBookletAllocationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateBookletAllocationUrl = () => {
+
+
+
+
+  return `/api/inventory/booklets/allocations`
+}
+
+/**
+ * @summary Allocate booklets to an agent
+ */
+export const createBookletAllocation = async (bookletAllocationInput: BookletAllocationInput, options?: RequestInit): Promise<BookletAllocation> => {
+
+  return customFetch<BookletAllocation>(getCreateBookletAllocationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookletAllocationInput,)
+  }
+);}
+
+
+
+
+export const getCreateBookletAllocationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBookletAllocation>>, TError,{data: BodyType<BookletAllocationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createBookletAllocation>>, TError,{data: BodyType<BookletAllocationInput>}, TContext> => {
+
+const mutationKey = ['createBookletAllocation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBookletAllocation>>, {data: BodyType<BookletAllocationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createBookletAllocation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateBookletAllocationMutationResult = NonNullable<Awaited<ReturnType<typeof createBookletAllocation>>>
+    export type CreateBookletAllocationMutationBody = BodyType<BookletAllocationInput>
+    export type CreateBookletAllocationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Allocate booklets to an agent
+ */
+export const useCreateBookletAllocation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBookletAllocation>>, TError,{data: BodyType<BookletAllocationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createBookletAllocation>>,
+        TError,
+        {data: BodyType<BookletAllocationInput>},
+        TContext
+      > => {
+      return useMutation(getCreateBookletAllocationMutationOptions(options));
+    }
+
+export const getGetBookletSummaryUrl = () => {
+
+
+
+
+  return `/api/inventory/booklets/summary`
+}
+
+/**
+ * @summary Summary of booklets stock, allocations, usage
+ */
+export const getBookletSummary = async ( options?: RequestInit): Promise<BookletSummary> => {
+
+  return customFetch<BookletSummary>(getGetBookletSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetBookletSummaryQueryKey = () => {
+    return [
+    `/api/inventory/booklets/summary`
+    ] as const;
+    }
+
+
+export const getGetBookletSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getBookletSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookletSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetBookletSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getBookletSummary>>> = ({ signal }) => getBookletSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getBookletSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetBookletSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getBookletSummary>>>
+export type GetBookletSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Summary of booklets stock, allocations, usage
+ */
+
+export function useGetBookletSummary<TData = Awaited<ReturnType<typeof getBookletSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getBookletSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetBookletSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListBookletAgentBalancesUrl = () => {
+
+
+
+
+  return `/api/inventory/booklets/agent-balances`
+}
+
+/**
+ * @summary Booklet balances per agent
+ */
+export const listBookletAgentBalances = async ( options?: RequestInit): Promise<BookletAgentBalance[]> => {
+
+  return customFetch<BookletAgentBalance[]>(getListBookletAgentBalancesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListBookletAgentBalancesQueryKey = () => {
+    return [
+    `/api/inventory/booklets/agent-balances`
+    ] as const;
+    }
+
+
+export const getListBookletAgentBalancesQueryOptions = <TData = Awaited<ReturnType<typeof listBookletAgentBalances>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookletAgentBalances>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBookletAgentBalancesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBookletAgentBalances>>> = ({ signal }) => listBookletAgentBalances({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBookletAgentBalances>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListBookletAgentBalancesQueryResult = NonNullable<Awaited<ReturnType<typeof listBookletAgentBalances>>>
+export type ListBookletAgentBalancesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Booklet balances per agent
+ */
+
+export function useListBookletAgentBalances<TData = Awaited<ReturnType<typeof listBookletAgentBalances>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listBookletAgentBalances>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListBookletAgentBalancesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListPadlocksUrl = () => {
+
+
+
+
+  return `/api/inventory/padlocks`
+}
+
+/**
+ * @summary List all registered padlocks
+ */
+export const listPadlocks = async ( options?: RequestInit): Promise<Padlock[]> => {
+
+  return customFetch<Padlock[]>(getListPadlocksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPadlocksQueryKey = () => {
+    return [
+    `/api/inventory/padlocks`
+    ] as const;
+    }
+
+
+export const getListPadlocksQueryOptions = <TData = Awaited<ReturnType<typeof listPadlocks>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPadlocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPadlocksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPadlocks>>> = ({ signal }) => listPadlocks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPadlocks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPadlocksQueryResult = NonNullable<Awaited<ReturnType<typeof listPadlocks>>>
+export type ListPadlocksQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all registered padlocks
+ */
+
+export function useListPadlocks<TData = Awaited<ReturnType<typeof listPadlocks>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPadlocks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPadlocksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreatePadlockUrl = () => {
+
+
+
+
+  return `/api/inventory/padlocks`
+}
+
+/**
+ * @summary Register a digital padlock
+ */
+export const createPadlock = async (padlockInput: PadlockInput, options?: RequestInit): Promise<Padlock> => {
+
+  return customFetch<Padlock>(getCreatePadlockUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      padlockInput,)
+  }
+);}
+
+
+
+
+export const getCreatePadlockMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPadlock>>, TError,{data: BodyType<PadlockInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPadlock>>, TError,{data: BodyType<PadlockInput>}, TContext> => {
+
+const mutationKey = ['createPadlock'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPadlock>>, {data: BodyType<PadlockInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPadlock(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePadlockMutationResult = NonNullable<Awaited<ReturnType<typeof createPadlock>>>
+    export type CreatePadlockMutationBody = BodyType<PadlockInput>
+    export type CreatePadlockMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Register a digital padlock
+ */
+export const useCreatePadlock = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPadlock>>, TError,{data: BodyType<PadlockInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPadlock>>,
+        TError,
+        {data: BodyType<PadlockInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePadlockMutationOptions(options));
+    }
+
+export const getAssignPadlockUrl = () => {
+
+
+
+
+  return `/api/inventory/padlocks/assign`
+}
+
+/**
+ * @summary Assign a padlock randomly to an agent
+ */
+export const assignPadlock = async (padlockAssignInput: PadlockAssignInput, options?: RequestInit): Promise<PadlockAssignment> => {
+
+  return customFetch<PadlockAssignment>(getAssignPadlockUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      padlockAssignInput,)
+  }
+);}
+
+
+
+
+export const getAssignPadlockMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignPadlock>>, TError,{data: BodyType<PadlockAssignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignPadlock>>, TError,{data: BodyType<PadlockAssignInput>}, TContext> => {
+
+const mutationKey = ['assignPadlock'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignPadlock>>, {data: BodyType<PadlockAssignInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  assignPadlock(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignPadlockMutationResult = NonNullable<Awaited<ReturnType<typeof assignPadlock>>>
+    export type AssignPadlockMutationBody = BodyType<PadlockAssignInput>
+    export type AssignPadlockMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Assign a padlock randomly to an agent
+ */
+export const useAssignPadlock = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignPadlock>>, TError,{data: BodyType<PadlockAssignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignPadlock>>,
+        TError,
+        {data: BodyType<PadlockAssignInput>},
+        TContext
+      > => {
+      return useMutation(getAssignPadlockMutationOptions(options));
+    }
+
+export const getListPadlockAssignmentsUrl = () => {
+
+
+
+
+  return `/api/inventory/padlock-assignments`
+}
+
+/**
+ * @summary List padlock assignments log
+ */
+export const listPadlockAssignments = async ( options?: RequestInit): Promise<PadlockAssignment[]> => {
+
+  return customFetch<PadlockAssignment[]>(getListPadlockAssignmentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPadlockAssignmentsQueryKey = () => {
+    return [
+    `/api/inventory/padlock-assignments`
+    ] as const;
+    }
+
+
+export const getListPadlockAssignmentsQueryOptions = <TData = Awaited<ReturnType<typeof listPadlockAssignments>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPadlockAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPadlockAssignmentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPadlockAssignments>>> = ({ signal }) => listPadlockAssignments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPadlockAssignments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPadlockAssignmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listPadlockAssignments>>>
+export type ListPadlockAssignmentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List padlock assignments log
+ */
+
+export function useListPadlockAssignments<TData = Awaited<ReturnType<typeof listPadlockAssignments>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPadlockAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPadlockAssignmentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getOpenPadlockAssignmentUrl = (id: string,) => {
+
+
+
+
+  return `/api/inventory/padlock-assignments/${id}/open`
+}
+
+/**
+ * @summary Mark padlock assignment as opened
+ */
+export const openPadlockAssignment = async (id: string,
+    padlockOpenInput?: PadlockOpenInput, options?: RequestInit): Promise<PadlockAssignment> => {
+
+  return customFetch<PadlockAssignment>(getOpenPadlockAssignmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      padlockOpenInput,)
+  }
+);}
+
+
+
+
+export const getOpenPadlockAssignmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof openPadlockAssignment>>, TError,{id: string;data?: BodyType<PadlockOpenInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof openPadlockAssignment>>, TError,{id: string;data?: BodyType<PadlockOpenInput>}, TContext> => {
+
+const mutationKey = ['openPadlockAssignment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof openPadlockAssignment>>, {id: string;data?: BodyType<PadlockOpenInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  openPadlockAssignment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type OpenPadlockAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof openPadlockAssignment>>>
+    export type OpenPadlockAssignmentMutationBody = BodyType<PadlockOpenInput> | undefined
+    export type OpenPadlockAssignmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark padlock assignment as opened
+ */
+export const useOpenPadlockAssignment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof openPadlockAssignment>>, TError,{id: string;data?: BodyType<PadlockOpenInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof openPadlockAssignment>>,
+        TError,
+        {id: string;data?: BodyType<PadlockOpenInput>},
+        TContext
+      > => {
+      return useMutation(getOpenPadlockAssignmentMutationOptions(options));
+    }
+
+export const getReturnPadlockAssignmentUrl = (id: string,) => {
+
+
+
+
+  return `/api/inventory/padlock-assignments/${id}/return`
+}
+
+/**
+ * @summary Mark padlock assignment as returned
+ */
+export const returnPadlockAssignment = async (id: string,
+    padlockReturnInput: PadlockReturnInput, options?: RequestInit): Promise<PadlockAssignment> => {
+
+  return customFetch<PadlockAssignment>(getReturnPadlockAssignmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      padlockReturnInput,)
+  }
+);}
+
+
+
+
+export const getReturnPadlockAssignmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnPadlockAssignment>>, TError,{id: string;data: BodyType<PadlockReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof returnPadlockAssignment>>, TError,{id: string;data: BodyType<PadlockReturnInput>}, TContext> => {
+
+const mutationKey = ['returnPadlockAssignment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof returnPadlockAssignment>>, {id: string;data: BodyType<PadlockReturnInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  returnPadlockAssignment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReturnPadlockAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof returnPadlockAssignment>>>
+    export type ReturnPadlockAssignmentMutationBody = BodyType<PadlockReturnInput>
+    export type ReturnPadlockAssignmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark padlock assignment as returned
+ */
+export const useReturnPadlockAssignment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnPadlockAssignment>>, TError,{id: string;data: BodyType<PadlockReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof returnPadlockAssignment>>,
+        TError,
+        {id: string;data: BodyType<PadlockReturnInput>},
+        TContext
+      > => {
+      return useMutation(getReturnPadlockAssignmentMutationOptions(options));
+    }
 

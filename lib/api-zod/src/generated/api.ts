@@ -1048,6 +1048,7 @@ export const ListGrossEntriesResponseItem = zod.object({
   "gameId": zod.string().optional(),
   "entryDate": zod.string(),
   "grossAmount": zod.string(),
+  "bookletsCount": zod.number(),
   "enteredBy": zod.string(),
   "locked": zod.boolean(),
   "createdAt": zod.string(),
@@ -1063,7 +1064,8 @@ export const CreateGrossEntryBody = zod.object({
   "writerId": zod.string(),
   "entryDate": zod.string(),
   "grossAmount": zod.string(),
-  "gameId": zod.string().optional()
+  "gameId": zod.string().optional(),
+  "bookletsCount": zod.number().nullish()
 })
 
 
@@ -1075,7 +1077,8 @@ export const UpdateGrossEntryParams = zod.object({
 })
 
 export const UpdateGrossEntryBody = zod.object({
-  "grossAmount": zod.string()
+  "grossAmount": zod.string(),
+  "bookletsCount": zod.number().nullish()
 })
 
 export const UpdateGrossEntryResponse = zod.object({
@@ -1084,6 +1087,7 @@ export const UpdateGrossEntryResponse = zod.object({
   "gameId": zod.string().optional(),
   "entryDate": zod.string(),
   "grossAmount": zod.string(),
+  "bookletsCount": zod.number(),
   "enteredBy": zod.string(),
   "locked": zod.boolean(),
   "createdAt": zod.string(),
@@ -2048,6 +2052,197 @@ export const DeleteReadNotificationsResponse = zod.object({
  */
 export const GetUnreadCountResponse = zod.object({
   "count": zod.number()
+})
+
+
+/**
+ * @summary List all booklet batches
+ */
+export const ListBookletBatchesResponseItem = zod.object({
+  "id": zod.string(),
+  "batchDate": zod.string(),
+  "quantity": zod.number(),
+  "totalCost": zod.string(),
+  "costPerBooklet": zod.string(),
+  "description": zod.string().nullish(),
+  "enteredBy": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListBookletBatchesResponse = zod.array(ListBookletBatchesResponseItem)
+
+
+/**
+ * @summary Record booklet printing batch restock
+ */
+export const CreateBookletBatchBody = zod.object({
+  "batchDate": zod.string(),
+  "quantity": zod.number(),
+  "totalCost": zod.string(),
+  "description": zod.string().optional()
+})
+
+
+/**
+ * @summary List booklet allocations to agents
+ */
+export const ListBookletAllocationsResponseItem = zod.object({
+  "id": zod.string(),
+  "agentId": zod.string(),
+  "allocatedDate": zod.string(),
+  "quantity": zod.number(),
+  "notes": zod.string().nullish(),
+  "enteredBy": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListBookletAllocationsResponse = zod.array(ListBookletAllocationsResponseItem)
+
+
+/**
+ * @summary Allocate booklets to an agent
+ */
+export const CreateBookletAllocationBody = zod.object({
+  "agentId": zod.string(),
+  "allocatedDate": zod.string(),
+  "quantity": zod.number(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Summary of booklets stock, allocations, usage
+ */
+export const GetBookletSummaryResponse = zod.object({
+  "totalStocked": zod.number(),
+  "totalAllocated": zod.number(),
+  "cashierStockRemaining": zod.number(),
+  "totalUsedByAgents": zod.number(),
+  "agentStockRemaining": zod.number()
+})
+
+
+/**
+ * @summary Booklet balances per agent
+ */
+export const ListBookletAgentBalancesResponseItem = zod.object({
+  "agentId": zod.string(),
+  "agentCode": zod.string(),
+  "agencyName": zod.string().nullable(),
+  "totalAllocated": zod.number(),
+  "totalUsed": zod.number(),
+  "balance": zod.number()
+})
+export const ListBookletAgentBalancesResponse = zod.array(ListBookletAgentBalancesResponseItem)
+
+
+/**
+ * @summary List all registered padlocks
+ */
+export const ListPadlocksResponseItem = zod.object({
+  "id": zod.string(),
+  "serialNumber": zod.string(),
+  "status": zod.string(),
+  "condition": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListPadlocksResponse = zod.array(ListPadlocksResponseItem)
+
+
+/**
+ * @summary Register a digital padlock
+ */
+export const CreatePadlockBody = zod.object({
+  "serialNumber": zod.string(),
+  "condition": zod.string().optional()
+})
+
+
+/**
+ * @summary Assign a padlock randomly to an agent
+ */
+export const AssignPadlockBody = zod.object({
+  "agentId": zod.string(),
+  "destination": zod.string(),
+  "conditionBefore": zod.string()
+})
+
+
+/**
+ * @summary List padlock assignments log
+ */
+export const ListPadlockAssignmentsResponseItem = zod.object({
+  "id": zod.string(),
+  "padlockId": zod.string(),
+  "padlockSerialNumber": zod.string(),
+  "agentId": zod.string(),
+  "agentCode": zod.string(),
+  "agencyName": zod.string().nullish(),
+  "destination": zod.string(),
+  "conditionBefore": zod.string(),
+  "conditionAfter": zod.string().nullish(),
+  "assignedAt": zod.string(),
+  "openedAt": zod.string().nullish(),
+  "returnedAt": zod.string().nullish(),
+  "enteredBy": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListPadlockAssignmentsResponse = zod.array(ListPadlockAssignmentsResponseItem)
+
+
+/**
+ * @summary Mark padlock assignment as opened
+ */
+export const OpenPadlockAssignmentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const OpenPadlockAssignmentBody = zod.object({
+
+}).passthrough()
+
+export const OpenPadlockAssignmentResponse = zod.object({
+  "id": zod.string(),
+  "padlockId": zod.string(),
+  "padlockSerialNumber": zod.string(),
+  "agentId": zod.string(),
+  "agentCode": zod.string(),
+  "agencyName": zod.string().nullish(),
+  "destination": zod.string(),
+  "conditionBefore": zod.string(),
+  "conditionAfter": zod.string().nullish(),
+  "assignedAt": zod.string(),
+  "openedAt": zod.string().nullish(),
+  "returnedAt": zod.string().nullish(),
+  "enteredBy": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Mark padlock assignment as returned
+ */
+export const ReturnPadlockAssignmentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ReturnPadlockAssignmentBody = zod.object({
+  "conditionAfter": zod.string()
+})
+
+export const ReturnPadlockAssignmentResponse = zod.object({
+  "id": zod.string(),
+  "padlockId": zod.string(),
+  "padlockSerialNumber": zod.string(),
+  "agentId": zod.string(),
+  "agentCode": zod.string(),
+  "agencyName": zod.string().nullish(),
+  "destination": zod.string(),
+  "conditionBefore": zod.string(),
+  "conditionAfter": zod.string().nullish(),
+  "assignedAt": zod.string(),
+  "openedAt": zod.string().nullish(),
+  "returnedAt": zod.string().nullish(),
+  "enteredBy": zod.string(),
+  "createdAt": zod.string()
 })
 
 

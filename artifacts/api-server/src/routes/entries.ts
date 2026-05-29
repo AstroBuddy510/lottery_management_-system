@@ -129,7 +129,11 @@ router.post(
 
     const [entry] = await db
       .insert(grossEntriesTable)
-      .values({ ...parse.data, enteredBy: req.user!.userId })
+      .values({
+        ...parse.data,
+        bookletsCount: parse.data.bookletsCount ?? 0,
+        enteredBy: req.user!.userId,
+      })
       .returning();
     res.status(201).json(entry);
   },
@@ -195,7 +199,10 @@ router.patch(
 
     const [entry] = await db
       .update(grossEntriesTable)
-      .set({ grossAmount: bodyResult.data.grossAmount })
+      .set({
+        grossAmount: bodyResult.data.grossAmount,
+        bookletsCount: bodyResult.data.bookletsCount ?? undefined,
+      })
       .where(eq(grossEntriesTable.id, paramsResult.data.id))
       .returning();
     res.json(entry);

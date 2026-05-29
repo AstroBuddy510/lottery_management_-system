@@ -20,6 +20,7 @@ import paystackRouter from "./paystack";
 import agencyStaffRouter from "./agency-staff";
 import companyStaffRouter from "./company-staff";
 import staffPayrollRouter from "./staff-payroll";
+import inventoryRouter from "./inventory";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(paystackRouter);
 router.use(agencyStaffRouter);
 router.use(companyStaffRouter);
 router.use(staffPayrollRouter);
+router.use(inventoryRouter);
 
 export default router;

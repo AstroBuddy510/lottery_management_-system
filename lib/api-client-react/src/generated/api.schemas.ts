@@ -438,6 +438,7 @@ export interface GrossEntry {
   gameId?: string;
   entryDate: string;
   grossAmount: string;
+  bookletsCount: number;
   enteredBy: string;
   locked: boolean;
   createdAt: string;
@@ -449,10 +450,12 @@ export interface GrossEntryInput {
   entryDate: string;
   grossAmount: string;
   gameId?: string;
+  bookletsCount?: number | null;
 }
 
 export interface GrossEntryUpdate {
   grossAmount: string;
+  bookletsCount?: number | null;
 }
 
 export interface WinsEntry {
@@ -1320,6 +1323,107 @@ export interface WalletTransaction {
   notes?: string | null;
   createdAt: string;
 }
+
+export interface BookletBatch {
+  id: string;
+  batchDate: string;
+  quantity: number;
+  totalCost: string;
+  costPerBooklet: string;
+  /** @nullable */
+  description?: string | null;
+  enteredBy: string;
+  createdAt: string;
+}
+
+export interface BookletBatchInput {
+  batchDate: string;
+  quantity: number;
+  totalCost: string;
+  description?: string;
+}
+
+export interface BookletAllocation {
+  id: string;
+  agentId: string;
+  allocatedDate: string;
+  quantity: number;
+  /** @nullable */
+  notes?: string | null;
+  enteredBy: string;
+  createdAt: string;
+}
+
+export interface BookletAllocationInput {
+  agentId: string;
+  allocatedDate: string;
+  quantity: number;
+  notes?: string;
+}
+
+export interface BookletSummary {
+  totalStocked: number;
+  totalAllocated: number;
+  cashierStockRemaining: number;
+  totalUsedByAgents: number;
+  agentStockRemaining: number;
+}
+
+export interface BookletAgentBalance {
+  agentId: string;
+  agentCode: string;
+  /** @nullable */
+  agencyName: string | null;
+  totalAllocated: number;
+  totalUsed: number;
+  balance: number;
+}
+
+export interface Padlock {
+  id: string;
+  serialNumber: string;
+  status: string;
+  condition: string;
+  createdAt: string;
+}
+
+export interface PadlockInput {
+  serialNumber: string;
+  condition?: string;
+}
+
+export interface PadlockAssignment {
+  id: string;
+  padlockId: string;
+  padlockSerialNumber: string;
+  agentId: string;
+  agentCode: string;
+  /** @nullable */
+  agencyName?: string | null;
+  destination: string;
+  conditionBefore: string;
+  /** @nullable */
+  conditionAfter?: string | null;
+  assignedAt: string;
+  /** @nullable */
+  openedAt?: string | null;
+  /** @nullable */
+  returnedAt?: string | null;
+  enteredBy: string;
+  createdAt: string;
+}
+
+export interface PadlockAssignInput {
+  agentId: string;
+  destination: string;
+  conditionBefore: string;
+}
+
+export interface PadlockReturnInput {
+  conditionAfter: string;
+}
+
+export interface PadlockOpenInput { [key: string]: unknown }
 
 export type GetServerTime200 = {
   utcTime: string;

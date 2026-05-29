@@ -16,3 +16,4 @@ export * from "./agency-staff";
 export * from "./company-staff";
 export * from "./salary-payments";
 export * from "./salary-wallet";
+export * from "./inventory";
