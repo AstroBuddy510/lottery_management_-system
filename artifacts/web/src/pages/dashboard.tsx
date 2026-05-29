@@ -563,7 +563,6 @@ function DirectorDashboard() {
   const chartData = useMemo(() => {
     const grouped: Record<string, { date: string; gross: number; wins: number; net: number; balance: number }> = {};
     calcList.forEach(c => {
-      if (displayGame && c.gameId !== displayGame.id) return;
       const dateStr = c.calcDate?.split("T")[0] ?? "";
       if (!dateStr) return;
       if (!grouped[dateStr]) {
@@ -582,7 +581,7 @@ function DirectorDashboard() {
     });
     const sorted = Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
     return sorted.slice(-7);
-  }, [calcList, displayGame]);
+  }, [calcList]);
 
   // Filter agents by search query (name or agent code)
   const filteredAgentStats = useMemo(() => {
