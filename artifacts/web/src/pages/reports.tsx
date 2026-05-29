@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   useGetWriterReport, useGetAgentReport, useGetOrgReport,
@@ -713,12 +713,26 @@ type GameSalesEntry = {
   writerFullName: string;
   imageUrl?: string | null;
 };
+type GameFinancialSummary = {
+  gameId: string;
+  gameName: string;
+  eventNumber: string;
+  goLiveAt: string;
+  closeAt: string;
+  grossSales: string;
+  commission: string;
+  netGross: string;
+  wins: string;
+  reserve: string;
+  balance: string;
+};
 type GameSalesReport = {
   agent: { id: string; fullCode: string; user?: { fullName?: string } | null };
   summary: { totalEntries: number; totalAmount: string; gameTypeCount: number; writerCount: number };
   byGameType: GameSalesByGameType[];
   byWriter: GameSalesByWriter[];
   entries: GameSalesEntry[];
+  gameFinancials?: GameFinancialSummary[];
 };
 
 const GAME_TYPE_COLOURS: Record<string, string> = {
@@ -760,6 +774,17 @@ function GameSalesView() {
 
   const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); };
   const r = report;
+
+  const groupedFinancials = useMemo(() => {
+    if (!r?.gameFinancials) return {};
+    const groups: Record<string, GameFinancialSummary[]> = {};
+    for (const item of r.gameFinancials) {
+      const type = item.gameName;
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(item);
+    }
+    return groups;
+  }, [r?.gameFinancials]);
 
   return (
     <div className="space-y-4 pt-4">
@@ -805,15 +830,18 @@ function GameSalesView() {
             title="Game Sales Report"
             subtitle={`${r.agent?.fullCode ?? "—"} — ${r.agent?.user?.fullName ?? "—"}`}
             dateFrom={dateFrom} dateTo={dateTo}
-            onExportPDF={() => generateGameSalesReportPDF(
-              r.agent?.user?.fullName ?? "Unknown Agent",
-              r.agent?.fullCode ?? "—",
-              dateFrom,
-              dateTo,
-              r.summary,
-              r.byGameType,
-              r.byWriter
-            )}
+            onExportPDF={async () => {
+              await generateGameSalesReportPDF(
+                r.agent?.user?.fullName ?? "Unknown Agent",
+                r.agent?.fullCode ?? "—",
+                dateFrom,
+                dateTo,
+                r.summary,
+                r.byGameType,
+                r.byWriter,
+                r.gameFinancials ?? []
+              );
+            }}
           />
 
           {/* Summary strip */}
@@ -837,6 +865,63 @@ function GameSalesView() {
               </div>
             ))}
           </div>
+
+          {/* Game Sales Financial Summary by Game Type */}
+          {Object.keys(groupedFinancials).length > 0 && (
+            <div className="space-y-6">
+              <div className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">
+                Game Sales Financial Summaries
+              </div>
+              {Object.entries(groupedFinancials).map(([gameType, items]) => (
+                <div key={gameType} className="rounded-xl border overflow-hidden">
+                  <div className="bg-muted/40 px-4 py-2.5 border-b flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wide text-primary">{gameType} Sales</span>
+                    <span className="text-xs text-muted-foreground">{items.length} event(s)</span>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/20">
+                        <TableHead className="text-xs">Name of game</TableHead>
+                        <TableHead className="text-right text-xs">Gross sales</TableHead>
+                        <TableHead className="text-right text-xs">Commission</TableHead>
+                        <TableHead className="text-right text-xs">Net Gross</TableHead>
+                        <TableHead className="text-right text-xs">Wins</TableHead>
+                        <TableHead className="text-right text-xs">Reserve</TableHead>
+                        <TableHead className="text-right text-xs">Balance</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map(item => (
+                        <TableRow key={item.gameId} className="hover:bg-muted/20">
+                          <TableCell className="font-semibold">
+                            {item.gameName} #{item.eventNumber}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            GH₵ {Number(item.grossSales).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-amber-600 dark:text-amber-400">
+                            GH₵ {Number(item.commission).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-teal-600 dark:text-teal-400">
+                            GH₵ {Number(item.netGross).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-rose-600 dark:text-rose-400">
+                            GH₵ {Number(item.wins).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-indigo-600 dark:text-indigo-400">
+                            GH₵ {Number(item.reserve).toFixed(2)}
+                          </TableCell>
+                          <TableCell className={`text-right font-mono font-bold ${Number(item.balance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
+                            GH₵ {Number(item.balance).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* By game type */}
           {r.byGameType.length > 0 ? (

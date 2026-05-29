@@ -21,65 +21,87 @@ function fmtDate(s?: string | null) {
   }
 }
 
+function getLogoImage(): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    img.src = "/company-logo-v3.png";
+    if (img.complete && img.naturalWidth !== 0) {
+      resolve(img);
+    } else {
+      img.onload = () => resolve(img);
+      img.onerror = () => {
+        console.error("Failed to load logo image");
+        resolve(null);
+      };
+    }
+  });
+}
+
 // Draw the header brand logo, company letterhead, and title
 function drawBrandHeader(
   doc: jsPDF,
   title: string,
   metaDetails: { label: string; value: string }[],
   clientLabel: string,
-  clientDetails: string[]
+  clientDetails: string[],
+  logoImg: HTMLImageElement | null
 ) {
   // Page Width
   const pageWidth = doc.internal.pageSize.width;
 
-  // Draw orange accent circle (inspired by invoice sample)
-  doc.setFillColor(255, 103, 0); // brand orange #ff6700
-  doc.circle(20, 20, 12, "F");
-
-  // Draw overlapping dark circle for logo style
-  doc.setFillColor(0, 78, 152); // brand dark blue #004e98
-  doc.circle(26, 26, 7, "F");
+  // Center logo
+  if (logoImg) {
+    try {
+      doc.addImage(logoImg, "PNG", (pageWidth - 24) / 2, 8, 24, 24);
+    } catch (err) {
+      console.error("Error drawing logo in PDF", err);
+    }
+  }
 
   // Company Name
   doc.setTextColor(0, 78, 152);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.text("VISION 2000 LOTTO.COM LTD", 40, 22);
+  doc.setFontSize(16);
+  doc.text("VISION 2000 LOTTO.COM LTD", pageWidth / 2, 38, { align: "center" });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  doc.text("HQ Location: Afienya Mataheko  |  Postal: PO Box SQ 168", 40, 27);
-  doc.text("Email: info@vs2000smartportal.com  |  Contact: 0302 021 000 / 0244614981", 40, 31);
+  doc.text("HQ Location: Afienya Mataheko  |  Postal: PO Box SQ 168", pageWidth / 2, 43, { align: "center" });
+  doc.text("Email: info@vs2000smartportal.com  |  Contact: 0302 021 000 / 0244614981", pageWidth / 2, 47, { align: "center" });
 
   // Draw divider line
   doc.setDrawColor(220, 220, 220);
   doc.setLineWidth(0.5);
-  doc.line(15, 36, pageWidth - 15, 36);
+  doc.line(15, 51, pageWidth - 15, 51);
 
   // Title Box
   doc.setTextColor(0, 78, 152);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text(title.toUpperCase(), 15, 47);
+  doc.text(title.toUpperCase(), 15, 60);
 
   // Left Column - Bill To / Client Info
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(60, 60, 60);
-  doc.text(clientLabel.toUpperCase() + ":", 15, 56);
+  doc.text(clientLabel.toUpperCase() + ":", 15, 69);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
-  let currentY = 61;
+  let currentY = 74;
   clientDetails.forEach((line) => {
     doc.text(line, 15, currentY);
     currentY += 4.5;
   });
 
   // Right Column - Statement Info Grid (Top aligned)
-  let rightY = 47;
+  let rightY = 60;
   metaDetails.forEach((item) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
@@ -154,7 +176,7 @@ const tableTheme: any = {
 };
 
 // ─── 1. WRITER REPORT PDF ───
-export function generateWriterReportPDF(
+export async function generateWriterReportPDF(
   writerName: string,
   writerCode: string,
   dateFrom: string,
@@ -162,6 +184,7 @@ export function generateWriterReportPDF(
   totals: any,
   rows: any[]
 ) {
+  const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
 
   const startY = drawBrandHeader(
@@ -173,7 +196,8 @@ export function generateWriterReportPDF(
       { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
     ],
     "Writer Details",
-    [`Name: ${writerName}`, `Code: ${writerCode}`, "Role: Writer Account"]
+    [`Name: ${writerName}`, `Code: ${writerCode}`, "Role: Writer Account"],
+    logoImg
   );
 
   const columns = [
@@ -245,7 +269,7 @@ export function generateWriterReportPDF(
 }
 
 // ─── 2. AGENT REPORT PDF ───
-export function generateAgentReportPDF(
+export async function generateAgentReportPDF(
   agentName: string,
   agentCode: string,
   dateFrom: string,
@@ -255,6 +279,7 @@ export function generateAgentReportPDF(
   payments: any[],
   totalPaid: string
 ) {
+  const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
 
   const startY = drawBrandHeader(
@@ -266,7 +291,8 @@ export function generateAgentReportPDF(
       { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
     ],
     "Agent Billing Details",
-    [`Name: ${agentName}`, `Code: ${agentCode}`, "Role: Registered Agency Partner"]
+    [`Name: ${agentName}`, `Code: ${agentCode}`, "Role: Registered Agency Partner"],
+    logoImg
   );
 
   // Render Writer Breakdown Table
@@ -389,12 +415,13 @@ export function generateAgentReportPDF(
 }
 
 // ─── 3. ORGANISATION REPORT (P&L Summary) PDF ───
-export function generateOrgReportPDF(
+export async function generateOrgReportPDF(
   dateFrom: string,
   dateTo: string,
   totals: any,
   agentsBreakdown: any[]
 ) {
+  const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
 
   const startY = drawBrandHeader(
@@ -406,7 +433,8 @@ export function generateOrgReportPDF(
       { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
     ],
     "Audited Entity",
-    ["VISION 2000 LOTTO.COM LTD", "Operational HQ", "Consolidated Agencies Summary"]
+    ["VISION 2000 LOTTO.COM LTD", "Operational HQ", "Consolidated Agencies Summary"],
+    logoImg
   );
 
   const columns = [
@@ -478,15 +506,17 @@ export function generateOrgReportPDF(
 }
 
 // ─── 4. GAME SALES REPORT PDF ───
-export function generateGameSalesReportPDF(
+export async function generateGameSalesReportPDF(
   agentName: string,
   agentCode: string,
   dateFrom: string,
   dateTo: string,
   summary: any,
   byGameType: any[],
-  byWriter: any[]
+  byWriter: any[],
+  gameFinancials: any[]
 ) {
+  const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
 
   const startY = drawBrandHeader(
@@ -498,7 +528,8 @@ export function generateGameSalesReportPDF(
       { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
     ],
     "Audited Agency",
-    [`Name: ${agentName}`, `Code: ${agentCode}`, "Entity: Game Tickets Distribution Summary"]
+    [`Name: ${agentName}`, `Code: ${agentCode}`, "Entity: Game Tickets Distribution Summary"],
+    logoImg
   );
 
   // Sales by game type table
@@ -580,6 +611,65 @@ export function generateGameSalesReportPDF(
     nextY = doc.lastAutoTable.finalY + 10;
   }
 
+  // Game Financial Summaries (categorized by game type)
+  if (gameFinancials && gameFinancials.length > 0) {
+    const financialsByGroup = new Map<string, typeof gameFinancials>();
+    for (const fin of gameFinancials) {
+      let list = financialsByGroup.get(fin.gameName);
+      if (!list) {
+        list = [];
+        financialsByGroup.set(fin.gameName, list);
+      }
+      list.push(fin);
+    }
+
+    for (const [gameType, items] of financialsByGroup.entries()) {
+      if (nextY > 210) {
+        doc.addPage();
+        nextY = 20;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(0, 78, 152);
+      doc.text(`${gameType.toUpperCase()} FINANCIAL SUMMARY`, 15, nextY);
+
+      const finCols = [
+        { header: "Name of Game", dataKey: "gameNameAndEvent" },
+        { header: "Gross Sales", dataKey: "grossSales" },
+        { header: "Commission", dataKey: "commission" },
+        { header: "Net Gross", dataKey: "netGross" },
+        { header: "Wins", dataKey: "wins" },
+        { header: "Reserve", dataKey: "reserve" },
+        { header: "Balance", dataKey: "balance" }
+      ];
+
+      const finData = items.map((item) => ({
+        gameNameAndEvent: `${item.eventNumber} (${fmtDate(item.goLiveAt)})`,
+        grossSales: fmt(item.grossSales),
+        commission: fmt(item.commission),
+        netGross: fmt(item.netGross),
+        wins: fmt(item.wins),
+        reserve: fmt(item.reserve),
+        balance: fmt(item.balance),
+      }));
+
+      autoTable(doc, {
+        columns: finCols,
+        body: finData,
+        startY: nextY + 4,
+        theme: "grid",
+        headStyles: { ...tableTheme.headStyles, halign: "right" },
+        bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+        columnStyles: {
+          gameNameAndEvent: { halign: "left" },
+        },
+        margin: tableTheme.margin,
+      });
+      nextY = doc.lastAutoTable.finalY + 10;
+    }
+  }
+
   // Summary footer panel
   if (nextY > 230) {
     doc.addPage();
@@ -606,7 +696,7 @@ export function generateGameSalesReportPDF(
 }
 
 // ─── 5. DAILY CASH RECONCILIATION SETTLEMENT PDF ───
-export function generateDailySettlementPDF(
+export async function generateDailySettlementPDF(
   date: string,
   totalPayIn: number,
   totalPayOut: number,
@@ -614,6 +704,7 @@ export function generateDailySettlementPDF(
   transactions: any[],
   agentNameMap: Record<string, string>
 ) {
+  const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
 
   const startY = drawBrandHeader(
@@ -625,7 +716,8 @@ export function generateDailySettlementPDF(
       { label: "Generated At", value: new Date().toLocaleTimeString("en-GB") },
     ],
     "Settlement Entity",
-    ["VISION 2000 LOTTO.COM LTD", "Cashier Desk Ledger", "Afienya Mataheko Branch"]
+    ["VISION 2000 LOTTO.COM LTD", "Cashier Desk Ledger", "Afienya Mataheko Branch"],
+    logoImg
   );
 
   const columns = [
@@ -702,10 +794,11 @@ export function generateDailySettlementPDF(
 }
 
 // ─── 6. PAYROLL DISBURSEMENT PDF ───
-export function generatePayrollPDF(
+export async function generatePayrollPDF(
   periodLabel: string,
   salaryPayments: any[]
 ) {
+  const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
 
   const startY = drawBrandHeader(
@@ -717,7 +810,8 @@ export function generatePayrollPDF(
       { label: "Date Disbursed", value: new Date().toLocaleDateString("en-GB") },
     ],
     "Disbursing Agent Details",
-    ["VISION 2000 LOTTO.COM LTD", "Internal HR & Payroll Ledger", "Status: Consolidated Payouts"]
+    ["VISION 2000 LOTTO.COM LTD", "Internal HR & Payroll Ledger", "Status: Consolidated Payouts"],
+    logoImg
   );
 
   const columns = [
@@ -793,7 +887,7 @@ export function generatePayrollPDF(
 }
 
 // ─── 7. GAME EVENT AUDIT REPORT PDF ───
-export function generateGameEventReportPDF(
+export async function generateGameEventReportPDF(
   gameName: string,
   eventNumber: string,
   closeDateStr: string,
@@ -801,6 +895,7 @@ export function generateGameEventReportPDF(
   agents: any[],
   writers: any[]
 ) {
+  const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
 
   const startY = drawBrandHeader(
@@ -812,7 +907,8 @@ export function generateGameEventReportPDF(
       { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
     ],
     "Audited Game Details",
-    [`Name: ${gameName}`, `Event: ${eventNumber}`, "Status: Completed Draw Event"]
+    [`Name: ${gameName}`, `Event: ${eventNumber}`, "Status: Completed Draw Event"],
+    logoImg
   );
 
   // Consolidated Agent Table

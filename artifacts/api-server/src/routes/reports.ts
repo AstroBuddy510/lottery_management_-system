@@ -11,10 +11,12 @@ import {
   reserveAllocationsTable,
   salesLogsTable,
   gamesTable,
+  systemSettingsTable,
 } from "@workspace/db";
 import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { GetWriterReportParams, GetAgentReportParams } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { calculateWriter } from "../lib/calculator";
 
 const router = Router();
 
@@ -363,6 +365,121 @@ router.get(
           .map(([gameType, gt]) => ({ gameType, ticketCount: gt.ticketCount, totalAmount: gt.totalAmount.toFixed(2) })),
       }));
 
+    // Fetch all games in the date range
+    const gameConditions = [];
+    if (dateFrom) gameConditions.push(gte(gamesTable.goLiveAt, new Date(dateFrom)));
+    if (dateTo) gameConditions.push(lte(gamesTable.goLiveAt, new Date(dateTo)));
+
+    const allGamesInPeriod = await db
+      .select()
+      .from(gamesTable)
+      .where(gameConditions.length > 0 ? and(...gameConditions) : undefined)
+      .orderBy(desc(gamesTable.goLiveAt));
+
+    // Fetch system settings
+    const [settings] = await db
+      .select()
+      .from(systemSettingsTable)
+      .orderBy(desc(systemSettingsTable.updatedAt))
+      .limit(1);
+    const commissionPct = settings ? parseFloat(settings.commissionPct) : 0.20;
+    const reservePct = settings ? parseFloat(settings.reservePct) : 0.05;
+
+    const gameFinancials = [];
+
+    for (const g of allGamesInPeriod) {
+      // Fetch daily calculations for this game and this agent's writers
+      const gameCalcs = await db
+        .select()
+        .from(dailyCalculationsTable)
+        .where(
+          and(
+            eq(dailyCalculationsTable.gameId, g.id),
+            inArray(dailyCalculationsTable.writerId, writerIds)
+          )
+        );
+
+      let grossSales = 0;
+      let commission = 0;
+      let netGross = 0;
+      let wins = 0;
+      let reserve = 0;
+      let balance = 0;
+      let hasActivity = false;
+
+      if (gameCalcs.length > 0) {
+        hasActivity = true;
+        for (const c of gameCalcs) {
+          grossSales += parseFloat(c.grossSales ?? "0");
+          commission += parseFloat(c.commissionAmount ?? "0");
+          netGross += parseFloat(c.netGross ?? "0");
+          wins += parseFloat(c.winsAmount ?? "0");
+          reserve += parseFloat(c.reserveAmount ?? "0");
+          balance += parseFloat(c.writerBalance ?? "0");
+        }
+      } else {
+        // Fetch entries to calculate on the fly
+        const grossEntries = await db
+          .select()
+          .from(grossEntriesTable)
+          .where(
+            and(
+              eq(grossEntriesTable.gameId, g.id),
+              inArray(grossEntriesTable.writerId, writerIds)
+            )
+          );
+        const winsEntries = await db
+          .select()
+          .from(winsEntriesTable)
+          .where(
+            and(
+              eq(winsEntriesTable.gameId, g.id),
+              inArray(winsEntriesTable.writerId, writerIds)
+            )
+          );
+
+        if (grossEntries.length > 0 || winsEntries.length > 0) {
+          hasActivity = true;
+          const wGrossMap = new Map<string, number>();
+          for (const e of grossEntries) {
+            wGrossMap.set(e.writerId, (wGrossMap.get(e.writerId) ?? 0) + parseFloat(e.grossAmount));
+          }
+          const wWinsMap = new Map<string, number>();
+          for (const e of winsEntries) {
+            wWinsMap.set(e.writerId, (wWinsMap.get(e.writerId) ?? 0) + parseFloat(e.winsAmount));
+          }
+          const activeWIds = [...new Set([...wGrossMap.keys(), ...wWinsMap.keys()])];
+          for (const wId of activeWIds) {
+            const gr = wGrossMap.get(wId) ?? 0;
+            const wn = wWinsMap.get(wId) ?? 0;
+            const res = calculateWriter(gr, wn, commissionPct, reservePct);
+            grossSales += res.grossSales;
+            commission += res.commissionAmount;
+            netGross += res.netGross;
+            wins += res.winsAmount;
+            reserve += res.reserveAmount;
+            balance += res.writerBalance;
+          }
+        }
+      }
+
+      if (hasActivity) {
+        gameFinancials.push({
+          gameId: g.id,
+          gameName: g.name,
+          eventNumber: g.eventNumber ?? "—",
+          goLiveAt: g.goLiveAt,
+          closeAt: g.closeAt,
+          grossSales: grossSales.toFixed(2),
+          commission: commission.toFixed(2),
+          netGross: netGross.toFixed(2),
+          wins: wins.toFixed(2),
+          reserve: reserve.toFixed(2),
+          balance: balance.toFixed(2),
+        });
+      }
+    }
+
     res.json({
       agent: agentRow,
       summary: {
@@ -383,6 +500,7 @@ router.get(
         writerFullName: writerMap.get(s.writerId)?.fullName ?? "—",
         imageUrl: s.imageUrl,
       })),
+      gameFinancials,
     });
   },
 );
@@ -531,7 +649,7 @@ router.get(
       return;
     }
 
-    const calcs = await db
+    let calcs = await db
       .select({
         calc: dailyCalculationsTable,
         writer: {
@@ -554,6 +672,97 @@ router.get(
       .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
       .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
       .where(eq(dailyCalculationsTable.gameId, gameId));
+
+    if (calcs.length === 0) {
+      // Fetch system settings
+      const [settings] = await db
+        .select()
+        .from(systemSettingsTable)
+        .orderBy(desc(systemSettingsTable.updatedAt))
+        .limit(1);
+      const commissionPct = settings ? parseFloat(settings.commissionPct) : 0.20;
+      const reservePct = settings ? parseFloat(settings.reservePct) : 0.05;
+
+      // Fetch entries
+      const grossEntries = await db
+        .select()
+        .from(grossEntriesTable)
+        .where(eq(grossEntriesTable.gameId, gameId));
+
+      const winsEntries = await db
+        .select()
+        .from(winsEntriesTable)
+        .where(eq(winsEntriesTable.gameId, gameId));
+
+      // Get all writer IDs who have activity
+      const grossMap = new Map<string, number>();
+      for (const e of grossEntries) {
+        grossMap.set(e.writerId, (grossMap.get(e.writerId) ?? 0) + parseFloat(e.grossAmount));
+      }
+      const winsMap = new Map<string, number>();
+      for (const e of winsEntries) {
+        winsMap.set(e.writerId, (winsMap.get(e.writerId) ?? 0) + parseFloat(e.winsAmount));
+      }
+      const activeWriterIds = [...new Set([...grossMap.keys(), ...winsMap.keys()])];
+
+      if (activeWriterIds.length > 0) {
+        // Fetch writer/agent details for active writers
+        const writersInfo = await db
+          .select({
+            writer: {
+              id: writersTable.id,
+              fullName: writersTable.fullName,
+              fullCode: writersTable.fullCode,
+              agentId: writersTable.agentId,
+            },
+            agent: {
+              id: agentsTable.id,
+              fullCode: agentsTable.fullCode,
+              agencyName: agentsTable.agencyName,
+            },
+            agentUser: {
+              fullName: usersTable.fullName,
+            }
+          })
+          .from(writersTable)
+          .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+          .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+          .where(inArray(writersTable.id, activeWriterIds));
+
+        // Construct mock calcs array
+        const mockCalcs = [];
+        for (const wInfo of writersInfo) {
+          const gross = grossMap.get(wInfo.writer.id) ?? 0;
+          const wins = winsMap.get(wInfo.writer.id) ?? 0;
+          const calcResult = calculateWriter(gross, wins, commissionPct, reservePct);
+          
+          mockCalcs.push({
+            calc: {
+              id: `mock-${wInfo.writer.id}`,
+              writerId: wInfo.writer.id,
+              gameId: gameId,
+              calcDate: game.goLiveAt,
+              grossSales: calcResult.grossSales.toFixed(2),
+              commissionPct: calcResult.commissionPct.toFixed(4),
+              commissionAmount: calcResult.commissionAmount.toFixed(2),
+              netGross: calcResult.netGross.toFixed(2),
+              winsAmount: calcResult.winsAmount.toFixed(2),
+              reservePct: calcResult.reservePct.toFixed(4),
+              reserveAmount: calcResult.reserveAmount.toFixed(2),
+              writerBalance: calcResult.writerBalance.toFixed(2),
+              reserveBalanceAfter: "0.00",
+              reserveDrawAmount: "0.00",
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+            writer: wInfo.writer,
+            agent: wInfo.agent,
+            agentUser: wInfo.agentUser,
+          });
+        }
+        calcs = mockCalcs as any;
+      }
+    }
 
     const totals = {
       grossSales: 0,
