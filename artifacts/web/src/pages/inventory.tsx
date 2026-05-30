@@ -114,6 +114,7 @@ export function Inventory() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignForm, setAssignForm] = useState({
     agentId: "",
+    padlockId: "",
     destination: "",
     conditionBefore: "good"
   });
@@ -213,13 +214,14 @@ export function Inventory() {
       await assignPadlockMutation.mutateAsync({
         data: {
           agentId: assignForm.agentId,
+          padlockId: (assignForm.padlockId && assignForm.padlockId !== "_random") ? assignForm.padlockId : undefined,
           destination: assignForm.destination,
           conditionBefore: assignForm.conditionBefore,
         },
       });
-      toast.success("Padlock assigned randomly to agent");
+      toast.success(assignForm.padlockId && assignForm.padlockId !== "_random" ? "Padlock assigned successfully" : "Padlock assigned randomly to agent");
       setAssignOpen(false);
-      setAssignForm({ agentId: "", destination: "", conditionBefore: "good" });
+      setAssignForm({ agentId: "", padlockId: "", destination: "", conditionBefore: "good" });
       invalidateAll();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to assign padlock");
@@ -309,6 +311,11 @@ export function Inventory() {
     const assigned = padlocks.filter(p => p.status === "assigned").length;
     const broken = padlocks.filter(p => p.status === "broken" || p.status === "damaged").length;
     return { total, available, assigned, broken };
+  }, [padlocks]);
+
+  const availablePadlocks = useMemo(() => {
+    if (!padlocks) return [];
+    return padlocks.filter(p => p.status === "available");
   }, [padlocks]);
 
   // Visual Buffers Rates
@@ -869,7 +876,7 @@ export function Inventory() {
                   className="rounded-xl font-bold text-xs uppercase"
                 >
                   <Plus className="w-4 h-4 mr-1.5" />
-                  {padlockSubTab === "registry" ? "Register Padlock" : "Assign Padlock Randomly"}
+                  {padlockSubTab === "registry" ? "Register Padlock" : "Assign Padlock"}
                 </Button>
               )}
             </div>
@@ -1273,13 +1280,12 @@ export function Inventory() {
         </DialogContent>
       </Dialog>
 
-      {/* Padlock Assign Modal */}
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent className="max-w-md rounded-3xl border border-border/80 shadow-lg p-6 bg-background/98 backdrop-blur-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="w-5 h-5 text-primary" />
-              <span>Assign Padlock Randomly</span>
+              <span>Assign Padlock</span>
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAssignPadlock} className="space-y-4 pt-2">
@@ -1299,6 +1305,56 @@ export function Inventory() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Select Padlock (Lock Details)</Label>
+              <Select
+                value={assignForm.padlockId}
+                onValueChange={padlockId => {
+                  const selected = padlocks?.find(p => p.id === padlockId);
+                  setAssignForm(prev => ({
+                    ...prev,
+                    padlockId,
+                    conditionBefore: selected?.condition || "good"
+                  }));
+                }}
+              >
+                <SelectTrigger className="rounded-xl border-border bg-muted/20 font-mono">
+                  <SelectValue placeholder="Choose a specific padlock... (Optional, defaults to Random)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_random" className="font-sans italic">Select randomly from available</SelectItem>
+                  {availablePadlocks.map(p => (
+                    <SelectItem key={p.id} value={p.id} className="font-mono">
+                      {p.serialNumber} ({p.brandName}) - {p.lockType === "new" ? "New" : "Old"} [{p.condition}]
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {assignForm.padlockId && assignForm.padlockId !== "_random" && (
+                (() => {
+                  const selected = padlocks?.find(p => p.id === assignForm.padlockId);
+                  if (!selected) return null;
+                  return (
+                    <div className="text-[11px] text-muted-foreground bg-muted/40 border border-border/40 p-2.5 rounded-xl space-y-1 mt-1.5">
+                      <div className="flex justify-between">
+                        <span>Brand / Make:</span>
+                        <span className="font-bold text-foreground">{selected.brandName || "—"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Lock Quality Type:</span>
+                        <span className="font-bold text-foreground">{selected.lockType === "new" ? "Brand New" : "Old Lock"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Registry Condition:</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 capitalize">{selected.condition}</span>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Assigned Destination</Label>
               <Input
@@ -1325,7 +1381,7 @@ export function Inventory() {
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setAssignOpen(false)} className="rounded-xl font-bold">Cancel</Button>
               <Button type="submit" disabled={assignPadlockMutation.isPending || !assignForm.agentId} className="rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90">
-                {assignPadlockMutation.isPending ? "Assigning Randomly..." : "Assign Random Padlock"}
+                {assignPadlockMutation.isPending ? "Assigning..." : "Assign Padlock"}
               </Button>
             </DialogFooter>
           </form>

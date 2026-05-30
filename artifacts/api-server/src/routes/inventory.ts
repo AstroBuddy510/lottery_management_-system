@@ -346,7 +346,7 @@ router.post(
       return;
     }
 
-    const { agentId, destination, conditionBefore } = parse.data;
+    const { agentId, padlockId, destination, conditionBefore } = parse.data;
 
     try {
       // Check agent exists
@@ -361,17 +361,34 @@ router.post(
         return;
       }
 
-      // Query randomly for an available padlock
-      const [availablePadlock] = await db
-        .select()
-        .from(padlocksTable)
-        .where(eq(padlocksTable.status, "available"))
-        .orderBy(sql`random()`)
-        .limit(1);
+      let availablePadlock;
+      if (padlockId) {
+        // Query specific padlock and ensure it's available
+        const [specificLock] = await db
+          .select()
+          .from(padlocksTable)
+          .where(and(eq(padlocksTable.id, padlockId), eq(padlocksTable.status, "available")))
+          .limit(1);
+        
+        if (!specificLock) {
+          res.status(409).json({ error: "Selected padlock is not available" });
+          return;
+        }
+        availablePadlock = specificLock;
+      } else {
+        // Query randomly for an available padlock
+        const [randomLock] = await db
+          .select()
+          .from(padlocksTable)
+          .where(eq(padlocksTable.status, "available"))
+          .orderBy(sql`random()`)
+          .limit(1);
 
-      if (!availablePadlock) {
-        res.status(409).json({ error: "No available padlocks in inventory" });
-        return;
+        if (!randomLock) {
+          res.status(409).json({ error: "No available padlocks in inventory" });
+          return;
+        }
+        availablePadlock = randomLock;
       }
 
       // Update padlock status to assigned

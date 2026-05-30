@@ -4265,6 +4265,8 @@ components:
       properties:
         agentId:
           type: string
+        padlockId:
+          type: string
         destination:
           type: string
         conditionBefore:

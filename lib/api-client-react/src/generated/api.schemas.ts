@@ -1419,6 +1419,7 @@ export interface PadlockAssignment {
 
 export interface PadlockAssignInput {
   agentId: string;
+  padlockId?: string;
   destination: string;
   conditionBefore: string;
 }

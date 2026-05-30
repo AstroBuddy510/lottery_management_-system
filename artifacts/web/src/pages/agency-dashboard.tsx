@@ -901,7 +901,7 @@ export function AgencyDashboard() {
       (a, b) => new Date(b.assignedAt).getTime() - new Date(a.assignedAt).getTime()
     );
     for (const a of sorted) {
-      if (!a.openedAt && !map[a.agentId]) {
+      if (!a.returnedAt && !map[a.agentId]) {
         map[a.agentId] = a;
       }
     }

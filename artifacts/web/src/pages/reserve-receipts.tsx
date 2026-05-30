@@ -34,7 +34,8 @@ import {
   ArrowRight,
   TrendingUp,
   FileText,
-  Search
+  Search,
+  RefreshCw
 } from "lucide-react";
 
 const GHS = (v: number | string) =>
@@ -183,30 +184,46 @@ export function ReserveReceipts() {
       </div>
 
       {/* Filters Box */}
-      <div className="flex gap-4 sm:gap-6 items-center flex-wrap bg-card/45 backdrop-blur-md border border-border/40 rounded-xl p-3.5 shadow-sm relative z-10">
-        <div className="flex items-center gap-2">
-          <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Date</Label>
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="h-8 text-xs w-36 bg-background/60 border-border/60 rounded-lg pr-2"
-          />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-card/45 backdrop-blur-md border border-border/40 rounded-2xl p-4 shadow-sm relative z-10">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Calculation Date</Label>
+          <div className="relative">
+            <Calendar className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50 pointer-events-none" />
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="pl-9 h-9 text-xs bg-background/60 border-border/60 rounded-xl w-full"
+            />
+          </div>
         </div>
-        <div className="relative max-w-xs flex-1">
-          <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground/50" />
-          <Input
-            placeholder="Filter agents by name or code..."
-            value={agentFilter}
-            onChange={(e) => setAgentFilter(e.target.value)}
-            className="pl-8.5 h-8 text-xs bg-background/60 border-border/60 rounded-lg w-full"
-          />
+
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Search Agent</Label>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50 pointer-events-none" />
+            <Input
+              placeholder="Filter by agent code or name..."
+              value={agentFilter}
+              onChange={(e) => setAgentFilter(e.target.value)}
+              className="pl-9 h-9 text-xs bg-background/60 border-border/60 rounded-xl w-full"
+            />
+          </div>
         </div>
-        {date !== todayStr() && (
-          <Button size="sm" variant="ghost" className="h-8 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20" onClick={() => setDate(todayStr())}>
-            Back to today
-          </Button>
-        )}
+
+        <div className="flex items-end justify-start sm:justify-end pb-0.5">
+          {date !== todayStr() && (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-9 text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50/50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950/20 rounded-xl"
+              onClick={() => setDate(todayStr())}
+            >
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+              Reset to Today
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* No-calculation warning notice */}

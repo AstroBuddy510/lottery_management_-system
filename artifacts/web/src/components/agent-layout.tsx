@@ -1,8 +1,22 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-client-react";
+import {
+  useGetUnreadCount,
+  getGetUnreadCountQueryKey,
+  useGetMyAgent,
+  getGetMyAgentQueryKey,
+  useListPadlockAssignments,
+  useUpdatePadlockAssignment,
+} from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const AVATAR_COLORS = [
   "#2563eb","#059669","#7c3aed","#ea580c",
@@ -91,6 +105,72 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Lock time states & queries
+  const qc = useQueryClient();
+  const [lockTimeOpen, setLockTimeOpen] = useState(false);
+  const [selectedLockAssignmentId, setSelectedLockAssignmentId] = useState<string>("");
+  const [lockForm, setLockForm] = useState({
+    openedAt: new Date().toISOString().slice(0, 16),
+    returnedAt: "",
+    conditionAfter: "Intact"
+  });
+
+  const { data: myAgent } = useGetMyAgent({
+    query: {
+      queryKey: getGetMyAgentQueryKey(),
+      enabled: user?.role === "agent"
+    }
+  });
+
+  const { data: padlockAssignments } = useListPadlockAssignments(
+    {
+      query: {
+        queryKey: ["/api/inventory/padlock-assignments"],
+        enabled: !!myAgent?.id && user?.role === "agent"
+      }
+    }
+  );
+
+  const activeLocks = useMemo(() => {
+    if (!Array.isArray(padlockAssignments) || !myAgent?.id) return [];
+    return padlockAssignments.filter(a => a.agentId === myAgent.id && !a.returnedAt);
+  }, [padlockAssignments, myAgent]);
+
+  const updateAssignmentMutation = useUpdatePadlockAssignment();
+
+  const handleRecordLockTime = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLockAssignmentId) {
+      toast.error("Please select a padlock assignment");
+      return;
+    }
+    const currentAssign = activeLocks.find(a => a.id === selectedLockAssignmentId);
+    if (!currentAssign) return;
+
+    try {
+      await updateAssignmentMutation.mutateAsync({
+        id: selectedLockAssignmentId,
+        data: {
+          openedAt: lockForm.openedAt ? new Date(lockForm.openedAt).toISOString() : null,
+          returnedAt: lockForm.returnedAt ? new Date(lockForm.returnedAt).toISOString() : null,
+          conditionAfter: lockForm.returnedAt ? lockForm.conditionAfter : undefined
+        }
+      });
+      toast.success("Lock times recorded successfully");
+      setLockTimeOpen(false);
+      setSelectedLockAssignmentId("");
+      setLockForm({
+        openedAt: new Date().toISOString().slice(0, 16),
+        returnedAt: "",
+        conditionAfter: "Intact"
+      });
+      qc.invalidateQueries({ queryKey: ["/api/inventory/padlocks/assignments"] });
+      qc.invalidateQueries({ queryKey: ["/api/inventory/padlock-assignments"] });
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to update padlock times");
+    }
+  };
+
   const { data: unread } = useGetUnreadCount({
     query: { queryKey: getGetUnreadCountQueryKey(), refetchInterval: 30_000 }
   });
@@ -178,6 +258,16 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
                   </div>
                 </Link>
                 <button
+                  onClick={() => { setMenuOpen(false); setLockTimeOpen(true); }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-50 transition-colors font-medium text-left border-t border-gray-100"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  Record Lock Time
+                </button>
+                <button
                   onClick={() => { setMenuOpen(false); logout(); }}
                   className="w-full flex items-center gap-3 px-4 py-3.5 text-sm text-red-600 hover:bg-red-50 active:bg-red-50 transition-colors font-semibold"
                 >
@@ -233,6 +323,103 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
           })}
         </div>
       </nav>
+
+      {/* Record Lock Time Modal Dialog */}
+      <Dialog open={lockTimeOpen} onOpenChange={setLockTimeOpen}>
+        <DialogContent className="max-w-md mx-4 rounded-3xl border border-border/50 bg-card/95 backdrop-blur-md shadow-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-extrabold text-lg">
+              <svg className="text-primary w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Record Lock Time
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleRecordLockTime} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Choose Assigned Padlock</Label>
+              <Select
+                value={selectedLockAssignmentId}
+                onValueChange={setSelectedLockAssignmentId}
+              >
+                <SelectTrigger className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20 font-mono">
+                  <SelectValue placeholder={activeLocks.length === 0 ? "No active padlocks found" : "Select assigned padlock..."} />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border/50 bg-card/95 backdrop-blur-md">
+                  {activeLocks.map(a => (
+                    <SelectItem key={a.id} value={a.id} className="font-mono">
+                      {a.padlockSerialNumber} ({a.destination})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedLockAssignmentId && (
+              (() => {
+                const selected = activeLocks.find(a => a.id === selectedLockAssignmentId);
+                if (!selected) return null;
+                return (
+                  <div className="text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-xl border border-border/40 space-y-1">
+                    <div><span className="font-semibold text-foreground">Padlock ID:</span> {selected.padlockSerialNumber}</div>
+                    <div><span className="font-semibold text-foreground">Destination:</span> {selected.destination}</div>
+                    <div><span className="font-semibold text-foreground">Assigned At:</span> {new Date(selected.assignedAt).toLocaleString("en-GB")}</div>
+                  </div>
+                );
+              })()
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Opened Time (Open Time)</Label>
+              <Input
+                type="datetime-local"
+                value={lockForm.openedAt}
+                onChange={e => setLockForm(prev => ({ ...prev, openedAt: e.target.value }))}
+                className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20 font-mono"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Returned Time (Optional)</Label>
+                <Input
+                  type="datetime-local"
+                  value={lockForm.returnedAt}
+                  onChange={e => setLockForm(prev => ({ ...prev, returnedAt: e.target.value }))}
+                  className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20 font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Returned Condition</Label>
+                <Select
+                  value={lockForm.conditionAfter}
+                  onValueChange={conditionAfter => setLockForm(prev => ({ ...prev, conditionAfter }))}
+                  disabled={!lockForm.returnedAt}
+                >
+                  <SelectTrigger className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/50 bg-card/95 backdrop-blur-md">
+                    <SelectItem value="Intact">Intact</SelectItem>
+                    <SelectItem value="Tempered with">Tempered with</SelectItem>
+                    <SelectItem value="damage">damage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-3 pt-3">
+              <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl font-semibold border-border" onClick={() => setLockTimeOpen(false)}>Cancel</Button>
+              <Button type="submit" className="flex-1 h-11 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/10" disabled={updateAssignmentMutation.isPending || !selectedLockAssignmentId}>
+                {updateAssignmentMutation.isPending ? "Saving..." : "Record Time"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

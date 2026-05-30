@@ -2165,6 +2165,7 @@ export const CreatePadlockBody = zod.object({
  */
 export const AssignPadlockBody = zod.object({
   "agentId": zod.string(),
+  "padlockId": zod.string().optional(),
   "destination": zod.string(),
   "conditionBefore": zod.string()
 })
