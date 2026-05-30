@@ -144,7 +144,7 @@ export function Inventory() {
     qc.invalidateQueries({ queryKey: ["/api/inventory/booklets/allocations"] });
     qc.invalidateQueries({ queryKey: ["/api/inventory/booklets/agent-balances"] });
     qc.invalidateQueries({ queryKey: ["/api/inventory/padlocks"] });
-    qc.invalidateQueries({ queryKey: ["/api/inventory/padlocks/assignments"] });
+    qc.invalidateQueries({ queryKey: ["/api/inventory/padlock-assignments"] });
   };
 
   // Form Handlers

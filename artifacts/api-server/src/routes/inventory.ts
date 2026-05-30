@@ -425,11 +425,28 @@ router.post(
 
 // List padlock assignments history
 router.get(
-  "/inventory/padlocks/assignments",
+  "/inventory/padlock-assignments",
   requireAuth,
-  requireRole("director", "administrator", "cashier"),
+  requireRole("director", "administrator", "cashier", "agent"),
   async (req, res) => {
     try {
+      const conditions = [];
+
+      if (req.user?.role === "agent") {
+        const [agent] = await db
+          .select()
+          .from(agentsTable)
+          .where(eq(agentsTable.userId, req.user.userId))
+          .limit(1);
+
+        if (agent) {
+          conditions.push(eq(padlockAssignmentsTable.agentId, agent.id));
+        } else {
+          res.json([]);
+          return;
+        }
+      }
+
       const assignments = await db
         .select({
           id: padlockAssignmentsTable.id,
@@ -450,6 +467,7 @@ router.get(
         .from(padlockAssignmentsTable)
         .innerJoin(padlocksTable, eq(padlockAssignmentsTable.padlockId, padlocksTable.id))
         .innerJoin(agentsTable, eq(padlockAssignmentsTable.agentId, agentsTable.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(padlockAssignmentsTable.assignedAt));
 
       res.json(assignments);
@@ -570,7 +588,7 @@ router.post(
 router.patch(
   "/inventory/padlock-assignments/:id",
   requireAuth,
-  requireRole("director", "administrator", "cashier"),
+  requireRole("director", "administrator", "cashier", "agent"),
   async (req, res) => {
     const id = req.params.id as string;
     const parse = UpdatePadlockAssignmentBody.safeParse(req.body);
@@ -589,6 +607,19 @@ router.patch(
       if (!existing) {
         res.status(404).json({ error: "Padlock assignment not found" });
         return;
+      }
+
+      if (req.user?.role === "agent") {
+        const [agent] = await db
+          .select()
+          .from(agentsTable)
+          .where(eq(agentsTable.userId, req.user.userId))
+          .limit(1);
+
+        if (!agent || existing.agentId !== agent.id) {
+          res.status(403).json({ error: "You are not authorized to update this padlock assignment" });
+          return;
+        }
       }
 
       const data = parse.data;
