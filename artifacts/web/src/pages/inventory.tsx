@@ -968,17 +968,19 @@ export function Inventory() {
                       <TableHead className="font-bold">Destination</TableHead>
                       <TableHead className="font-bold">Cond. Before</TableHead>
                       <TableHead className="font-bold">Cond. After</TableHead>
-                      <TableHead className="font-bold">Timestamps (Assigned · Opened · Returned)</TableHead>
+                      <TableHead className="font-bold">Assigned</TableHead>
+                      <TableHead className="font-bold">Opened</TableHead>
+                      <TableHead className="font-bold">Returned</TableHead>
                       <TableHead className="w-48 text-center font-bold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loadingAssignments ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-12">
+                      <TableRow><TableCell colSpan={9} className="text-center py-12">
                         <Skeleton className="h-6 w-1/2 mx-auto" />
                       </TableCell></TableRow>
                     ) : !assignments || assignments.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-xs italic">No padlock assignments found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-xs italic">No padlock assignments found.</TableCell></TableRow>
                     ) : (
                       assignments.map(a => {
                         const assignedDate = new Date(a.assignedAt);
@@ -1014,22 +1016,25 @@ export function Inventory() {
                                 <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-[11px] text-muted-foreground space-y-1 py-3">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-semibold text-foreground min-w-[55px]">Assigned:</span>
-                                <span>{assignedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span>
-                              </div>
-                              {openedDate && (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-semibold text-foreground min-w-[55px]">Opened:</span>
-                                  <span className="text-blue-600 dark:text-blue-400">{openedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span>
-                                </div>
+                            <TableCell className="text-[11px] text-muted-foreground py-3">
+                              <span>{assignedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span>
+                            </TableCell>
+                            <TableCell className="text-[11px] text-muted-foreground py-3">
+                              {openedDate ? (
+                                <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                  {openedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/45 italic text-[10px]">Not opened yet</span>
                               )}
-                              {returnedDate && (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-semibold text-foreground min-w-[55px]">Returned:</span>
-                                  <span className="text-emerald-600 dark:text-emerald-400">{returnedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span>
-                                </div>
+                            </TableCell>
+                            <TableCell className="text-[11px] text-muted-foreground py-3">
+                              {returnedDate ? (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                  {returnedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/45 italic text-[10px]">Not returned yet</span>
                               )}
                             </TableCell>
                             <TableCell className="text-center">

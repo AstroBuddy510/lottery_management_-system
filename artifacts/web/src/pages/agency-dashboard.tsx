@@ -202,23 +202,27 @@ function PinMarker({
 
       {/* Bubble card */}
       <div className={`flex items-center gap-2 bg-white rounded-2xl shadow-xl border border-slate-200 px-2.5 py-1.5 group-hover:shadow-2xl group-hover:-translate-y-0.5 transition-all duration-150 whitespace-nowrap ${activePadlock ? "neon-pulsing-active" : ""}`}>
-        {/* Avatar — photo or padlock icon / initials */}
-        <div
-          className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center text-white font-bold text-xs"
-          style={{ boxShadow: `0 0 0 2px ${activePadlock ? "#22c55e" : color}` }}
-        >
-          {activePadlock ? (
-            <div className="w-full h-full flex items-center justify-center bg-emerald-500 text-white">
-              <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        {/* Avatar with relative wrapper for corner badge overlay */}
+        <div className="relative flex-shrink-0">
+          <div
+            className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white font-bold text-xs"
+            style={{ boxShadow: `0 0 0 2px ${activePadlock ? "#22c55e" : color}` }}
+          >
+            {photo ? (
+              <img src={photo} alt={name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center" style={{ background: color }}>
+                {initials || "?"}
+              </div>
+            )}
+          </div>
+          {/* Small padlock corner badge */}
+          {activePadlock && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border border-white flex items-center justify-center shadow-md">
+              <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
-            </div>
-          ) : photo ? (
-            <img src={photo} alt={name} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center" style={{ background: color }}>
-              {initials || "?"}
             </div>
           )}
         </div>
