@@ -17,6 +17,7 @@ import {
   CreatePadlockBody,
   AssignPadlockBody,
   ReturnPadlockAssignmentBody,
+  UpdatePadlockAssignmentBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 
@@ -300,7 +301,7 @@ router.post(
       return;
     }
 
-    const { serialNumber, brandName, condition } = parse.data;
+    const { serialNumber, brandName, lockType, condition } = parse.data;
 
     try {
       // Check unique serial number
@@ -320,6 +321,7 @@ router.post(
         .values({
           serialNumber,
           brandName,
+          lockType: lockType || "new",
           condition: condition || "good",
           status: "available",
         })
@@ -543,6 +545,114 @@ router.post(
     } catch (error) {
       console.error("Error returning padlock:", error);
       res.status(500).json({ error: "Failed to record padlock return" });
+    }
+  }
+);
+
+// Update details of a padlock assignment
+router.patch(
+  "/inventory/padlock-assignments/:id",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (req, res) => {
+    const id = req.params.id as string;
+    const parse = UpdatePadlockAssignmentBody.safeParse(req.body);
+    if (!parse.success) {
+      res.status(400).json({ error: "Invalid request body", details: parse.error.format() });
+      return;
+    }
+
+    try {
+      const [existing] = await db
+        .select()
+        .from(padlockAssignmentsTable)
+        .where(eq(padlockAssignmentsTable.id, id))
+        .limit(1);
+
+      if (!existing) {
+        res.status(404).json({ error: "Padlock assignment not found" });
+        return;
+      }
+
+      const data = parse.data;
+      const updates: any = {};
+      if (data.padlockId !== undefined) updates.padlockId = data.padlockId;
+      if (data.agentId !== undefined) updates.agentId = data.agentId;
+      if (data.destination !== undefined) updates.destination = data.destination;
+      if (data.conditionBefore !== undefined) updates.conditionBefore = data.conditionBefore;
+      if (data.conditionAfter !== undefined) updates.conditionAfter = data.conditionAfter;
+      if (data.assignedAt !== undefined) updates.assignedAt = data.assignedAt ? new Date(data.assignedAt) : null;
+      if (data.openedAt !== undefined) updates.openedAt = data.openedAt ? new Date(data.openedAt) : null;
+      if (data.returnedAt !== undefined) updates.returnedAt = data.returnedAt ? new Date(data.returnedAt) : null;
+
+      const [updated] = await db
+        .update(padlockAssignmentsTable)
+        .set(updates)
+        .where(eq(padlockAssignmentsTable.id, id))
+        .returning();
+
+      // Manage old/new padlock status in registry
+      if (data.padlockId && data.padlockId !== existing.padlockId) {
+        await db
+          .update(padlocksTable)
+          .set({ status: "available" })
+          .where(eq(padlocksTable.id, existing.padlockId));
+        
+        await db
+          .update(padlocksTable)
+          .set({ status: "assigned" })
+          .where(eq(padlocksTable.id, data.padlockId));
+      }
+
+      const finalPadlockId = updated.padlockId;
+      if (updated.returnedAt) {
+        const finalCondition = updated.conditionAfter || "good";
+        let status = "available";
+        let padlockCondition = "good";
+        
+        if (finalCondition === "Intact") {
+          status = "available";
+          padlockCondition = "good";
+        } else if (
+          finalCondition === "Tampered with" || 
+          finalCondition === "Tempered with" || 
+          finalCondition === "damage" || 
+          finalCondition === "damaged"
+        ) {
+          status = "damaged";
+          padlockCondition = "damaged";
+        } else if (finalCondition === "Damaged" || finalCondition === "broken") {
+          status = "broken";
+          padlockCondition = "broken";
+        } else {
+          status = finalCondition === "good" ? "available" : finalCondition;
+          padlockCondition = finalCondition === "good" ? "good" : finalCondition;
+        }
+
+        await db
+          .update(padlocksTable)
+          .set({ status, condition: padlockCondition })
+          .where(eq(padlocksTable.id, finalPadlockId));
+      } else {
+        await db
+          .update(padlocksTable)
+          .set({ status: "assigned" })
+          .where(eq(padlocksTable.id, finalPadlockId));
+      }
+
+      // Get metadata for response
+      const [padlock] = await db.select().from(padlocksTable).where(eq(padlocksTable.id, updated.padlockId)).limit(1);
+      const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, updated.agentId)).limit(1);
+
+      res.json({
+        ...updated,
+        padlockSerialNumber: padlock?.serialNumber ?? "",
+        agentCode: agent?.agentCode ?? "",
+        agencyName: agent?.agencyName ?? "",
+      });
+    } catch (error) {
+      console.error("Error updating padlock assignment:", error);
+      res.status(500).json({ error: "Failed to update padlock assignment" });
     }
   }
 );

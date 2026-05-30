@@ -1383,6 +1383,7 @@ export interface Padlock {
   id: string;
   serialNumber: string;
   brandName: string;
+  lockType: string;
   status: string;
   condition: string;
   createdAt: string;
@@ -1391,6 +1392,7 @@ export interface Padlock {
 export interface PadlockInput {
   serialNumber: string;
   brandName: string;
+  lockType?: string;
   condition?: string;
 }
 
@@ -1426,6 +1428,19 @@ export interface PadlockReturnInput {
 }
 
 export interface PadlockOpenInput { [key: string]: unknown }
+
+export interface UpdatePadlockAssignmentInput {
+  padlockId?: string;
+  agentId?: string;
+  destination?: string;
+  conditionBefore?: string;
+  conditionAfter?: string;
+  assignedAt?: string;
+  /** @nullable */
+  openedAt?: string | null;
+  /** @nullable */
+  returnedAt?: string | null;
+}
 
 export type GetServerTime200 = {
   utcTime: string;

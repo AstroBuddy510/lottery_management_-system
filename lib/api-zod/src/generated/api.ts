@@ -2141,6 +2141,7 @@ export const ListPadlocksResponseItem = zod.object({
   "id": zod.string(),
   "serialNumber": zod.string(),
   "brandName": zod.string(),
+  "lockType": zod.string(),
   "status": zod.string(),
   "condition": zod.string(),
   "createdAt": zod.string()
@@ -2154,6 +2155,7 @@ export const ListPadlocksResponse = zod.array(ListPadlocksResponseItem)
 export const CreatePadlockBody = zod.object({
   "serialNumber": zod.string(),
   "brandName": zod.string(),
+  "lockType": zod.string().optional(),
   "condition": zod.string().optional()
 })
 
@@ -2188,6 +2190,42 @@ export const ListPadlockAssignmentsResponseItem = zod.object({
   "createdAt": zod.string()
 })
 export const ListPadlockAssignmentsResponse = zod.array(ListPadlockAssignmentsResponseItem)
+
+
+/**
+ * @summary Update details of a padlock assignment
+ */
+export const UpdatePadlockAssignmentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdatePadlockAssignmentBody = zod.object({
+  "padlockId": zod.string().optional(),
+  "agentId": zod.string().optional(),
+  "destination": zod.string().optional(),
+  "conditionBefore": zod.string().optional(),
+  "conditionAfter": zod.string().optional(),
+  "assignedAt": zod.string().optional(),
+  "openedAt": zod.string().nullish(),
+  "returnedAt": zod.string().nullish()
+})
+
+export const UpdatePadlockAssignmentResponse = zod.object({
+  "id": zod.string(),
+  "padlockId": zod.string(),
+  "padlockSerialNumber": zod.string(),
+  "agentId": zod.string(),
+  "agentCode": zod.string(),
+  "agencyName": zod.string().nullish(),
+  "destination": zod.string(),
+  "conditionBefore": zod.string(),
+  "conditionAfter": zod.string().nullish(),
+  "assignedAt": zod.string(),
+  "openedAt": zod.string().nullish(),
+  "returnedAt": zod.string().nullish(),
+  "enteredBy": zod.string(),
+  "createdAt": zod.string()
+})
 
 
 /**

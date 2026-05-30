@@ -122,6 +122,7 @@ import type {
   UpdateGameBody,
   UpdateGameTemplateBody,
   UpdateMyPhotoBody,
+  UpdatePadlockAssignmentInput,
   UpdateRecurringExpenseBody,
   User,
   UserCreated,
@@ -8020,6 +8021,78 @@ export function useListPadlockAssignments<TData = Awaited<ReturnType<typeof list
 
 
 
+
+export const getUpdatePadlockAssignmentUrl = (id: string,) => {
+
+
+
+
+  return `/api/inventory/padlock-assignments/${id}`
+}
+
+/**
+ * @summary Update details of a padlock assignment
+ */
+export const updatePadlockAssignment = async (id: string,
+    updatePadlockAssignmentInput: UpdatePadlockAssignmentInput, options?: RequestInit): Promise<PadlockAssignment> => {
+
+  return customFetch<PadlockAssignment>(getUpdatePadlockAssignmentUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updatePadlockAssignmentInput,)
+  }
+);}
+
+
+
+
+export const getUpdatePadlockAssignmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePadlockAssignment>>, TError,{id: string;data: BodyType<UpdatePadlockAssignmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePadlockAssignment>>, TError,{id: string;data: BodyType<UpdatePadlockAssignmentInput>}, TContext> => {
+
+const mutationKey = ['updatePadlockAssignment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePadlockAssignment>>, {id: string;data: BodyType<UpdatePadlockAssignmentInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePadlockAssignment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePadlockAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof updatePadlockAssignment>>>
+    export type UpdatePadlockAssignmentMutationBody = BodyType<UpdatePadlockAssignmentInput>
+    export type UpdatePadlockAssignmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update details of a padlock assignment
+ */
+export const useUpdatePadlockAssignment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePadlockAssignment>>, TError,{id: string;data: BodyType<UpdatePadlockAssignmentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePadlockAssignment>>,
+        TError,
+        {id: string;data: BodyType<UpdatePadlockAssignmentInput>},
+        TContext
+      > => {
+      return useMutation(getUpdatePadlockAssignmentMutationOptions(options));
+    }
 
 export const getOpenPadlockAssignmentUrl = (id: string,) => {
 

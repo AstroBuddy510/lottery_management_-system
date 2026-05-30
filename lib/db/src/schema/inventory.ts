@@ -40,6 +40,7 @@ export const padlocksTable = pgTable("padlocks", {
   id: uuid("id").primaryKey().defaultRandom(),
   serialNumber: varchar("serial_number", { length: 100 }).notNull().unique(),
   brandName: varchar("brand_name", { length: 100 }).notNull().default(""),
+  lockType: varchar("lock_type", { length: 50 }).notNull().default("new"), // "new" (Brand New), "old" (Old Lock)
   status: varchar("status", { length: 50 }).notNull().default("available"), // "available", "assigned", "damaged", "lost"
   condition: varchar("condition", { length: 50 }).notNull().default("good"), // "good", "damaged", "broken"
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

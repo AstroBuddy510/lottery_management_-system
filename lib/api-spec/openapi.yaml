@@ -2322,6 +2322,33 @@ paths:
                 items:
                   $ref: "#/components/schemas/PadlockAssignment"
 
+  /inventory/padlock-assignments/{id}:
+    patch:
+      operationId: updatePadlockAssignment
+      tags: [inventory]
+      summary: Update details of a padlock assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePadlockAssignmentInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PadlockAssignment"
+
   /inventory/padlock-assignments/{id}/open:
     post:
       operationId: openPadlockAssignment
@@ -4169,13 +4196,15 @@ components:
 
     Padlock:
       type: object
-      required: [id, serialNumber, brandName, status, condition, createdAt]
+      required: [id, serialNumber, brandName, lockType, status, condition, createdAt]
       properties:
         id:
           type: string
         serialNumber:
           type: string
         brandName:
+          type: string
+        lockType:
           type: string
         status:
           type: string
@@ -4191,6 +4220,8 @@ components:
         serialNumber:
           type: string
         brandName:
+          type: string
+        lockType:
           type: string
         condition:
           type: string
@@ -4249,3 +4280,23 @@ components:
     PadlockOpenInput:
       type: object
       properties: {}
+
+    UpdatePadlockAssignmentInput:
+      type: object
+      properties:
+        padlockId:
+          type: string
+        agentId:
+          type: string
+        destination:
+          type: string
+        conditionBefore:
+          type: string
+        conditionAfter:
+          type: string
+        assignedAt:
+          type: string
+        openedAt:
+          type: ["string", "null"]
+        returnedAt:
+          type: ["string", "null"]
