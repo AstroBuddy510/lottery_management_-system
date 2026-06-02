@@ -17,10 +17,21 @@ const router = Router();
 
 
 async function generateReceiptNumber(): Promise<string> {
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(paymentsTable);
-  const next = (count ?? 0) + 1;
+  const [result] = await db
+    .select({
+      maxReceipt: sql<string | null>`max(${paymentsTable.receiptNumber})`
+    })
+    .from(paymentsTable)
+    .where(sql`${paymentsTable.receiptNumber} LIKE 'REC-%'`);
+
+  let next = 1;
+  if (result && result.maxReceipt) {
+    const numPart = result.maxReceipt.replace("REC-", "");
+    const parsed = parseInt(numPart, 10);
+    if (!isNaN(parsed)) {
+      next = parsed + 1;
+    }
+  }
   return `REC-${String(next).padStart(6, "0")}`;
 }
 

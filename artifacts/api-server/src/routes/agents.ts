@@ -336,6 +336,55 @@ router.patch(
   },
 );
 
+router.patch(
+  "/writers/:id",
+  requireAuth,
+  requireRole("director", "administrator", "agent"),
+  async (req, res) => {
+    const paramsResult = UpdateWriterParams.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({ error: "Invalid params" });
+      return;
+    }
+    const bodyResult = UpdateWriterBody.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ error: "Invalid request body" });
+      return;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(writersTable)
+      .where(eq(writersTable.id, paramsResult.data.id))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ error: "Writer not found" });
+      return;
+    }
+
+    if (req.user!.role === "agent") {
+      const myAgent = await getAgentForUser(req.user!.userId);
+      if (!myAgent || myAgent.id !== existing.agentId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    }
+
+    const updates: Record<string, unknown> = {};
+    if (bodyResult.data.fullName) updates.fullName = bodyResult.data.fullName;
+    if (bodyResult.data.isActive !== undefined) updates.isActive = bodyResult.data.isActive;
+
+    const [writer] = await db
+      .update(writersTable)
+      .set(updates)
+      .where(eq(writersTable.id, paramsResult.data.id))
+      .returning();
+
+    res.json(writer);
+  },
+);
+
 router.get(
   "/agents/:agentId/debt-reductions",
   requireAuth,

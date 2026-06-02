@@ -2959,6 +2959,8 @@ components:
         bookletsCount:
           type: integer
           nullable: true
+        pin:
+          type: string
 
 
     WinsEntry:

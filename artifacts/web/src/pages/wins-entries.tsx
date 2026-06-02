@@ -104,6 +104,7 @@ function AgentWinsView() {
   const updateMutation = useUpdateWinsEntry();
   const changeRequestMutation = useCreateEntryChangeRequest();
   const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "", gameId: "" });
+  const [writerSearch, setWriterSearch] = useState("");
   const [editForm, setEditForm] = useState({ winsAmount: "" });
   const [changeReqEntry, setChangeReqEntry] = useState<WinsEntry | null>(null);
   const [changeReqForm, setChangeReqForm] = useState({ requestedAmount: "", reason: "" });
@@ -128,6 +129,15 @@ function AgentWinsView() {
   const availableWriters = useMemo(() => {
     return writerList.filter(w => !usedWriterIds.has(w.id));
   }, [writerList, usedWriterIds]);
+
+  const filteredWriters = useMemo(() => {
+    if (!writerSearch) return availableWriters;
+    const query = writerSearch.toLowerCase();
+    return availableWriters.filter(w =>
+      w.fullCode.toLowerCase().includes(query) ||
+      w.fullName.toLowerCase().includes(query)
+    );
+  }, [availableWriters, writerSearch]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["/api/entries/wins"] });
@@ -336,7 +346,7 @@ function AgentWinsView() {
       </div>
 
       {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={o => { if (!o) setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); setCreateOpen(o); }}>
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); setWriterSearch(""); } setCreateOpen(o); }}>
         <DialogContent className="max-w-sm mx-4 rounded-2xl">
           <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
           {myAgent && (
@@ -385,13 +395,23 @@ function AgentWinsView() {
               <Select
                 value={form.writerId}
                 onValueChange={v => setForm(f => ({ ...f, writerId: v }))}
-                disabled={!form.gameId || availableWriters.length === 0}
+                disabled={!form.gameId || filteredWriters.length === 0}
               >
                 <SelectTrigger className="h-11 text-sm rounded-xl">
-                  <SelectValue placeholder={!form.gameId ? "Choose game first…" : availableWriters.length === 0 ? "All writers entered for this draw" : "Select writer…"} />
+                  <SelectValue placeholder={!form.gameId ? "Choose game first…" : filteredWriters.length === 0 ? "No matching writers" : "Select writer…"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+                  {form.gameId && availableWriters.length > 5 && (
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="Search writer..."
+                        value={writerSearch}
+                        onChange={e => setWriterSearch(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                  )}
+                  {filteredWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -554,6 +574,7 @@ function AdminWinsView() {
 
   const today = new Date(getServerNow()).toISOString().split("T")[0];
   const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "", gameId: "" });
+  const [writerSearch, setWriterSearch] = useState("");
 
   // Fetch all wins entries for the selected date and game to verify which writers have already been entered
   const { data: dateEntries } = useListWinsEntries({
@@ -575,6 +596,15 @@ function AdminWinsView() {
   const availableWriters = useMemo(() => {
     return writerList.filter(w => !usedWriterIds.has(w.id));
   }, [writerList, usedWriterIds]);
+
+  const filteredWriters = useMemo(() => {
+    if (!writerSearch) return availableWriters;
+    const query = writerSearch.toLowerCase();
+    return availableWriters.filter(w =>
+      w.fullCode.toLowerCase().includes(query) ||
+      w.fullName.toLowerCase().includes(query)
+    );
+  }, [availableWriters, writerSearch]);
 
   const createMutation = useCreateWinsEntry();
   const updateMutation = useUpdateWinsEntry();
@@ -750,7 +780,7 @@ function AdminWinsView() {
         </Table>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); } setCreateOpen(o); }}>
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); setWriterSearch(""); } setCreateOpen(o); }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
@@ -802,13 +832,23 @@ function AdminWinsView() {
               <Select
                 value={form.writerId}
                 onValueChange={v => setForm(f => ({ ...f, writerId: v }))}
-                disabled={!form.gameId || availableWriters.length === 0}
+                disabled={!form.gameId || filteredWriters.length === 0}
               >
                 <SelectTrigger className="h-11 text-sm rounded-xl">
-                  <SelectValue placeholder={!form.gameId ? "Choose game first…" : availableWriters.length === 0 ? "All writers entered for this draw" : "Select writer…"} />
+                  <SelectValue placeholder={!form.gameId ? "Choose game first…" : filteredWriters.length === 0 ? "No matching writers" : "Select writer…"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+                  {form.gameId && availableWriters.length > 5 && (
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="Search writer..."
+                        value={writerSearch}
+                        onChange={e => setWriterSearch(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                  )}
+                  {filteredWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

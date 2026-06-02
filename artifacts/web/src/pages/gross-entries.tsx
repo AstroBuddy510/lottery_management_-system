@@ -113,6 +113,7 @@ function AgentGrossView() {
   const updateMutation = useUpdateGrossEntry();
   const changeRequestMutation = useCreateEntryChangeRequest();
   const [form, setForm] = useState({ writerId: "", entryDate: today, grossAmount: "", bookletsCount: "", gameId: "" });
+  const [writerSearch, setWriterSearch] = useState("");
   const [editForm, setEditForm] = useState({ grossAmount: "", bookletsCount: "" });
   const [changeReqEntry, setChangeReqEntry] = useState<GrossEntry | null>(null);
   const [changeReqForm, setChangeReqForm] = useState({ requestedAmount: "", reason: "" });
@@ -137,6 +138,15 @@ function AgentGrossView() {
   const availableWriters = useMemo(() => {
     return writerList.filter(w => !usedWriterIds.has(w.id));
   }, [writerList, usedWriterIds]);
+
+  const filteredWriters = useMemo(() => {
+    if (!writerSearch) return availableWriters;
+    const query = writerSearch.toLowerCase();
+    return availableWriters.filter(w =>
+      w.fullCode.toLowerCase().includes(query) ||
+      w.fullName.toLowerCase().includes(query)
+    );
+  }, [availableWriters, writerSearch]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["/api/entries/gross"] });
@@ -356,7 +366,7 @@ function AgentGrossView() {
       </div>
 
       {/* Create dialog */}
-      <Dialog open={createOpen} onOpenChange={o => { if (!o) setForm({ writerId: "", entryDate: today, grossAmount: "", bookletsCount: "", gameId: "" }); setCreateOpen(o); }}>
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setForm({ writerId: "", entryDate: today, grossAmount: "", bookletsCount: "", gameId: "" }); setWriterSearch(""); } setCreateOpen(o); }}>
         <DialogContent className="max-w-sm mx-4 rounded-2xl">
           <DialogHeader><DialogTitle>Add Gross Entry</DialogTitle></DialogHeader>
           {myAgent && (
@@ -405,13 +415,23 @@ function AgentGrossView() {
               <Select
                 value={form.writerId}
                 onValueChange={v => setForm(f => ({ ...f, writerId: v }))}
-                disabled={!form.gameId || availableWriters.length === 0}
+                disabled={!form.gameId || filteredWriters.length === 0}
               >
                 <SelectTrigger className="h-11 text-sm rounded-xl">
-                  <SelectValue placeholder={!form.gameId ? "Choose game first…" : availableWriters.length === 0 ? "All writers entered for this draw" : "Select writer…"} />
+                  <SelectValue placeholder={!form.gameId ? "Choose game first…" : filteredWriters.length === 0 ? "No matching writers" : "Select writer…"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+                  {form.gameId && availableWriters.length > 5 && (
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="Search writer..."
+                        value={writerSearch}
+                        onChange={e => setWriterSearch(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                  )}
+                  {filteredWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -609,6 +629,17 @@ function AdminGrossView() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<GrossEntry | null>(null);
   const [editForm, setEditForm] = useState({ grossAmount: "", bookletsCount: "" });
+  const [writerSearch, setWriterSearch] = useState("");
+  const [pin, setPin] = useState("");
+
+  const filteredWriters = useMemo(() => {
+    if (!writerSearch) return availableWriters;
+    const query = writerSearch.toLowerCase();
+    return availableWriters.filter(w =>
+      w.fullCode.toLowerCase().includes(query) ||
+      w.fullName.toLowerCase().includes(query)
+    );
+  }, [availableWriters, writerSearch]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/entries/gross"] });
 
@@ -642,10 +673,12 @@ function AdminGrossView() {
         data: {
           grossAmount: editForm.grossAmount,
           bookletsCount: editForm.bookletsCount ? parseInt(editForm.bookletsCount) : 0,
+          pin: editEntry.locked ? pin : undefined,
         }
       });
       toast.success("Entry updated");
       setEditEntry(null);
+      setPin("");
       invalidate();
     } catch (err: any) {
       toast.error(err?.data?.error ?? "Failed to update entry");
@@ -734,9 +767,7 @@ function AdminGrossView() {
                   </TableCell>
                   <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
                   <TableCell>
-                    {!entry.locked && (
-                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount, bookletsCount: String(entry.bookletsCount ?? 0) }); }}>Edit</Button>
-                    )}
+                    <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount, bookletsCount: String(entry.bookletsCount ?? 0) }); }}>Edit</Button>
                   </TableCell>
                 </TableRow>
               );
@@ -745,7 +776,7 @@ function AdminGrossView() {
         </Table>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm(f => ({ ...f, writerId: "" })); } setCreateOpen(o); }}>
+      <Dialog open={createOpen} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm(f => ({ ...f, writerId: "" })); setWriterSearch(""); } setCreateOpen(o); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Gross Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
@@ -758,12 +789,22 @@ function AdminGrossView() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Writer</Label>
-              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={!selectedAgent || availableWriters.length === 0}>
+              <Select value={form.writerId} onValueChange={v => setForm(f => ({ ...f, writerId: v }))} disabled={!selectedAgent || filteredWriters.length === 0}>
                 <SelectTrigger className="h-9 text-sm">
-                  <SelectValue placeholder={!selectedAgent ? "Select agent..." : availableWriters.length === 0 ? "All writers entered for this date" : "Select writer..."} />
+                  <SelectValue placeholder={!selectedAgent ? "Select agent..." : filteredWriters.length === 0 ? "No matching writers" : "Select writer..."} />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
+                  {selectedAgent && availableWriters.length > 5 && (
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="Search writer..."
+                        value={writerSearch}
+                        onChange={e => setWriterSearch(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                  )}
+                  {filteredWriters.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -787,7 +828,7 @@ function AdminGrossView() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editEntry} onOpenChange={o => !o && setEditEntry(null)}>
+      <Dialog open={!!editEntry} onOpenChange={o => { if (!o) { setEditEntry(null); setPin(""); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Entry</DialogTitle></DialogHeader>
           {editEntry && (
@@ -805,9 +846,25 @@ function AdminGrossView() {
               <Label className="text-xs">Booklets Used</Label>
               <Input type="number" min="0" value={editForm.bookletsCount} onChange={e => setEditForm(prev => ({ ...prev, bookletsCount: e.target.value }))} required className="h-9 text-sm" />
             </div>
+            {editEntry && editEntry.locked && (
+              <div className="space-y-1.5 border-t pt-3 mt-2">
+                <Label className="text-xs font-semibold text-amber-600 dark:text-amber-400">Admin Login PIN Required (Locked Entry)</Label>
+                <Input
+                  type="password"
+                  maxLength={4}
+                  value={pin}
+                  onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  required
+                  className="h-10 text-sm font-mono text-center tracking-widest bg-amber-500/5 border-amber-500/30 rounded-xl"
+                  placeholder="••••"
+                  inputMode="numeric"
+                />
+                <p className="text-[10px] text-muted-foreground mt-0.5">This entry has already been calculated. Enter your 4-digit PIN to authorize this override.</p>
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditEntry(null)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save</Button>
+              <Button type="submit" size="sm" disabled={updateMutation.isPending || (editEntry?.locked && pin.length !== 4)}>Save</Button>
             </DialogFooter>
           </form>
         </DialogContent>

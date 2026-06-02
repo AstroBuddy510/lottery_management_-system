@@ -1078,7 +1078,8 @@ export const UpdateGrossEntryParams = zod.object({
 
 export const UpdateGrossEntryBody = zod.object({
   "grossAmount": zod.string(),
-  "bookletsCount": zod.number().nullish()
+  "bookletsCount": zod.number().nullish(),
+  "pin": zod.string().optional()
 })
 
 export const UpdateGrossEntryResponse = zod.object({

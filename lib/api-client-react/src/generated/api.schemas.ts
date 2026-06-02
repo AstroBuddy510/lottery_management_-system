@@ -456,6 +456,7 @@ export interface GrossEntryInput {
 export interface GrossEntryUpdate {
   grossAmount: string;
   bookletsCount?: number | null;
+  pin?: string;
 }
 
 export interface WinsEntry {

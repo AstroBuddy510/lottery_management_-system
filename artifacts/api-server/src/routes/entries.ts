@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { db, grossEntriesTable, winsEntriesTable, writersTable, agentsTable, gamesTable, dailyCalculationsTable } from "@workspace/db";
+import bcrypt from "bcryptjs";
+import { db, grossEntriesTable, winsEntriesTable, writersTable, agentsTable, gamesTable, dailyCalculationsTable, usersTable } from "@workspace/db";
 import { eq, and, gte, lte, inArray } from "drizzle-orm";
 import {
   CreateGrossEntryBody,
@@ -164,8 +165,29 @@ router.patch(
       return;
     }
     if (existing.locked) {
-      res.status(409).json({ error: "Entry is locked and cannot be modified" });
-      return;
+      if (req.user!.role !== "administrator" && req.user!.role !== "director") {
+        res.status(409).json({ error: "Entry is locked and cannot be modified" });
+        return;
+      }
+      const pin = bodyResult.data.pin;
+      if (!pin) {
+        res.status(400).json({ error: "Entry is locked. Admin PIN is required to override." });
+        return;
+      }
+      const [user] = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, req.user!.userId))
+        .limit(1);
+      if (!user || !user.pinHash) {
+        res.status(401).json({ error: "Admin account not found or PIN not set." });
+        return;
+      }
+      const valid = await bcrypt.compare(pin, user.pinHash);
+      if (!valid) {
+        res.status(401).json({ error: "Invalid PIN" });
+        return;
+      }
     }
 
     // Agents can only edit entries for their own writers
