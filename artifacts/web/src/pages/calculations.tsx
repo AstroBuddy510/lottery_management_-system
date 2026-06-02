@@ -86,6 +86,23 @@ export function Calculations() {
       copy[index] = cleanValue;
       setMachineNumbers(copy);
     }
+
+    if (cleanValue.length === 2) {
+      if (type === "winning") {
+        if (index < 4) {
+          const nextInput = document.getElementById(`winning-input-${index + 1}`);
+          nextInput?.focus();
+        } else {
+          const nextInput = document.getElementById(`machine-input-0`);
+          nextInput?.focus();
+        }
+      } else {
+        if (index < 4) {
+          const nextInput = document.getElementById(`machine-input-${index + 1}`);
+          nextInput?.focus();
+        }
+      }
+    }
   };
 
   const isDrawNumbersValid = useMemo(() => {
@@ -308,6 +325,7 @@ export function Calculations() {
                           {winningNumbers.map((num, idx) => (
                             <Input
                               key={`winning-${idx}`}
+                              id={`winning-input-${idx}`}
                               type="text"
                               inputMode="numeric"
                               maxLength={2}
@@ -329,6 +347,7 @@ export function Calculations() {
                           {machineNumbers.map((num, idx) => (
                             <Input
                               key={`machine-${idx}`}
+                              id={`machine-input-${idx}`}
                               type="text"
                               inputMode="numeric"
                               maxLength={2}
