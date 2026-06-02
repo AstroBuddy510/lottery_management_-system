@@ -325,65 +325,92 @@ router.post(
       return;
     }
 
-    const [agentRow] = await db
-      .select({ userId: agentsTable.userId, outstandingDebt: agentsTable.outstandingDebt, fullCode: agentsTable.fullCode })
-      .from(agentsTable)
-      .where(eq(agentsTable.id, existing.agentId))
-      .limit(1);
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const result = await db.transaction(async (tx) => {
+          // Lock agent row to prevent TOCTOU on balance
+          const [agentRow] = await tx
+            .select({ userId: agentsTable.userId, outstandingDebt: agentsTable.outstandingDebt, fullCode: agentsTable.fullCode })
+            .from(agentsTable)
+            .where(eq(agentsTable.id, existing.agentId))
+            .limit(1);
 
-    if (!agentRow) {
-      res.status(404).json({ error: "Agent not found" });
-      return;
+          if (!agentRow) throw new Error("AGENT_NOT_FOUND");
+
+          // Generate receipt inside transaction to ensure uniqueness
+          const [receiptResult] = await tx
+            .select({
+              maxReceipt: sql<string | null>`max(${paymentsTable.receiptNumber})`
+            })
+            .from(paymentsTable)
+            .where(sql`${paymentsTable.receiptNumber} LIKE 'REC-%'`);
+
+          let next = 1;
+          if (receiptResult && receiptResult.maxReceipt) {
+            const numPart = receiptResult.maxReceipt.replace("REC-", "");
+            const parsed = parseInt(numPart, 10);
+            if (!isNaN(parsed)) next = parsed + 1;
+          }
+          const receiptNumber = `REC-${String(next).padStart(6, "0")}`;
+
+          const todayStr = new Date().toISOString().split("T")[0];
+
+          const [payment] = await tx
+            .update(paymentsTable)
+            .set({
+              status: "completed",
+              cashierId: req.user!.userId,
+              receiptNumber,
+              paymentDate: todayStr,
+            })
+            .where(eq(paymentsTable.id, paramsResult.data.id))
+            .returning();
+
+          const currentDebt = parseFloat(agentRow.outstandingDebt || "0");
+          const pmtAmount = parseFloat(existing.amount);
+          const newDebt = currentDebt + pmtAmount;
+          const debtSinceVal = newDebt < 0
+            ? (currentDebt >= 0 ? new Date() : undefined)
+            : null;
+
+          await tx
+            .update(agentsTable)
+            .set({
+              outstandingDebt: newDebt.toFixed(2),
+              debtSince: debtSinceVal,
+            })
+            .where(eq(agentsTable.id, existing.agentId));
+
+          return { payment, receiptNumber, pmtAmount, agentUserId: agentRow.userId };
+        });
+
+        // Notification outside transaction
+        await dispatchSystemNotification({
+          sentBy: req.user!.userId,
+          messageType: "payment_received",
+          title: `Payment Approved — Receipt ${result.receiptNumber}`,
+          body: `Your cash payment request of GH₵${result.pmtAmount.toFixed(2)} has been approved and collected by cashier.`,
+          targetType: "agent",
+          targetId: existing.agentId,
+          recipientUserIds: [result.agentUserId],
+        });
+
+        // Verify ledger and escalate conflicts
+        verifyLedgerAndEscalate(existing.agentId, req.user!.userId).catch(console.error);
+
+        res.json(result.payment);
+        return;
+      } catch (err: any) {
+        if (err?.message === "AGENT_NOT_FOUND") {
+          res.status(404).json({ error: "Agent not found" });
+          return;
+        }
+        // Retry on unique constraint violation (receipt number collision)
+        if (err?.code === "23505" && attempt < MAX_RETRIES - 1) continue;
+        throw err;
+      }
     }
-
-    const currentDebt = parseFloat(agentRow.outstandingDebt || "0");
-    const pmtAmount = parseFloat(existing.amount);
-
-    // Accountant Validations on Approval removed to allow flexible prepayments
-
-
-    const receiptNumber = await generateReceiptNumber();
-    const todayStr = new Date().toISOString().split("T")[0];
-
-    // Atomically update balance and mark payment as completed
-    const [payment] = await db
-      .update(paymentsTable)
-      .set({
-        status: "completed",
-        cashierId: req.user!.userId,
-        receiptNumber,
-        paymentDate: todayStr,
-      })
-      .where(eq(paymentsTable.id, paramsResult.data.id))
-      .returning();
-
-    const newDebt = currentDebt + pmtAmount; // since it is pay_in
-    const debtSinceVal = newDebt < 0 
-      ? (currentDebt >= 0 ? new Date() : undefined) 
-      : null;
-
-    await db
-      .update(agentsTable)
-      .set({
-        outstandingDebt: newDebt.toFixed(2),
-        debtSince: debtSinceVal,
-      })
-      .where(eq(agentsTable.id, existing.agentId));
-
-    await dispatchSystemNotification({
-      sentBy: req.user!.userId,
-      messageType: "payment_received",
-      title: `Payment Approved — Receipt ${receiptNumber}`,
-      body: `Your cash payment request of GH₵${pmtAmount.toFixed(2)} has been approved and collected by cashier.`,
-      targetType: "agent",
-      targetId: existing.agentId,
-      recipientUserIds: [agentRow.userId],
-    });
-
-    // Verify ledger and escalate conflicts
-    verifyLedgerAndEscalate(existing.agentId, req.user!.userId).catch(console.error);
-
-    res.json(payment);
   },
 );
 
