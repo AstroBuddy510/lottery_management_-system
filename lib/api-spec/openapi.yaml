@@ -1245,7 +1245,7 @@ paths:
                 $ref: "#/components/schemas/GrossEntry"
 
   /entries/gross/{id}:
-    put:
+    patch:
       operationId: updateGrossEntry
       tags: [entries]
       summary: Update gross entry if unlocked
@@ -1331,7 +1331,7 @@ paths:
                 $ref: "#/components/schemas/WinsEntry"
 
   /entries/wins/{id}:
-    put:
+    patch:
       operationId: updateWinsEntry
       tags: [entries]
       summary: Update wins entry if unlocked

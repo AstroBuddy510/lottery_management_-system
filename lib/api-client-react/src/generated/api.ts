@@ -4335,7 +4335,7 @@ export const updateGrossEntry = async (id: string,
   return customFetch<GrossEntry>(getUpdateGrossEntryUrl(id),
   {
     ...options,
-    method: 'PUT',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       grossEntryUpdate,)
@@ -4562,7 +4562,7 @@ export const updateWinsEntry = async (id: string,
   return customFetch<WinsEntry>(getUpdateWinsEntryUrl(id),
   {
     ...options,
-    method: 'PUT',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       winsEntryUpdate,)
