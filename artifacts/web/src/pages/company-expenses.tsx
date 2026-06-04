@@ -4,6 +4,10 @@ import {
   useCreateCompanyExpense,
   useListRecurringExpenses,
   getListCompanyExpensesQueryKey,
+  useGetReserveBalance,
+  useGetSalaryWallet,
+  getGetReserveBalanceQueryKey,
+  getGetSalaryWalletQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -32,7 +36,8 @@ import {
   Eye,
   Settings,
   ShieldCheck,
-  Building
+  Building,
+  Wallet
 } from "lucide-react";
 
 function fmtDateTime(ts?: string | null) {
@@ -45,6 +50,30 @@ export function CompanyExpenses() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
+
+  const isDirectorOrAdmin = user?.role === "director" || user?.role === "administrator";
+
+  const { data: reserveBalRaw, isLoading: loadingReserve } = useGetReserveBalance({
+    query: {
+      queryKey: getGetReserveBalanceQueryKey(),
+      enabled: isDirectorOrAdmin,
+      refetchInterval: 5_000,
+    }
+  });
+
+  const { data: walletRaw, isLoading: loadingWallet } = useGetSalaryWallet({
+    query: {
+      queryKey: getGetSalaryWalletQueryKey(),
+      enabled: isDirectorOrAdmin,
+      refetchInterval: 5_000,
+    }
+  });
+
+  const companyFundsTotal = useMemo(() => {
+    return Number(reserveBalRaw?.balance ?? 0) + Number(walletRaw?.balance ?? 0);
+  }, [reserveBalRaw, walletRaw]);
+
+  const isLoadingFunds = loadingReserve || loadingWallet;
 
   // ── Date Filters state ──
   const [dateFilter, setDateFilter] = useState<"today" | "week" | "month" | "custom">("month");
@@ -158,6 +187,10 @@ export function CompanyExpenses() {
 
       toast({ title: "Company expense recorded successfully" });
       qc.invalidateQueries({ queryKey: getCompanyExpensesQueryKey() });
+      if (isDirectorOrAdmin) {
+        qc.invalidateQueries({ queryKey: getGetReserveBalanceQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetSalaryWalletQueryKey() });
+      }
       resetForm();
       setRecordOpen(false);
     } catch (err: any) {
@@ -213,7 +246,38 @@ export function CompanyExpenses() {
       </div>
 
       {/* Summary KPI stats */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-3 relative z-10">
+      <div className={`grid gap-4 grid-cols-1 ${isDirectorOrAdmin ? "md:grid-cols-4" : "md:grid-cols-3"} relative z-10`}>
+        {/* Total Company Funds (Director/Admin only) */}
+        {isDirectorOrAdmin && (
+          <Card className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-indigo-500/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden relative group">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500/10 rounded-full blur-xl -mr-6 -mt-6 pointer-events-none group-hover:bg-indigo-500/20 transition-all duration-300" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 pt-3.5 px-4.5">
+              <CardTitle className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Total Company Funds
+              </CardTitle>
+              <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-xs">
+                <Wallet className="h-4 w-4" />
+              </span>
+            </CardHeader>
+            <CardContent className="px-4.5 pb-3.5">
+              <div className="text-xl font-bold font-mono tracking-tight text-foreground bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">
+                {isLoadingFunds ? (
+                  <span className="text-xs font-sans text-muted-foreground/60 animate-pulse">Calculating...</span>
+                ) : (
+                  fmtGHS(companyFundsTotal)
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-[9.5px] text-muted-foreground/70 font-semibold">Treasury + Investment</p>
+                <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold uppercase border border-emerald-500/20 leading-none">
+                  Active
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Total combined */}
         <Card className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-indigo-500/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 pt-3.5 px-4.5">
