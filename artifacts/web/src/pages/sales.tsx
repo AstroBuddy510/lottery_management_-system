@@ -186,12 +186,12 @@ function AgentSalesView() {
       <div className="sticky top-0 bg-background/80 backdrop-blur-md border-b border-border/40 z-20 px-4 py-3.5">
         <div className="flex items-center gap-3 max-w-xl mx-auto md:max-w-2xl">
           <div className="flex-1">
-            <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-400">Sales Log</h1>
-            <p className="text-xs text-muted-foreground mt-0.5 font-medium">{salesList.length} records · <span className="font-semibold text-primary font-mono">{fmtGHS(totalAmount)}</span></p>
+            <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-400">Transaction Summary</h1>
+            <p className="text-xs text-muted-foreground mt-0.5 font-medium">Real-time performance details<span className="hidden">{salesList.length} {totalAmount}</span></p>
           </div>
           <button
             onClick={() => setShowFilter(f => !f)}
-            className={`p-2.5 rounded-xl transition-all duration-200 active:scale-95 border ${
+            className={`hidden p-2.5 rounded-xl transition-all duration-200 active:scale-95 border ${
               showFilter || hasFilter 
                 ? "bg-primary text-primary-foreground border-primary" 
                 : "bg-background border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
@@ -201,7 +201,7 @@ function AgentSalesView() {
           </button>
           <button
             onClick={() => setOpen(true)}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold active:scale-95 transition-all shadow-md shadow-blue-500/10 border border-blue-500/15"
+            className="hidden flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold active:scale-95 transition-all shadow-md shadow-blue-500/10 border border-blue-500/15"
           >
             <PlusIcon /> Log Sale
           </button>
@@ -242,7 +242,7 @@ function AgentSalesView() {
 
         {/* Today summary strip */}
         {!hasFilter && (
-          <div className="mt-4 flex items-center justify-between bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/10 rounded-2xl px-4 py-3 shadow-inner">
+          <div className="hidden mt-4 flex items-center justify-between bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/10 rounded-2xl px-4 py-3 shadow-inner">
             <div className="flex items-center gap-2.5">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               <div>
@@ -426,7 +426,7 @@ function AgentSalesView() {
         </div>
 
         {/* Sale cards list */}
-        <div className="mt-5 space-y-3">
+        <div className="hidden mt-5 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Transaction Records</span>
             {salesList.length > 0 && <span className="text-[10px] text-muted-foreground font-semibold">{salesList.length} total logged logs</span>}

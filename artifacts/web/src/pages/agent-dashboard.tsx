@@ -215,7 +215,7 @@ export function AgentDashboard() {
     type Item = { id: string; type: "sale" | "gross" | "wins"; label: string; amount: number; time: string };
     const liveGameIds = new Set(liveGames.map(g => g.id));
     const items: Item[] = [
-      ...salesList.map(s => ({ id: s.id, type: "sale" as const, label: `Sale · ${s.gameType ?? "—"}`, amount: Number(s.ticketAmount ?? 0), time: s.createdAt ?? s.saleDate ?? "" })),
+      // ...salesList.map(s => ({ id: s.id, type: "sale" as const, label: `Sale · ${s.gameType ?? "—"}`, amount: Number(s.ticketAmount ?? 0), time: s.createdAt ?? s.saleDate ?? "" })),
       ...grossList
         .filter(e => e.gameId && liveGameIds.has(e.gameId))
         .map(e => ({ id: e.id, type: "gross" as const, label: "Gross Entry", amount: Number(e.grossAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
@@ -390,7 +390,7 @@ export function AgentDashboard() {
           <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Today's Summary</div>
           <div className="space-y-1">
             
-            {/* Sales Logged Row */}
+            {/* Sales Logged Row - Hidden since we are not using Sales Log
             <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl text-blue-600 bg-blue-50 flex items-center justify-center flex-shrink-0">
@@ -403,6 +403,7 @@ export function AgentDashboard() {
               </div>
               <div className="text-base font-bold text-gray-900 font-mono">{salesList.length}</div>
             </div>
+            */}
 
             {/* Gross Today Row */}
             <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
@@ -470,6 +471,7 @@ export function AgentDashboard() {
         {/* ── Quick actions ── */}
         <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
           <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Quick Actions</div>
+          {/* Link to /sales is hidden since Sales Log is disabled
           <Link href="/sales">
             <button className="w-full flex items-center justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-3.5 mb-4 font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98]">
               <div className="flex items-center gap-3">
@@ -484,6 +486,7 @@ export function AgentDashboard() {
               <div className="text-white/70"><IconChevronRight /></div>
             </button>
           </Link>
+          */}
           <div className="grid grid-cols-2 gap-3">
             <Link href="/entries/gross" className="w-full">
               <button className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-3 font-semibold text-xs transition-colors active:scale-[0.98]">
