@@ -9,7 +9,7 @@ import {
   useUpdatePadlockAssignment,
 } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -112,7 +112,7 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
   const [lockTimeOpen, setLockTimeOpen] = useState(false);
   const [selectedLockAssignmentId, setSelectedLockAssignmentId] = useState<string>("");
   const [lockForm, setLockForm] = useState({
-    openedAt: new Date().toISOString().slice(0, 16),
+    lockedAt: new Date().toISOString().slice(0, 16),
     returnedAt: "",
     conditionAfter: "Intact"
   });
@@ -138,6 +138,12 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
     return padlockAssignments.filter(a => a.agentId === myAgent.id && !a.returnedAt);
   }, [padlockAssignments, myAgent]);
 
+  useEffect(() => {
+    if (activeLocks.length > 0 && !selectedLockAssignmentId) {
+      setSelectedLockAssignmentId(activeLocks[0].id);
+    }
+  }, [activeLocks, selectedLockAssignmentId]);
+
   const updateAssignmentMutation = useUpdatePadlockAssignment();
 
   const handleRecordLockTime = async (e: React.FormEvent) => {
@@ -153,7 +159,7 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
       await updateAssignmentMutation.mutateAsync({
         id: selectedLockAssignmentId,
         data: {
-          openedAt: lockForm.openedAt ? new Date(lockForm.openedAt).toISOString() : null,
+          lockedAt: lockForm.lockedAt ? new Date(lockForm.lockedAt).toISOString() : null,
           returnedAt: lockForm.returnedAt ? new Date(lockForm.returnedAt).toISOString() : null,
           conditionAfter: lockForm.returnedAt ? lockForm.conditionAfter : undefined
         }
@@ -162,7 +168,7 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
       setLockTimeOpen(false);
       setSelectedLockAssignmentId("");
       setLockForm({
-        openedAt: new Date().toISOString().slice(0, 16),
+        lockedAt: new Date().toISOString().slice(0, 16),
         returnedAt: "",
         conditionAfter: "Intact"
       });
@@ -328,7 +334,7 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
 
       {/* Record Lock Time Modal Dialog */}
       <Dialog open={lockTimeOpen} onOpenChange={setLockTimeOpen}>
-        <DialogContent className="max-w-md mx-4 rounded-3xl border border-border/50 bg-card/95 backdrop-blur-md shadow-2xl p-6">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-md rounded-3xl border border-border/50 bg-card/95 backdrop-blur-md shadow-2xl p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-extrabold text-lg">
               <svg className="text-primary w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -373,44 +379,42 @@ export function AgentLayout({ children }: { children: React.ReactNode }) {
             )}
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Opened Time (Open Time)</Label>
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">LOCK TIME</Label>
               <Input
                 type="datetime-local"
-                value={lockForm.openedAt}
-                onChange={e => setLockForm(prev => ({ ...prev, openedAt: e.target.value }))}
+                value={lockForm.lockedAt}
+                onChange={e => setLockForm(prev => ({ ...prev, lockedAt: e.target.value }))}
                 className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20 font-mono"
                 required
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Returned Time (Optional)</Label>
-                <Input
-                  type="datetime-local"
-                  value={lockForm.returnedAt}
-                  onChange={e => setLockForm(prev => ({ ...prev, returnedAt: e.target.value }))}
-                  className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20 font-mono"
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Returned Time (Optional)</Label>
+              <Input
+                type="datetime-local"
+                value={lockForm.returnedAt}
+                onChange={e => setLockForm(prev => ({ ...prev, returnedAt: e.target.value }))}
+                className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20 font-mono"
+              />
+            </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Returned Condition</Label>
-                <Select
-                  value={lockForm.conditionAfter}
-                  onValueChange={conditionAfter => setLockForm(prev => ({ ...prev, conditionAfter }))}
-                  disabled={!lockForm.returnedAt}
-                >
-                  <SelectTrigger className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl border-border/50 bg-card/95 backdrop-blur-md">
-                    <SelectItem value="Intact">Intact</SelectItem>
-                    <SelectItem value="Tempered with">Tempered with</SelectItem>
-                    <SelectItem value="damage">damage</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Returned Condition</Label>
+              <Select
+                value={lockForm.conditionAfter}
+                onValueChange={conditionAfter => setLockForm(prev => ({ ...prev, conditionAfter }))}
+                disabled={!lockForm.returnedAt}
+              >
+                <SelectTrigger className="h-11 text-sm bg-background border-border/60 rounded-xl focus:ring-2 focus:ring-primary/20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl border-border/50 bg-card/95 backdrop-blur-md">
+                  <SelectItem value="Intact">Intact</SelectItem>
+                  <SelectItem value="Tempered with">Tempered with</SelectItem>
+                  <SelectItem value="damage">damage</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <DialogFooter className="gap-3 pt-3">

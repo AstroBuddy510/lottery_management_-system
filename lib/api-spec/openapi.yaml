@@ -4252,6 +4252,8 @@ components:
           type: ["string", "null"]
         assignedAt:
           type: string
+        lockedAt:
+          type: ["string", "null"]
         openedAt:
           type: ["string", "null"]
         returnedAt:
@@ -4300,6 +4302,8 @@ components:
           type: string
         assignedAt:
           type: string
+        lockedAt:
+          type: ["string", "null"]
         openedAt:
           type: ["string", "null"]
         returnedAt:

@@ -1411,6 +1411,8 @@ export interface PadlockAssignment {
   conditionAfter?: string | null;
   assignedAt: string;
   /** @nullable */
+  lockedAt?: string | null;
+  /** @nullable */
   openedAt?: string | null;
   /** @nullable */
   returnedAt?: string | null;
@@ -1438,6 +1440,8 @@ export interface UpdatePadlockAssignmentInput {
   conditionBefore?: string;
   conditionAfter?: string;
   assignedAt?: string;
+  /** @nullable */
+  lockedAt?: string | null;
   /** @nullable */
   openedAt?: string | null;
   /** @nullable */

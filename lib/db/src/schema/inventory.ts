@@ -59,6 +59,7 @@ export const padlockAssignmentsTable = pgTable("padlock_assignments", {
   conditionBefore: varchar("condition_before", { length: 50 }).notNull(),
   conditionAfter: varchar("condition_after", { length: 50 }),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
   openedAt: timestamp("opened_at", { withTimezone: true }),
   returnedAt: timestamp("returned_at", { withTimezone: true }),
   enteredBy: uuid("entered_by").notNull().references(() => usersTable.id),

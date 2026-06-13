@@ -133,6 +133,7 @@ export function Inventory() {
     conditionBefore: "good",
     conditionAfter: "Intact",
     assignedAt: "",
+    lockedAt: "",
     openedAt: "",
     returnedAt: ""
   });
@@ -267,6 +268,7 @@ export function Inventory() {
       conditionBefore: a.conditionBefore || "good",
       conditionAfter: a.conditionAfter || "Intact",
       assignedAt: a.assignedAt ? new Date(a.assignedAt).toISOString().slice(0, 16) : "",
+      lockedAt: a.lockedAt ? new Date(a.lockedAt).toISOString().slice(0, 16) : "",
       openedAt: a.openedAt ? new Date(a.openedAt).toISOString().slice(0, 16) : "",
       returnedAt: a.returnedAt ? new Date(a.returnedAt).toISOString().slice(0, 16) : "",
     });
@@ -286,6 +288,7 @@ export function Inventory() {
           conditionBefore: editForm.conditionBefore,
           conditionAfter: editForm.conditionAfter || undefined,
           assignedAt: editForm.assignedAt ? new Date(editForm.assignedAt).toISOString() : new Date().toISOString(),
+          lockedAt: editForm.lockedAt ? new Date(editForm.lockedAt).toISOString() : null,
           openedAt: editForm.openedAt ? new Date(editForm.openedAt).toISOString() : null,
           returnedAt: editForm.returnedAt ? new Date(editForm.returnedAt).toISOString() : null,
         },
@@ -969,6 +972,7 @@ export function Inventory() {
                       <TableHead className="font-bold">Cond. Before</TableHead>
                       <TableHead className="font-bold">Cond. After</TableHead>
                       <TableHead className="font-bold">Assigned</TableHead>
+                      <TableHead className="font-bold">Locked</TableHead>
                       <TableHead className="font-bold">Opened</TableHead>
                       <TableHead className="font-bold">Returned</TableHead>
                       <TableHead className="w-48 text-center font-bold">Actions</TableHead>
@@ -976,14 +980,15 @@ export function Inventory() {
                   </TableHeader>
                   <TableBody>
                     {loadingAssignments ? (
-                      <TableRow><TableCell colSpan={9} className="text-center py-12">
+                      <TableRow><TableCell colSpan={10} className="text-center py-12">
                         <Skeleton className="h-6 w-1/2 mx-auto" />
                       </TableCell></TableRow>
                     ) : !assignments || assignments.length === 0 ? (
-                      <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-xs italic">No padlock assignments found.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground text-xs italic">No padlock assignments found.</TableCell></TableRow>
                     ) : (
                       assignments.map(a => {
                         const assignedDate = new Date(a.assignedAt);
+                        const lockedDate = a.lockedAt ? new Date(a.lockedAt) : null;
                         const openedDate = a.openedAt ? new Date(a.openedAt) : null;
                         const returnedDate = a.returnedAt ? new Date(a.returnedAt) : null;
 
@@ -1018,6 +1023,15 @@ export function Inventory() {
                             </TableCell>
                             <TableCell className="text-[11px] text-muted-foreground py-3">
                               <span>{assignedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span>
+                            </TableCell>
+                            <TableCell className="text-[11px] text-muted-foreground py-3">
+                              {lockedDate ? (
+                                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                  {lockedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/45 italic text-[10px]">Not locked yet</span>
+                              )}
                             </TableCell>
                             <TableCell className="text-[11px] text-muted-foreground py-3">
                               {openedDate ? (
@@ -1526,9 +1540,19 @@ export function Inventory() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold uppercase text-muted-foreground">Opened Time (Open Time)</Label>
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Locked Time</Label>
+                <Input
+                  type="datetime-local"
+                  value={editForm.lockedAt}
+                  onChange={e => setEditForm(prev => ({ ...prev, lockedAt: e.target.value }))}
+                  className="rounded-xl border-border bg-muted/20 font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Opened Time</Label>
                 <Input
                   type="datetime-local"
                   value={editForm.openedAt}

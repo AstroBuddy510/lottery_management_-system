@@ -459,6 +459,7 @@ router.get(
           conditionBefore: padlockAssignmentsTable.conditionBefore,
           conditionAfter: padlockAssignmentsTable.conditionAfter,
           assignedAt: padlockAssignmentsTable.assignedAt,
+          lockedAt: padlockAssignmentsTable.lockedAt,
           openedAt: padlockAssignmentsTable.openedAt,
           returnedAt: padlockAssignmentsTable.returnedAt,
           enteredBy: padlockAssignmentsTable.enteredBy,
@@ -630,6 +631,7 @@ router.patch(
       if (data.conditionBefore !== undefined) updates.conditionBefore = data.conditionBefore;
       if (data.conditionAfter !== undefined) updates.conditionAfter = data.conditionAfter;
       if (data.assignedAt !== undefined) updates.assignedAt = data.assignedAt ? new Date(data.assignedAt) : null;
+      if (data.lockedAt !== undefined) updates.lockedAt = data.lockedAt ? new Date(data.lockedAt) : null;
       if (data.openedAt !== undefined) updates.openedAt = data.openedAt ? new Date(data.openedAt) : null;
       if (data.returnedAt !== undefined) updates.returnedAt = data.returnedAt ? new Date(data.returnedAt) : null;
 
