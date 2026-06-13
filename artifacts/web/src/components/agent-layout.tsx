@@ -40,6 +40,7 @@ function NavHome({ active }: { active: boolean }) {
   );
 }
 
+/*
 function NavSales({ active }: { active: boolean }) {
   return active ? (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
@@ -52,6 +53,7 @@ function NavSales({ active }: { active: boolean }) {
     </svg>
   );
 }
+*/
 
 function NavGross({ active }: { active: boolean }) {
   return (
@@ -94,7 +96,7 @@ function NavWriters({ active }: { active: boolean }) {
 
 const NAV_TABS = [
   { label: "Home",    path: "/dashboard",     icon: (a: boolean) => <NavHome active={a} /> },
-  { label: "Sales",   path: "/sales",          icon: (a: boolean) => <NavSales active={a} /> },
+  // { label: "Sales",   path: "/sales",          icon: (a: boolean) => <NavSales active={a} /> },
   { label: "Gross",   path: "/entries/gross",  icon: (a: boolean) => <NavGross active={a} /> },
   { label: "Wins",    path: "/entries/wins",   icon: (a: boolean) => <NavWins active={a} /> },
   { label: "Writers", path: "/my-writers",     icon: (a: boolean) => <NavWriters active={a} /> },

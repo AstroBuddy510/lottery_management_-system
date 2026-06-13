@@ -22,7 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Gross & Wins", path: "/gross-wins", roles: ["director", "administrator"] },
   { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "agent"] },
   { label: "Wins Entries", path: "/entries/wins", roles: ["wins_entry", "agent"] },
-  { label: "Sales Log", path: "/sales", roles: ["agent", "administrator"] },
+  // { label: "Sales Log", path: "/sales", roles: ["agent", "administrator"] },
   { label: "Payments", path: "/payments", roles: ["cashier", "administrator"] },
   { label: "Staffs & Employees", path: "/staffs-employees", roles: ["cashier", "administrator", "director"] },
   { label: "Agency Staff Expenses", path: "/agency-staff-expenses", roles: ["cashier", "administrator", "director"] },
