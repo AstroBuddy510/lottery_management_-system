@@ -1066,27 +1066,31 @@ export function Inventory() {
               <div className="space-y-4">
                 {/* Filters and Actions Toolbar */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border border-border/60 bg-card/45 backdrop-blur-md rounded-2xl shadow-sm">
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-4">
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Period:</span>
+                      <Calendar className="w-4 h-4 text-indigo-500" />
+                      <span className="text-xs font-black uppercase tracking-wider text-muted-foreground">Filter Period:</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="date"
-                        placeholder="From Date"
-                        value={assignFilterFrom}
-                        onChange={e => setAssignFilterFrom(e.target.value)}
-                        className="h-8 text-xs rounded-lg border-border bg-background/50 font-mono w-[130px]"
-                      />
-                      <span className="text-xs text-muted-foreground font-semibold">to</span>
-                      <Input
-                        type="date"
-                        placeholder="To Date"
-                        value={assignFilterTo}
-                        onChange={e => setAssignFilterTo(e.target.value)}
-                        className="h-8 text-xs rounded-lg border-border bg-background/50 font-mono w-[130px]"
-                      />
+                    <div className="flex items-center gap-3 bg-muted/40 px-3 py-1.5 rounded-xl border border-border/40">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground/70">From</span>
+                        <Input
+                          type="date"
+                          value={assignFilterFrom}
+                          onChange={e => setAssignFilterFrom(e.target.value)}
+                          className="h-8 text-xs rounded-lg border-border bg-background/80 font-mono w-[155px] px-2 focus:ring-1 focus:ring-primary focus-visible:ring-1 focus-visible:ring-primary"
+                        />
+                      </div>
+                      <div className="w-px h-5 bg-border/80" />
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground/70">To</span>
+                        <Input
+                          type="date"
+                          value={assignFilterTo}
+                          onChange={e => setAssignFilterTo(e.target.value)}
+                          className="h-8 text-xs rounded-lg border-border bg-background/80 font-mono w-[155px] px-2 focus:ring-1 focus:ring-primary focus-visible:ring-1 focus-visible:ring-primary"
+                        />
+                      </div>
                     </div>
                     {(assignFilterFrom || assignFilterTo) && (
                       <Button

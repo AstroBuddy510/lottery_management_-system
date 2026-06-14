@@ -552,7 +552,7 @@ export function EntryChangeRequests() {
 
       {/* Agent Submit Request Dialog */}
       <Dialog open={createRequestOpen} onOpenChange={o => { if (!o) setCreateRequestOpen(false); }}>
-        <DialogContent className="max-w-md rounded-2xl p-6 gap-6">
+        <DialogContent className="max-w-md w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6 gap-6 scrollbar-thin">
           <DialogHeader className="pb-2 border-b">
             <DialogTitle className="text-lg font-bold text-slate-900">
               Submit Change Request
@@ -563,13 +563,13 @@ export function EntryChangeRequests() {
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-slate-700">Locked Game Event</Label>
               <Select value={selectedGameId} onValueChange={v => { setSelectedGameId(v); }}>
-                <SelectTrigger className="h-9 text-sm rounded-lg">
+                <SelectTrigger className="h-10 text-xs rounded-xl border-slate-250 bg-background">
                   <SelectValue placeholder="Select locked game..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[250px] overflow-y-auto">
                   {lockedGames.map(g => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.eventNumber} · {g.name} ({new Date(g.closeAt).toLocaleDateString("en-GB")})
+                    <SelectItem key={g.id} value={g.id} className="text-xs py-2 cursor-pointer">
+                      #{g.eventNumber} — {g.name} ({new Date(g.closeAt).toLocaleDateString("en-GB")})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -579,12 +579,12 @@ export function EntryChangeRequests() {
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-slate-700">Writer</Label>
               <Select value={selectedWriterId} onValueChange={v => setSelectedWriterId(v)}>
-                <SelectTrigger className="h-9 text-sm rounded-lg">
+                <SelectTrigger className="h-10 text-xs rounded-xl border-slate-250 bg-background">
                   <SelectValue placeholder="Select writer..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[250px] overflow-y-auto">
                   {writerList.map(w => (
-                    <SelectItem key={w.id} value={w.id}>
+                    <SelectItem key={w.id} value={w.id} className="text-xs py-2 cursor-pointer">
                       {w.fullCode} — {w.fullName}
                     </SelectItem>
                   ))}
@@ -595,12 +595,12 @@ export function EntryChangeRequests() {
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-slate-700">Submission Type</Label>
               <Select value={selectedType} onValueChange={(v: any) => setSelectedType(v)}>
-                <SelectTrigger className="h-9 text-sm rounded-lg">
+                <SelectTrigger className="h-10 text-xs rounded-xl border-slate-250 bg-background">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gross">Gross Entry</SelectItem>
-                  <SelectItem value="wins">Win Submission</SelectItem>
+                  <SelectItem value="gross" className="text-xs py-2 cursor-pointer">Gross Entry</SelectItem>
+                  <SelectItem value="wins" className="text-xs py-2 cursor-pointer">Win Submission</SelectItem>
                 </SelectContent>
               </Select>
             </div>
