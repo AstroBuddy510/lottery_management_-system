@@ -95,6 +95,9 @@ router.post(
 
     const grossMap = new Map<string, number>();
     for (const e of grossEntries) {
+      if (e.isLate && !e.adminConfirmed) {
+        continue;
+      }
       grossMap.set(e.writerId, (grossMap.get(e.writerId) ?? 0) + parseFloat(e.grossAmount));
     }
 

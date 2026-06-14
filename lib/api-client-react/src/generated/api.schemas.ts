@@ -441,6 +441,8 @@ export interface GrossEntry {
   bookletsCount: number;
   enteredBy: string;
   locked: boolean;
+  isLate: boolean;
+  adminConfirmed: boolean;
   createdAt: string;
   updatedAt: string;
 }

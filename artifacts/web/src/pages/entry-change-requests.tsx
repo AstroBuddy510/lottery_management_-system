@@ -5,6 +5,16 @@ import {
   useDirectorReviewEntryChangeRequest,
   getListEntryChangeRequestsQueryKey,
   EntryChangeRequest,
+  useListGames,
+  useListWriters,
+  useGetMyAgent,
+  getGetMyAgentQueryKey,
+  useListGrossEntries,
+  useListWinsEntries,
+  useCreateEntryChangeRequest,
+  getListWritersQueryKey,
+  getListGrossEntriesQueryKey,
+  getListWinsEntriesQueryKey,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { fmtGHS } from "@/lib/utils";
+import { getServerNow } from "@/lib/time-sync";
 
 function relDate(s: string) {
   if (!s) return s;
@@ -29,7 +40,7 @@ function relDate(s: string) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; class: string }> = {
-    pending_admin:    { label: "Awaiting Admin Review",    class: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50" },
+    pending_admin:    { label: "Awaiting Review",          class: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50" },
     pending_director: { label: "Awaiting Director Review", class: "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900/50" },
     approved:         { label: "Approved & Applied",         class: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50" },
     rejected:         { label: "Rejected",         class: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/50" },
@@ -55,6 +66,66 @@ export function EntryChangeRequests() {
   const [reviewNote, setReviewNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // New Request Form States
+  const [createRequestOpen, setCreateRequestOpen] = useState(false);
+  const [selectedGameId, setSelectedGameId] = useState("");
+  const [selectedWriterId, setSelectedWriterId] = useState("");
+  const [selectedType, setSelectedType] = useState<"gross" | "wins">("gross");
+  const [requestedAmount, setRequestedAmount] = useState("");
+  const [reason, setReason] = useState("");
+
+  const isAgent = role === "agent";
+
+  const { data: myAgent } = useGetMyAgent({
+    query: {
+      queryKey: getGetMyAgentQueryKey(),
+      enabled: isAgent,
+    }
+  });
+
+  const { data: gamesData } = useListGames();
+  const gameList = Array.isArray(gamesData) ? gamesData : [];
+  
+  // Filter for locked games: status === "closed" OR closeAt <= getServerNow()
+  const lockedGames = useMemo(() => {
+    return gameList.filter(g => g.status === "closed" || new Date(g.closeAt) <= new Date(getServerNow()));
+  }, [gameList]);
+
+  const { data: writersData } = useListWriters(myAgent?.id ?? "", {}, {
+    query: {
+      queryKey: getListWritersQueryKey(myAgent?.id ?? "", {}),
+      enabled: !!myAgent?.id,
+    }
+  });
+  const writerList = Array.isArray(writersData) ? writersData : [];
+
+  // Fetch gross entry if selectedType === "gross", selectedGameId and selectedWriterId are present
+  const { data: fetchedGrossEntries, isLoading: isFetchingGross } = useListGrossEntries({
+    gameId: selectedGameId || undefined,
+    writerId: selectedWriterId || undefined,
+  }, {
+    query: {
+      queryKey: getListGrossEntriesQueryKey({ gameId: selectedGameId || undefined, writerId: selectedWriterId || undefined }),
+      enabled: selectedType === "gross" && !!selectedGameId && !!selectedWriterId,
+    }
+  });
+
+  // Fetch wins entry if selectedType === "wins", selectedGameId and selectedWriterId are present
+  const { data: fetchedWinsEntries, isLoading: isFetchingWins } = useListWinsEntries({
+    gameId: selectedGameId || undefined,
+    writerId: selectedWriterId || undefined,
+  }, {
+    query: {
+      queryKey: getListWinsEntriesQueryKey({ gameId: selectedGameId || undefined, writerId: selectedWriterId || undefined }),
+      enabled: selectedType === "wins" && !!selectedGameId && !!selectedWriterId,
+    }
+  });
+
+  const activeEntries = selectedType === "gross" ? fetchedGrossEntries : fetchedWinsEntries;
+  const isFetchingEntry = selectedType === "gross" ? isFetchingGross : isFetchingWins;
+  const matchedEntry = Array.isArray(activeEntries) && activeEntries.length > 0 ? activeEntries[0] : null;
+  const currentAmount = matchedEntry ? (selectedType === "gross" ? (matchedEntry as any).grossAmount : (matchedEntry as any).winsAmount) : null;
+
   // Fetch all requests to allow rich real-time client-side counting and search
   const { data, isLoading } = useListEntryChangeRequests(
     {},
@@ -64,6 +135,7 @@ export function EntryChangeRequests() {
 
   const adminReview = useAdminReviewEntryChangeRequest();
   const directorReview = useDirectorReviewEntryChangeRequest();
+  const createChangeRequest = useCreateEntryChangeRequest();
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: getListEntryChangeRequestsQueryKey({}) });
@@ -75,6 +147,33 @@ export function EntryChangeRequests() {
     setReviewNote("");
   };
 
+  const handleCreateRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!matchedEntry) return;
+    setSubmitting(true);
+    try {
+      await createChangeRequest.mutateAsync({
+        data: {
+          entryType: selectedType,
+          entryId: matchedEntry.id,
+          requestedAmount,
+          reason,
+        }
+      });
+      toast.success("Change request submitted successfully!");
+      setCreateRequestOpen(false);
+      setSelectedGameId("");
+      setSelectedWriterId("");
+      setRequestedAmount("");
+      setReason("");
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to submit request");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleReview = async () => {
     if (!reviewDialog) return;
     setSubmitting(true);
@@ -84,7 +183,7 @@ export function EntryChangeRequests() {
           id: reviewDialog.request.id,
           data: { action: reviewAction, note: reviewNote || undefined },
         });
-        toast.success(reviewAction === "approve" ? "Forwarded to Director" : "Request rejected");
+        toast.success(reviewAction === "approve" ? "Change applied and transaction committed!" : "Request rejected");
       } else {
         await directorReview.mutateAsync({
           id: reviewDialog.request.id,
@@ -153,14 +252,22 @@ export function EntryChangeRequests() {
             
             {/* Header Mini Actions */}
             {role === "agent" && (
-              <div className="text-right">
-                <span className="text-[11px] text-indigo-200 uppercase tracking-wide block mb-1">Status Summary</span>
-                <div className="flex items-center gap-2">
-                  <div className="bg-white/10 px-3 py-1.5 rounded-lg text-xs font-mono">
-                    <span className="font-semibold text-amber-300">{pendingAdminCount + pendingDirectorCount}</span> Pending
-                  </div>
-                  <div className="bg-white/10 px-3 py-1.5 rounded-lg text-xs font-mono">
-                    <span className="font-semibold text-emerald-400">{approvedCount}</span> Approved
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 text-right">
+                <Button
+                  onClick={() => setCreateRequestOpen(true)}
+                  className="bg-white text-indigo-950 hover:bg-slate-100 font-bold rounded-xl shadow-md px-4 py-2 text-xs transition-transform hover:scale-102 active:scale-98"
+                >
+                  New Request
+                </Button>
+                <div>
+                  <span className="text-[11px] text-indigo-200 uppercase tracking-wide block mb-1">Status Summary</span>
+                  <div className="flex items-center gap-2">
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg text-xs font-mono text-left">
+                      <span className="font-semibold text-amber-300">{pendingAdminCount + pendingDirectorCount}</span> Pending
+                    </div>
+                    <div className="bg-white/10 px-3 py-1.5 rounded-lg text-xs font-mono text-left">
+                      <span className="font-semibold text-emerald-400">{approvedCount}</span> Approved
+                    </div>
                   </div>
                 </div>
               </div>
@@ -437,9 +544,125 @@ export function EntryChangeRequests() {
               disabled={submitting}
               className={reviewAction === "reject" ? "bg-rose-600 hover:bg-rose-700 text-white" : "bg-slate-900 hover:bg-slate-800 text-white"}
             >
-              {submitting ? "Updating..." : reviewAction === "approve" ? (reviewDialog?.role === "admin" ? "Forward to Director" : "Authorize Change") : "Reject Request"}
+              {submitting ? "Updating..." : reviewAction === "approve" ? "Authorize Change" : "Reject Request"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Agent Submit Request Dialog */}
+      <Dialog open={createRequestOpen} onOpenChange={o => { if (!o) setCreateRequestOpen(false); }}>
+        <DialogContent className="max-w-md rounded-2xl p-6 gap-6">
+          <DialogHeader className="pb-2 border-b">
+            <DialogTitle className="text-lg font-bold text-slate-900">
+              Submit Change Request
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateRequest} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Locked Game Event</Label>
+              <Select value={selectedGameId} onValueChange={v => { setSelectedGameId(v); }}>
+                <SelectTrigger className="h-9 text-sm rounded-lg">
+                  <SelectValue placeholder="Select locked game..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {lockedGames.map(g => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.eventNumber} · {g.name} ({new Date(g.closeAt).toLocaleDateString("en-GB")})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Writer</Label>
+              <Select value={selectedWriterId} onValueChange={v => setSelectedWriterId(v)}>
+                <SelectTrigger className="h-9 text-sm rounded-lg">
+                  <SelectValue placeholder="Select writer..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {writerList.map(w => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.fullCode} — {w.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Submission Type</Label>
+              <Select value={selectedType} onValueChange={(v: any) => setSelectedType(v)}>
+                <SelectTrigger className="h-9 text-sm rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gross">Gross Entry</SelectItem>
+                  <SelectItem value="wins">Win Submission</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedGameId && selectedWriterId && (
+              <div className="bg-slate-50 border rounded-xl p-4 text-xs space-y-3">
+                {isFetchingEntry ? (
+                  <div className="text-center py-2 text-slate-500">Searching database...</div>
+                ) : matchedEntry ? (
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Current Amount:</span>
+                      <span className="font-mono font-bold text-slate-800">{fmtGHS(Number(currentAmount))}</span>
+                    </div>
+
+                    <div className="space-y-1.5 pt-2 border-t">
+                      <Label className="text-xs font-semibold text-slate-700">Proposed New Amount (GH₵)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={requestedAmount}
+                        onChange={e => setRequestedAmount(e.target.value)}
+                        placeholder="0.00"
+                        required
+                        className="h-9 text-sm rounded-lg"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-700">Reason for Request</Label>
+                      <Textarea
+                        value={reason}
+                        onChange={e => setReason(e.target.value)}
+                        placeholder="Explain the correction needed (e.g. keying error on original booklet)"
+                        required
+                        className="resize-none text-xs h-20 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-2 text-rose-600 font-semibold">
+                    No matching entry found for the selected game and writer.
+                  </div>
+                )}
+              </div>
+            )}
+
+            <DialogFooter className="gap-2 pt-2 border-t">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setCreateRequestOpen(false)} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={submitting || !matchedEntry || !requestedAmount || reason.length < 5}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg"
+              >
+                {submitting ? "Submitting..." : "Submit Request"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

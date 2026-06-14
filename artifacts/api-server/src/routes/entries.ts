@@ -121,10 +121,21 @@ router.post(
         res.status(404).json({ error: "Game not found" });
         return;
       }
-      const isClosed = game.status === "closed" || new Date(game.closeAt) <= new Date();
-      if (isClosed) {
+      if (game.status === "closed") {
         res.status(409).json({ error: "Cannot create gross entry: Game is closed" });
         return;
+      }
+    }
+
+    let isLate = false;
+    if (parse.data.gameId) {
+      const [game] = await db
+        .select({ closeAt: gamesTable.closeAt })
+        .from(gamesTable)
+        .where(eq(gamesTable.id, parse.data.gameId))
+        .limit(1);
+      if (game && new Date(game.closeAt) <= new Date()) {
+        isLate = true;
       }
     }
 
@@ -134,6 +145,8 @@ router.post(
         ...parse.data,
         bookletsCount: parse.data.bookletsCount ?? 0,
         enteredBy: req.user!.userId,
+        isLate,
+        adminConfirmed: false,
       })
       .returning();
     res.status(201).json(entry);
@@ -413,6 +426,33 @@ router.patch(
       .returning();
     res.json(entry);
   },
+);
+
+router.post(
+  "/entries/gross/:id/confirm",
+  requireAuth,
+  requireRole("administrator", "director"),
+  async (req, res) => {
+    const id = String(req.params.id);
+    const [existing] = await db
+      .select()
+      .from(grossEntriesTable)
+      .where(eq(grossEntriesTable.id, id))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ error: "Gross entry not found" });
+      return;
+    }
+
+    const [updated] = await db
+      .update(grossEntriesTable)
+      .set({ adminConfirmed: true })
+      .where(eq(grossEntriesTable.id, id))
+      .returning();
+
+    res.json(updated);
+  }
 );
 
 export default router;

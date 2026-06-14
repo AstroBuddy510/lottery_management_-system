@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  useListGrossEntries, useCreateGrossEntry, useUpdateGrossEntry,
+  useListGrossEntries, useCreateGrossEntry, useUpdateGrossEntry, useConfirmLateGrossEntry,
   useListWinsEntries, useCreateWinsEntry, useUpdateWinsEntry,
   useListWriters, getListGrossEntriesQueryKey, getListWinsEntriesQueryKey, getListWritersQueryKey,
   GrossEntry, WinsEntry, useGetSettings, ListGrossEntriesParams, ListWinsEntriesParams,
@@ -49,12 +49,24 @@ function GrossTab() {
 
   const createMutation = useCreateGrossEntry();
   const updateMutation = useUpdateGrossEntry();
+  const confirmMutation = useConfirmLateGrossEntry();
   const [createOpen, setCreateOpen] = useState(false);
   const [editEntry, setEditEntry] = useState<GrossEntry | null>(null);
   const [form, setForm] = useState({ writerId: "", entryDate: new Date().toISOString().split("T")[0], grossAmount: "" });
   const [editForm, setEditForm] = useState({ grossAmount: "" });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/entries/gross"] });
+
+  const handleConfirmLate = async (id: string) => {
+    if (!confirm("Are you sure you want to confirm this late gross entry for inclusion in calculations?")) return;
+    try {
+      await confirmMutation.mutateAsync({ id });
+      toast({ title: "Late entry confirmed" });
+      invalidate();
+    } catch (err: any) {
+      toast({ title: err?.data?.error ?? "Failed to confirm entry", variant: "destructive" });
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,11 +172,25 @@ function GrossTab() {
                   <TableCell className="text-sm tabular-nums pl-8">
                     {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>
-                  <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
                   <TableCell>
-                    {!entry.locked && (
-                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount }); }}>Edit</Button>
-                    )}
+                    <div className="flex flex-col gap-1">
+                      <Badge variant={entry.locked ? "secondary" : "default"} className="text-xs w-fit">{entry.locked ? "Locked" : "Open"}</Badge>
+                      {entry.isLate && (
+                        <Badge variant={entry.adminConfirmed ? "secondary" : "destructive"} className={`text-xs w-fit ${entry.adminConfirmed ? "bg-emerald-100 text-emerald-800 border-emerald-200" : ""}`}>
+                          {entry.adminConfirmed ? "Late (Confirmed)" : "Late (Pending)"}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      {!entry.locked && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount }); }}>Edit</Button>
+                      )}
+                      {entry.isLate && !entry.adminConfirmed && (
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] px-2 bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 font-bold" onClick={() => handleConfirmLate(entry.id)}>Confirm</Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               );

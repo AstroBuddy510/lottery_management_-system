@@ -14,6 +14,8 @@ export const grossEntriesTable = pgTable("gross_entries", {
   bookletsCount: integer("booklets_count").notNull().default(0),
   enteredBy: uuid("entered_by").notNull().references(() => usersTable.id),
   locked: boolean("locked").notNull().default(false),
+  isLate: boolean("is_late").notNull().default(false),
+  adminConfirmed: boolean("admin_confirmed").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

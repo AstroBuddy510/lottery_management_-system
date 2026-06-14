@@ -1051,6 +1051,8 @@ export const ListGrossEntriesResponseItem = zod.object({
   "bookletsCount": zod.number(),
   "enteredBy": zod.string(),
   "locked": zod.boolean(),
+  "isLate": zod.boolean(),
+  "adminConfirmed": zod.boolean(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1091,6 +1093,31 @@ export const UpdateGrossEntryResponse = zod.object({
   "bookletsCount": zod.number(),
   "enteredBy": zod.string(),
   "locked": zod.boolean(),
+  "isLate": zod.boolean(),
+  "adminConfirmed": zod.boolean(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Confirm a late gross entry (admin/director only)
+ */
+export const ConfirmLateGrossEntryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ConfirmLateGrossEntryResponse = zod.object({
+  "id": zod.string(),
+  "writerId": zod.string(),
+  "gameId": zod.string().optional(),
+  "entryDate": zod.string(),
+  "grossAmount": zod.string(),
+  "bookletsCount": zod.number(),
+  "enteredBy": zod.string(),
+  "locked": zod.boolean(),
+  "isLate": zod.boolean(),
+  "adminConfirmed": zod.boolean(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

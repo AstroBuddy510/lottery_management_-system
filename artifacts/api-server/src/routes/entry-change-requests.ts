@@ -257,7 +257,33 @@ router.patch(
       return;
     }
 
-    const newStatus = action === "approve" ? "pending_director" : "rejected";
+    const newStatus = action === "approve" ? "approved" : "rejected";
+
+    // If approved, apply the change to the actual entry
+    if (action === "approve") {
+      if (existing.entryType === "gross") {
+        await db
+          .update(grossEntriesTable)
+          .set({ grossAmount: existing.requestedAmount })
+          .where(eq(grossEntriesTable.id, existing.entryId));
+      } else {
+        await db
+          .update(winsEntriesTable)
+          .set({ winsAmount: existing.requestedAmount })
+          .where(eq(winsEntriesTable.id, existing.entryId));
+      }
+
+      // Fetch writer to find agentId
+      const [writer] = await db
+        .select({ agentId: writersTable.agentId })
+        .from(writersTable)
+        .where(eq(writersTable.id, existing.writerId))
+        .limit(1);
+
+      if (writer) {
+        verifyLedgerAndEscalate(writer.agentId, req.user!.userId).catch(console.error);
+      }
+    }
 
     const [updated] = await db
       .update(entryChangeRequestsTable)
@@ -275,35 +301,15 @@ router.patch(
       sentBy: req.user!.userId,
       messageType: "change_request_update",
       title: action === "approve"
-        ? "Change Request Forwarded to Director"
+        ? "Entry Change Applied — Admin Approved"
         : "Change Request Rejected by Admin",
       body: action === "approve"
-        ? `Your ${existing.entryType} entry change request for ${existing.entryDate} has been approved by the administrator and forwarded to the Director for final approval.${note ? ` Note: ${note}` : ""}`
+        ? `The Administrator has approved the ${existing.entryType} entry change for ${existing.entryDate}. The entry has been updated from GH₵${existing.currentAmount} to GH₵${existing.requestedAmount}.${note ? ` Note: ${note}` : ""}`
         : `Your ${existing.entryType} entry change request for ${existing.entryDate} was rejected by the administrator.${note ? ` Reason: ${note}` : ""}`,
       targetType: "system",
       targetId: id,
       recipientUserIds: [existing.requestedBy],
     });
-
-    // If approved, notify directors
-    if (action === "approve") {
-      const directors = await db
-        .select({ id: usersTable.id })
-        .from(usersTable)
-        .where(eq(usersTable.role, "director"));
-
-      if (directors.length > 0) {
-        await dispatchSystemNotification({
-          sentBy: req.user!.userId,
-          messageType: "change_request",
-          title: `Entry Change Request — Awaiting Director Approval`,
-          body: `An administrator has reviewed and forwarded an entry change request for a locked ${existing.entryType} entry (${existing.entryDate}). Current: GH₵${existing.currentAmount} → Requested: GH₵${existing.requestedAmount}.`,
-          targetType: "system",
-          targetId: id,
-          recipientUserIds: directors.map((d) => d.id),
-        });
-      }
-    }
 
     const [enriched] = await enrichRequests([updated]);
     res.json(enriched);

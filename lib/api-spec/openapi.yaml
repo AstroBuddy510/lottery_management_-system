@@ -1277,6 +1277,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /entries/gross/{id}/confirm:
+    post:
+      operationId: confirmLateGrossEntry
+      tags: [entries]
+      summary: Confirm a late gross entry (admin/director only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrossEntry"
+
   /entries/wins:
     get:
       operationId: listWinsEntries
@@ -2910,7 +2931,7 @@ components:
 
     GrossEntry:
       type: object
-      required: [id, writerId, entryDate, grossAmount, enteredBy, locked, bookletsCount, createdAt, updatedAt]
+      required: [id, writerId, entryDate, grossAmount, enteredBy, locked, bookletsCount, isLate, adminConfirmed, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -2927,6 +2948,10 @@ components:
         enteredBy:
           type: string
         locked:
+          type: boolean
+        isLate:
+          type: boolean
+        adminConfirmed:
           type: boolean
         createdAt:
           type: string

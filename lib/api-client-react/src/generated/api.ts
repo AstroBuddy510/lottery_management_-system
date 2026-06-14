@@ -4390,6 +4390,76 @@ export const useUpdateGrossEntry = <TError = ErrorType<ErrorResponse>,
       return useMutation(getUpdateGrossEntryMutationOptions(options));
     }
 
+export const getConfirmLateGrossEntryUrl = (id: string,) => {
+
+
+
+
+  return `/api/entries/gross/${id}/confirm`
+}
+
+/**
+ * @summary Confirm a late gross entry (admin/director only)
+ */
+export const confirmLateGrossEntry = async (id: string, options?: RequestInit): Promise<GrossEntry> => {
+
+  return customFetch<GrossEntry>(getConfirmLateGrossEntryUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getConfirmLateGrossEntryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmLateGrossEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmLateGrossEntry>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['confirmLateGrossEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmLateGrossEntry>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  confirmLateGrossEntry(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConfirmLateGrossEntryMutationResult = NonNullable<Awaited<ReturnType<typeof confirmLateGrossEntry>>>
+
+    export type ConfirmLateGrossEntryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Confirm a late gross entry (admin/director only)
+ */
+export const useConfirmLateGrossEntry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmLateGrossEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof confirmLateGrossEntry>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getConfirmLateGrossEntryMutationOptions(options));
+    }
+
 export const getListWinsEntriesUrl = (params?: ListWinsEntriesParams,) => {
   const normalizedParams = new URLSearchParams();
 

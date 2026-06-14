@@ -82,14 +82,14 @@ function AgentGrossView() {
   const { data: games } = useListGames();
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live" && new Date(g.closeAt) > new Date(getServerNow()));
+    return gameList.filter(g => g.status === "live");
   }, [gameList]);
 
   const isGameClosed = (gameId?: string) => {
     if (!gameId) return false;
     const game = gameList.find(g => g.id === gameId);
     if (!game) return false;
-    return game.status === "closed" || new Date(game.closeAt) <= new Date(getServerNow());
+    return game.status === "closed";
   };
 
   const { data: entries, isLoading } = useListGrossEntries({

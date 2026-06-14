@@ -16,10 +16,13 @@ async function generateEventNumber(): Promise<string> {
 }
 
 async function autoClosePastGames(): Promise<void> {
+  // Let games remain live during their lifetime; locked/closed only when running calculations
+  /*
   await db
     .update(gamesTable)
     .set({ status: "closed", updatedAt: new Date() })
     .where(and(lt(gamesTable.closeAt, new Date()), not(eq(gamesTable.status, "closed"))));
+  */
 }
 
 router.get("/games", requireAuth, async (req, res) => {

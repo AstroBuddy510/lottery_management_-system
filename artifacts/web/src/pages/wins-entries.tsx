@@ -76,11 +76,7 @@ function AgentWinsView() {
   const { data: games } = useListGames();
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    const todayStr = new Date(getServerNow()).toISOString().split("T")[0];
-    return gameList.filter(g => {
-      const gameDateStr = g.closeAt ? g.closeAt.split("T")[0] : "";
-      return gameDateStr === todayStr;
-    });
+    return gameList.filter(g => g.status === "live");
   }, [gameList]);
 
   const { data: entries, isLoading } = useListWinsEntries({
