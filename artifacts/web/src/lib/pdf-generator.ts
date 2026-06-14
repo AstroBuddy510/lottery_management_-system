@@ -1047,3 +1047,104 @@ export async function generateGameEventReportPDF(
   drawSignatureBlock(doc, "Audited By (Cashier)", "Authorized Signatory (Director)");
   doc.save(`event_audit_report_${eventNumber}.pdf`);
 }
+
+// ─── 8. DIGITAL PADLOCK ASSIGNMENTS HISTORY REPORT PDF ───
+export async function generatePadlockAssignmentsPDF(
+  assignments: any[],
+  dateFrom?: string,
+  dateTo?: string
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF() as any;
+
+  const startY = drawBrandHeader(
+    doc,
+    "Digital Padlocks Assignment History",
+    [
+      { label: "Report ID", value: `PDL-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
+    ],
+    "Inventory & Security Details",
+    ["VISION 2000 LOTTO.COM LTD", "Digital Padlocks Tracking System", "Status: Audited Logs"],
+    logoImg
+  );
+
+  const columns = [
+    { header: "Serial Number", dataKey: "serialNumber" },
+    { header: "Agent (Code)", dataKey: "agent" },
+    { header: "Destination", dataKey: "destination" },
+    { header: "Cond. Before", dataKey: "condBefore" },
+    { header: "Cond. After", dataKey: "condAfter" },
+    { header: "Assigned At", dataKey: "assignedAt" },
+    { header: "Locked At", dataKey: "lockedAt" },
+    { header: "Opened At", dataKey: "openedAt" },
+    { header: "Returned At", dataKey: "returnedAt" },
+  ];
+
+  const formatDateTime = (s?: string | null) => {
+    if (!s) return "—";
+    try {
+      const d = new Date(s);
+      return d.toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return s;
+    }
+  };
+
+  const tableData = assignments.map((a) => ({
+    serialNumber: a.padlockSerialNumber || "—",
+    agent: `${a.agentCode}${a.agencyName ? ` (${a.agencyName})` : ""}`,
+    destination: a.destination || "—",
+    condBefore: a.conditionBefore || "—",
+    condAfter: a.conditionAfter || "—",
+    assignedAt: formatDateTime(a.assignedAt),
+    lockedAt: formatDateTime(a.lockedAt),
+    openedAt: formatDateTime(a.openedAt),
+    returnedAt: formatDateTime(a.returnedAt),
+  }));
+
+  autoTable(doc, {
+    columns,
+    body: tableData,
+    startY,
+    theme: "striped",
+    headStyles: { ...tableTheme.headStyles, halign: "left" },
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "left", fontSize: 7 },
+    columnStyles: {
+      serialNumber: { fontStyle: "bold" },
+    },
+    margin: tableTheme.margin,
+  });
+
+  let nextY = doc.lastAutoTable.finalY + 10;
+  if (nextY > 230) {
+    doc.addPage();
+    nextY = 20;
+  }
+
+  // Summary box
+  const pageWidth = doc.internal.pageSize.width;
+  doc.setFillColor(241, 245, 249);
+  doc.rect(pageWidth - 95, nextY, 80, 20, "F");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text("Total Assignments Logged:", pageWidth - 90, nextY + 8);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(40, 40, 40);
+  doc.setFontSize(10);
+  doc.text(String(assignments.length), pageWidth - 20, nextY + 8, { align: "right" });
+
+  drawSignatureBlock(doc, "Prepared By (Inventory Manager)", "Verified By (Operations Director)");
+  doc.save(`padlock_assignments_history.pdf`);
+}
+

@@ -14,6 +14,7 @@ import {
   useReturnPadlockAssignment,
   useUpdatePadlockAssignment,
 } from "@workspace/api-client-react";
+import { generatePadlockAssignmentsPDF } from "@/lib/pdf-generator";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -49,7 +50,9 @@ import {
   Settings2,
   FileSpreadsheet,
   AlertCircle,
-  FolderLock
+  FolderLock,
+  Printer,
+  FileDown
 } from "lucide-react";
 import {
   PieChart,
@@ -122,6 +125,10 @@ export function Inventory() {
   const [returnOpen, setReturnOpen] = useState(false);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
   const [returnForm, setReturnForm] = useState({ conditionAfter: "Intact" });
+
+  // Date states for padlock assignments filtering
+  const [assignFilterFrom, setAssignFilterFrom] = useState("");
+  const [assignFilterTo, setAssignFilterTo] = useState("");
 
   // Assignment Editing Dialog State
   const [editOpen, setEditOpen] = useState(false);
@@ -320,6 +327,100 @@ export function Inventory() {
     if (!padlocks) return [];
     return padlocks.filter(p => p.status === "available");
   }, [padlocks]);
+
+  // Filter padlock assignments by selected date range
+  const filteredAssignments = useMemo(() => {
+    if (!assignments) return [];
+    const fromTime = assignFilterFrom ? new Date(assignFilterFrom + "T00:00:00").getTime() : null;
+    const toTime = assignFilterTo ? new Date(assignFilterTo + "T23:59:59").getTime() : null;
+
+    return assignments.filter(a => {
+      if (!a.assignedAt) return false;
+      const assignedTime = new Date(a.assignedAt).getTime();
+      if (fromTime && assignedTime < fromTime) return false;
+      if (toTime && assignedTime > toTime) return false;
+      return true;
+    });
+  }, [assignments, assignFilterFrom, assignFilterTo]);
+
+  // Handler to print filtered padlock assignments logs
+  const handlePrintAssignments = () => {
+    const w = window.open("", "_blank", "width=800,height=600");
+    if (!w) return;
+    w.document.write(`
+      <html>
+      <head>
+        <title>Padlock Assignments History Log</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; font-size: 11px; padding: 24px; color: #333; }
+          h2 { text-align: center; margin: 0 0 4px; font-size: 18px; color: #004e98; }
+          .subtitle { text-align: center; margin: 0 0 16px; font-size: 11px; color: #666; font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+          th { background-color: #004e98; color: white; font-weight: bold; font-size: 10px; text-transform: uppercase; }
+          tr:nth-child(even) { background-color: #f8fafc; }
+          .badge { display: inline-block; padding: 2px 5px; font-size: 9px; font-weight: bold; border-radius: 4px; border: 1px solid #ccc; text-transform: uppercase; }
+          .badge-intact { color: #166534; border-color: #bbf7d0; background-color: #f0fdf4; }
+          .badge-damaged { color: #991b1b; border-color: #fecaca; background-color: #fef2f2; }
+          .meta-table { width: 100%; border: none; margin-bottom: 16px; }
+          .meta-table td { border: none; padding: 2px 0; }
+        </style>
+      </head>
+      <body>
+        <h2>VISION 2000 LOTTO.COM LTD</h2>
+        <div class="subtitle">DIGITAL PADLOCKS ASSIGNMENT HISTORY LOG</div>
+        <table class="meta-table">
+          <tr>
+            <td><strong>Report Period:</strong> ${assignFilterFrom || assignFilterTo ? `${assignFilterFrom || 'Beginning'} to ${assignFilterTo || 'Present'}` : 'All Periods'}</td>
+            <td style="text-align: right;"><strong>Date Printed:</strong> ${new Date().toLocaleString('en-GB')}</td>
+          </tr>
+          <tr>
+            <td><strong>Total Assignments Logged:</strong> ${filteredAssignments.length}</td>
+            <td></td>
+          </tr>
+        </table>
+        <table>
+          <thead>
+            <tr>
+              <th>Serial Number</th>
+              <th>Agent</th>
+              <th>Destination</th>
+              <th>Cond. Before</th>
+              <th>Cond. After</th>
+              <th>Assigned</th>
+              <th>Locked</th>
+              <th>Opened</th>
+              <th>Returned</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredAssignments.map(a => `
+              <tr>
+                <td style="font-family: monospace; font-weight: bold;">${a.padlockSerialNumber}</td>
+                <td>${a.agentCode}${a.agencyName ? ` (${a.agencyName})` : ''}</td>
+                <td>${a.destination}</td>
+                <td><span class="badge">${a.conditionBefore}</span></td>
+                <td>${a.conditionAfter ? `<span class="badge ${a.conditionAfter === 'Intact' || a.conditionAfter === 'good' ? 'badge-intact' : 'badge-damaged'}">${a.conditionAfter}</span>` : '—'}</td>
+                <td>${a.assignedAt ? new Date(a.assignedAt).toLocaleString('en-GB', {dateStyle:'short', timeStyle:'short'}) : '—'}</td>
+                <td>${a.lockedAt ? new Date(a.lockedAt).toLocaleString('en-GB', {dateStyle:'short', timeStyle:'short'}) : '—'}</td>
+                <td>${a.openedAt ? new Date(a.openedAt).toLocaleString('en-GB', {dateStyle:'short', timeStyle:'short'}) : '—'}</td>
+                <td>${a.returnedAt ? new Date(a.returnedAt).toLocaleString('en-GB', {dateStyle:'short', timeStyle:'short'}) : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  // Handler to export filtered padlock assignments to PDF
+  const handleExportAssignmentsPDF = () => {
+    generatePadlockAssignmentsPDF(filteredAssignments, assignFilterFrom, assignFilterTo);
+  };
 
   // Visual Buffers Rates
   const totalStocked = summary?.totalStocked ?? 0;
@@ -962,143 +1063,205 @@ export function Inventory() {
 
             {/* Sub Tab: Assignments */}
             {padlockSubTab === "assignments" && (
-              <div className="border border-border/80 rounded-2xl overflow-hidden bg-card/65 shadow-sm">
-                <Table>
-                  <TableHeader className="bg-muted/40">
-                    <TableRow>
-                      <TableHead className="font-bold">Serial Number</TableHead>
-                      <TableHead className="font-bold">Assigned Agent</TableHead>
-                      <TableHead className="font-bold">Destination</TableHead>
-                      <TableHead className="font-bold">Cond. Before</TableHead>
-                      <TableHead className="font-bold">Cond. After</TableHead>
-                      <TableHead className="font-bold">Assigned</TableHead>
-                      <TableHead className="font-bold">Locked</TableHead>
-                      <TableHead className="font-bold">Opened</TableHead>
-                      <TableHead className="font-bold">Returned</TableHead>
-                      <TableHead className="w-48 text-center font-bold">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loadingAssignments ? (
-                      <TableRow><TableCell colSpan={10} className="text-center py-12">
-                        <Skeleton className="h-6 w-1/2 mx-auto" />
-                      </TableCell></TableRow>
-                    ) : !assignments || assignments.length === 0 ? (
-                      <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground text-xs italic">No padlock assignments found.</TableCell></TableRow>
-                    ) : (
-                      assignments.map(a => {
-                        const assignedDate = new Date(a.assignedAt);
-                        const lockedDate = a.lockedAt ? new Date(a.lockedAt) : null;
-                        const openedDate = a.openedAt ? new Date(a.openedAt) : null;
-                        const returnedDate = a.returnedAt ? new Date(a.returnedAt) : null;
-
-                        return (
-                          <TableRow key={a.id} className="hover:bg-muted/20 transition-colors">
-                            <TableCell className="text-xs font-mono font-bold text-foreground">
-                              {a.padlockSerialNumber}
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              <span className="font-mono font-bold bg-muted px-2 py-0.5 border rounded-md">{a.agentCode}</span>
-                              {a.agencyName && <span className="text-[11px] text-muted-foreground ml-1.5 font-medium">({a.agencyName})</span>}
-                            </TableCell>
-                            <TableCell className="text-xs font-medium truncate max-w-[120px]">{a.destination}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-[10px] uppercase font-bold">{a.conditionBefore}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              {a.conditionAfter ? (
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] uppercase font-bold ${
-                                    a.conditionAfter === "Intact" || a.conditionAfter === "good"
-                                      ? "text-emerald-600 border-emerald-200 bg-emerald-50/50"
-                                      : "text-rose-600 border-rose-200 bg-rose-50/50"
-                                  }`}
-                                >
-                                  {a.conditionAfter}
-                                </Badge>
-                              ) : (
-                                <span className="text-muted-foreground text-xs">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-[11px] text-muted-foreground py-3">
-                              <span>{assignedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span>
-                            </TableCell>
-                            <TableCell className="text-[11px] text-muted-foreground py-3">
-                              {lockedDate ? (
-                                <span className="text-amber-600 dark:text-amber-400 font-medium">
-                                  {lockedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground/45 italic text-[10px]">Not locked yet</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-[11px] text-muted-foreground py-3">
-                              {openedDate ? (
-                                <span className="text-blue-600 dark:text-blue-400 font-medium">
-                                  {openedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground/45 italic text-[10px]">Not opened yet</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-[11px] text-muted-foreground py-3">
-                              {returnedDate ? (
-                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                                  {returnedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground/45 italic text-[10px]">Not returned yet</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <div className="flex justify-center items-center gap-1.5">
-                                {!a.openedAt && !a.returnedAt && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleOpenAssignment(a.id)}
-                                    className="text-[10px] h-7 px-2 font-bold uppercase rounded-lg border-blue-200 hover:bg-blue-50/50 text-blue-600 dark:border-blue-900 dark:hover:bg-blue-950/20"
-                                    disabled={openPadlockMutation.isPending}
-                                  >
-                                    Mark Opened
-                                  </Button>
-                                )}
-                                {!a.returnedAt && (
-                                  <Button
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedAssignmentId(a.id);
-                                      setReturnOpen(true);
-                                    }}
-                                    className="text-[10px] h-7 px-2 font-bold uppercase rounded-lg bg-amber-600 hover:bg-amber-700"
-                                  >
-                                    Return
-                                  </Button>
-                                )}
-                                {a.returnedAt && (
-                                  <Badge variant="secondary" className="text-[10px] uppercase px-2 py-1 font-bold">Returned</Badge>
-                                )}
-                                
-                                {isCashier && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleOpenEditModal(a)}
-                                    className="h-7 w-7 p-0 rounded-lg hover:bg-muted"
-                                    title="Edit Assignment Details"
-                                  >
-                                    <Settings2 className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-                                  </Button>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
+              <div className="space-y-4">
+                {/* Filters and Actions Toolbar */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border border-border/60 bg-card/45 backdrop-blur-md rounded-2xl shadow-sm">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Period:</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="date"
+                        placeholder="From Date"
+                        value={assignFilterFrom}
+                        onChange={e => setAssignFilterFrom(e.target.value)}
+                        className="h-8 text-xs rounded-lg border-border bg-background/50 font-mono w-[130px]"
+                      />
+                      <span className="text-xs text-muted-foreground font-semibold">to</span>
+                      <Input
+                        type="date"
+                        placeholder="To Date"
+                        value={assignFilterTo}
+                        onChange={e => setAssignFilterTo(e.target.value)}
+                        className="h-8 text-xs rounded-lg border-border bg-background/50 font-mono w-[130px]"
+                      />
+                    </div>
+                    {(assignFilterFrom || assignFilterTo) && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setAssignFilterFrom("");
+                          setAssignFilterTo("");
+                        }}
+                        className="h-8 text-[11px] font-bold uppercase rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/25"
+                      >
+                        Clear
+                      </Button>
                     )}
-                  </TableBody>
-                </Table>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handlePrintAssignments}
+                      className="h-8 text-[11px] font-bold uppercase rounded-lg border-border bg-background/50 hover:bg-muted text-foreground flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-muted-foreground" />
+                      Print Logs
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleExportAssignmentsPDF}
+                      className="h-8 text-[11px] font-bold uppercase rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5"
+                    >
+                      <FileDown className="w-3.5 h-3.5" />
+                      Export PDF
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="border border-border/80 rounded-2xl overflow-hidden bg-card/65 shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-muted/40">
+                      <TableRow>
+                        <TableHead className="font-bold">Serial Number</TableHead>
+                        <TableHead className="font-bold">Assigned Agent</TableHead>
+                        <TableHead className="font-bold">Destination</TableHead>
+                        <TableHead className="font-bold">Cond. Before</TableHead>
+                        <TableHead className="font-bold">Cond. After</TableHead>
+                        <TableHead className="font-bold">Assigned</TableHead>
+                        <TableHead className="font-bold">Locked</TableHead>
+                        <TableHead className="font-bold">Opened</TableHead>
+                        <TableHead className="font-bold">Returned</TableHead>
+                        <TableHead className="w-48 text-center font-bold">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadingAssignments ? (
+                        <TableRow><TableCell colSpan={10} className="text-center py-12">
+                          <Skeleton className="h-6 w-1/2 mx-auto" />
+                        </TableCell></TableRow>
+                      ) : !filteredAssignments || filteredAssignments.length === 0 ? (
+                        <TableRow><TableCell colSpan={10} className="text-center py-12 text-muted-foreground text-xs italic">No padlock assignments found.</TableCell></TableRow>
+                      ) : (
+                        filteredAssignments.map(a => {
+                          const assignedDate = new Date(a.assignedAt);
+                          const lockedDate = a.lockedAt ? new Date(a.lockedAt) : null;
+                          const openedDate = a.openedAt ? new Date(a.openedAt) : null;
+                          const returnedDate = a.returnedAt ? new Date(a.returnedAt) : null;
+
+                          return (
+                            <TableRow key={a.id} className="hover:bg-muted/20 transition-colors">
+                              <TableCell className="text-xs font-mono font-bold text-foreground">
+                                {a.padlockSerialNumber}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                <span className="font-mono font-bold bg-muted px-2 py-0.5 border rounded-md">{a.agentCode}</span>
+                                {a.agencyName && <span className="text-[11px] text-muted-foreground ml-1.5 font-medium">({a.agencyName})</span>}
+                              </TableCell>
+                              <TableCell className="text-xs font-medium truncate max-w-[120px]">{a.destination}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[10px] uppercase font-bold">{a.conditionBefore}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {a.conditionAfter ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] uppercase font-bold ${
+                                      a.conditionAfter === "Intact" || a.conditionAfter === "good"
+                                        ? "text-emerald-600 border-emerald-200 bg-emerald-50/50"
+                                        : "text-rose-600 border-rose-200 bg-rose-50/50"
+                                    }`}
+                                  >
+                                    {a.conditionAfter}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-[11px] text-muted-foreground py-3">
+                                <span>{assignedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}</span>
+                              </TableCell>
+                              <TableCell className="text-[11px] text-muted-foreground py-3">
+                                {lockedDate ? (
+                                  <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                    {lockedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/45 italic text-[10px]">Not locked yet</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-[11px] text-muted-foreground py-3">
+                                {openedDate ? (
+                                  <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                    {openedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/45 italic text-[10px]">Not opened yet</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-[11px] text-muted-foreground py-3">
+                                {returnedDate ? (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                    {returnedDate.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/45 italic text-[10px]">Not returned yet</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="flex justify-center items-center gap-1.5">
+                                  {!a.openedAt && !a.returnedAt && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleOpenAssignment(a.id)}
+                                      className="text-[10px] h-7 px-2 font-bold uppercase rounded-lg border-blue-200 hover:bg-blue-50/50 text-blue-600 dark:border-blue-900 dark:hover:bg-blue-950/20"
+                                      disabled={openPadlockMutation.isPending}
+                                    >
+                                      Mark Opened
+                                    </Button>
+                                  )}
+                                  {!a.returnedAt && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedAssignmentId(a.id);
+                                        setReturnOpen(true);
+                                      }}
+                                      className="text-[10px] h-7 px-2 font-bold uppercase rounded-lg bg-amber-600 hover:bg-amber-700"
+                                    >
+                                      Return
+                                    </Button>
+                                  )}
+                                  {a.returnedAt && (
+                                    <Badge variant="secondary" className="text-[10px] uppercase px-2 py-1 font-bold">Returned</Badge>
+                                  )}
+                                  
+                                  {isCashier && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleOpenEditModal(a)}
+                                      className="h-7 w-7 p-0 rounded-lg hover:bg-muted"
+                                      title="Edit Assignment Details"
+                                    >
+                                      <Settings2 className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             )}
           </motion.div>
