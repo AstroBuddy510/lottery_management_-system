@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, gamesTable, dailyCalculationsTable } from "@workspace/db";
+import { db, gamesTable, dailyCalculationsTable, usersTable } from "@workspace/db";
 import { eq, lt, and, not, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 
@@ -16,20 +16,46 @@ async function generateEventNumber(): Promise<string> {
 }
 
 async function autoClosePastGames(): Promise<void> {
-  // Let games remain live during their lifetime; locked/closed only when running calculations
-  /*
   await db
     .update(gamesTable)
-    .set({ status: "closed", updatedAt: new Date() })
-    .where(and(lt(gamesTable.closeAt, new Date()), not(eq(gamesTable.status, "closed"))));
-  */
+    .set({
+      status: "closed",
+      closedAt: new Date(),
+      closeType: "automatic",
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        lt(gamesTable.closeAt, new Date()),
+        not(eq(gamesTable.status, "closed"))
+      )
+    );
 }
 
 router.get("/games", requireAuth, async (req, res) => {
   await autoClosePastGames();
   const games = await db
-    .select()
+    .select({
+      id: gamesTable.id,
+      eventNumber: gamesTable.eventNumber,
+      name: gamesTable.name,
+      description: gamesTable.description,
+      logoUrl: gamesTable.logoUrl,
+      goLiveAt: gamesTable.goLiveAt,
+      closeAt: gamesTable.closeAt,
+      status: gamesTable.status,
+      createdBy: gamesTable.createdBy,
+      winningNumbers: gamesTable.winningNumbers,
+      machineNumbers: gamesTable.machineNumbers,
+      closedBy: gamesTable.closedBy,
+      closedAt: gamesTable.closedAt,
+      closeType: gamesTable.closeType,
+      createdAt: gamesTable.createdAt,
+      updatedAt: gamesTable.updatedAt,
+      closedByName: usersTable.fullName,
+    })
     .from(gamesTable)
+    .leftJoin(usersTable, eq(gamesTable.closedBy, usersTable.id))
     .orderBy(gamesTable.createdAt);
 
   const calculations = await db
@@ -177,6 +203,43 @@ router.delete(
 
     await db.delete(gamesTable).where(eq(gamesTable.id, id));
     res.status(204).send();
+  },
+);
+
+router.post(
+  "/games/:id/close",
+  requireAuth,
+  requireRole("director", "administrator"),
+  async (req, res) => {
+    const id = req.params["id"] as string;
+    const [existing] = await db
+      .select()
+      .from(gamesTable)
+      .where(eq(gamesTable.id, id))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ error: "Game not found" });
+      return;
+    }
+    if (existing.status === "closed") {
+      res.status(400).json({ error: "Game is already closed" });
+      return;
+    }
+
+    const [updated] = await db
+      .update(gamesTable)
+      .set({
+        status: "closed",
+        closedBy: req.user!.userId,
+        closedAt: new Date(),
+        closeType: "manual",
+        updatedAt: new Date(),
+      })
+      .where(eq(gamesTable.id, id))
+      .returning();
+
+    res.json(updated);
   },
 );
 

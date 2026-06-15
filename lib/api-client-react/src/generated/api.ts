@@ -442,6 +442,76 @@ export const useDeleteGame = <TError = ErrorType<unknown>,
       return useMutation(getDeleteGameMutationOptions(options));
     }
 
+export const getCloseGameUrl = (id: string,) => {
+
+
+
+
+  return `/api/games/${id}/close`
+}
+
+/**
+ * @summary Manually close a game event (Kill switch)
+ */
+export const closeGame = async (id: string, options?: RequestInit): Promise<Game> => {
+
+  return customFetch<Game>(getCloseGameUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getCloseGameMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof closeGame>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof closeGame>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['closeGame'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof closeGame>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  closeGame(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CloseGameMutationResult = NonNullable<Awaited<ReturnType<typeof closeGame>>>
+
+    export type CloseGameMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Manually close a game event (Kill switch)
+ */
+export const useCloseGame = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof closeGame>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof closeGame>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getCloseGameMutationOptions(options));
+    }
+
 export const getListGameTemplatesUrl = () => {
 
 

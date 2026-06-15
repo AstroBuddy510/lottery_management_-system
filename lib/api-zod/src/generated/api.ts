@@ -22,6 +22,10 @@ export const ListGamesResponseItem = zod.object({
   "status": zod.enum(['offline', 'live', 'closed']),
   "winningNumbers": zod.string().nullish(),
   "machineNumbers": zod.string().nullish(),
+  "closedBy": zod.string().nullish(),
+  "closedAt": zod.string().nullish(),
+  "closeType": zod.string().nullish(),
+  "closedByName": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })
@@ -67,6 +71,10 @@ export const UpdateGameResponse = zod.object({
   "status": zod.enum(['offline', 'live', 'closed']),
   "winningNumbers": zod.string().nullish(),
   "machineNumbers": zod.string().nullish(),
+  "closedBy": zod.string().nullish(),
+  "closedAt": zod.string().nullish(),
+  "closeType": zod.string().nullish(),
+  "closedByName": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })
@@ -77,6 +85,33 @@ export const UpdateGameResponse = zod.object({
  */
 export const DeleteGameParams = zod.object({
   "id": zod.coerce.string()
+})
+
+
+/**
+ * @summary Manually close a game event (Kill switch)
+ */
+export const CloseGameParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const CloseGameResponse = zod.object({
+  "id": zod.string(),
+  "eventNumber": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "logoUrl": zod.string().nullish(),
+  "goLiveAt": zod.string(),
+  "closeAt": zod.string(),
+  "status": zod.enum(['offline', 'live', 'closed']),
+  "winningNumbers": zod.string().nullish(),
+  "machineNumbers": zod.string().nullish(),
+  "closedBy": zod.string().nullish(),
+  "closedAt": zod.string().nullish(),
+  "closeType": zod.string().nullish(),
+  "closedByName": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional()
 })
 
 

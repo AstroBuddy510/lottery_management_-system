@@ -32,6 +32,9 @@ export const gamesTable = pgTable("games", {
     .references(() => usersTable.id),
   winningNumbers: varchar("winning_numbers", { length: 50 }),
   machineNumbers: varchar("machine_numbers", { length: 50 }),
+  closedBy: uuid("closed_by").references(() => usersTable.id),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  closeType: varchar("close_type", { length: 20 }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

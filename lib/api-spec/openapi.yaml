@@ -114,6 +114,27 @@ paths:
         "204":
           description: Deleted
 
+  /games/{id}/close:
+    post:
+      operationId: closeGame
+      tags: [settings]
+      summary: Manually close a game event (Kill switch)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Game manually closed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Game"
+
   /game-templates:
     get:
       operationId: listGameTemplates
@@ -3636,6 +3657,14 @@ components:
         winningNumbers:
           type: ["string", "null"]
         machineNumbers:
+          type: ["string", "null"]
+        closedBy:
+          type: ["string", "null"]
+        closedAt:
+          type: ["string", "null"]
+        closeType:
+          type: ["string", "null"]
+        closedByName:
           type: ["string", "null"]
         createdAt:
           type: string

@@ -955,6 +955,14 @@ export interface Game {
   winningNumbers?: string | null;
   /** @nullable */
   machineNumbers?: string | null;
+  /** @nullable */
+  closedBy?: string | null;
+  /** @nullable */
+  closedAt?: string | null;
+  /** @nullable */
+  closeType?: string | null;
+  /** @nullable */
+  closedByName?: string | null;
   createdAt: string;
   updatedAt?: string;
 }

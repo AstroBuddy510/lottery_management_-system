@@ -328,6 +328,8 @@ export function Games() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editGame, setEditGame] = useState<Game | null>(null);
   const [form, setForm] = useState<GameFormState>(EMPTY_FORM);
+  const [gameToClose, setGameToClose] = useState<Game | null>(null);
+  const [isClosingGame, setIsClosingGame] = useState(false);
 
   const [closedSearch, setClosedSearch] = useState("");
   const [closedDate, setClosedDate] = useState("");
@@ -459,6 +461,24 @@ export function Games() {
       invalidate();
     } catch {
       toast.error("Failed to delete game.");
+    }
+  };
+
+  const handleConfirmClose = async () => {
+    if (!gameToClose) return;
+    setIsClosingGame(true);
+    try {
+      await customFetch(`/api/games/${gameToClose.id}/close`, {
+        method: "POST",
+      });
+      toast.success(`Game "${gameToClose.name}" has been manually closed.`);
+      setGameToClose(null);
+      invalidate();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to close game.";
+      toast.error(msg);
+    } finally {
+      setIsClosingGame(false);
     }
   };
 
@@ -601,6 +621,17 @@ export function Games() {
             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
               {isClosed ? "Closed" : g.status === "live" ? "Live" : "Offline"}
             </span>
+            {!isClosed && isAdminOrDirector && (
+              <Button
+                size="icon"
+                variant="destructive"
+                className="h-6 w-6 rounded-md bg-rose-600 hover:bg-rose-700 hover:text-white text-white shrink-0 ml-1 shadow-xs transition-all duration-200 hover:scale-105"
+                onClick={() => setGameToClose(g)}
+                title="Manual Close (Kill Switch)"
+              >
+                <Square className="h-2.5 w-2.5 fill-current" />
+              </Button>
+            )}
           </div>
           {!isClosed && (
             <div className="flex gap-1">
@@ -1096,6 +1127,26 @@ export function Games() {
                     {selectedGameForAudit.name} • Closed at {formatDateTime(selectedGameForAudit.closeAt)}
                   </p>
                 )}
+                {selectedGameForAudit && (selectedGameForAudit.closedAt || selectedGameForAudit.closeType) && (
+                  <div className="mt-2 text-xs flex flex-wrap items-center gap-2 bg-muted/65 dark:bg-muted/15 border rounded-lg px-2.5 py-1.5 w-fit">
+                    <span className="font-semibold text-foreground/80">Closure Audit:</span>
+                    <Badge variant={selectedGameForAudit.closeType === "manual" ? "destructive" : "secondary"} className="text-[9px] font-bold px-1.5 py-0 uppercase tracking-wider">
+                      {selectedGameForAudit.closeType === "manual" ? "Manual Close" : "Auto Close"}
+                    </Badge>
+                    <span className="text-muted-foreground">•</span>
+                    <span className="text-muted-foreground">
+                      Time: <span className="font-mono font-medium text-foreground">{formatDateTime(selectedGameForAudit.closedAt || selectedGameForAudit.closeAt)}</span>
+                    </span>
+                    {selectedGameForAudit.closeType === "manual" && selectedGameForAudit.closedByName && (
+                      <>
+                        <span className="text-muted-foreground">•</span>
+                        <span className="text-muted-foreground">
+                          Authorized By: <span className="font-semibold text-foreground">{selectedGameForAudit.closedByName}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
               {auditReport && (
                 <Button
@@ -1327,6 +1378,93 @@ export function Games() {
           <DialogFooter className="pt-2">
             <Button size="sm" onClick={() => setSelectedFolderForView(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Close / Kill Switch Confirmation Dialog */}
+      <Dialog open={!!gameToClose} onOpenChange={(open) => {
+        if (!open) setGameToClose(null);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-destructive flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-rose-600" />
+              Emergency Game Closure Confirmation
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              You are about to execute a manual close (kill switch) on this game event. This action is irreversible and will immediately stop all entry submissions.
+            </p>
+          </DialogHeader>
+
+          {gameToClose && (
+            <div className="bg-muted/40 dark:bg-muted/10 border border-border/50 rounded-xl p-4 space-y-3">
+              <div className="flex gap-3.5 items-start">
+                {gameToClose.logoUrl ? (
+                  <img src={gameToClose.logoUrl} alt={gameToClose.name} className="w-10 h-10 object-contain rounded-lg bg-background p-1 border border-border/40 shrink-0" />
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-lg text-white flex items-center justify-center font-extrabold text-xs shadow shrink-0"
+                    style={{ background: getGameGradient(gameToClose.name) }}
+                  >
+                    {gameToClose.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-sm text-foreground leading-snug">{gameToClose.name}</h4>
+                  <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-bold mt-0.5">Event #{gameToClose.eventNumber}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                <div>
+                  <span className="text-[10px] text-muted-foreground block font-medium">Current Status</span>
+                  <span className="font-semibold text-foreground uppercase tracking-wider text-[10px]">{gameToClose.status}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground block font-medium">Scheduled Close</span>
+                  <span className="font-mono text-foreground text-[10px] font-semibold">{formatDateTime(gameToClose.closeAt)}</span>
+                </div>
+              </div>
+
+              {gameToClose.description && (
+                <div className="text-[11px] text-muted-foreground border-t border-border/40 pt-2 mt-1 leading-relaxed">
+                  <span className="font-medium text-foreground block mb-0.5 text-[10px]">Description</span>
+                  {gameToClose.description}
+                </div>
+              )}
+
+              <div className="border-t border-border/40 pt-2 space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground font-medium">Triggered By:</span>
+                  <span className="font-semibold text-foreground">{user?.fullName || user?.role}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground font-medium">Execution Time:</span>
+                  <span className="font-mono font-semibold text-foreground">{new Date().toLocaleString("en-GB")}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setGameToClose(null)}
+              className="rounded-xl font-medium"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleConfirmClose}
+              disabled={isClosingGame}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl flex items-center gap-1.5"
+            >
+              {isClosingGame ? "Executing Closure..." : "Confirm Close Event"}
             </Button>
           </DialogFooter>
         </DialogContent>
