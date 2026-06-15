@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Printer } from "lucide-react";
-import { generateAgentLedgerPDF } from "@/lib/pdf-generator";
+import { generateAgentLedgerPDF, generateSmartDebtSimulationPDF } from "@/lib/pdf-generator";
 
 const GHS = (v: number | string) =>
   `GH₵ ${Number(v).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -416,6 +416,23 @@ export function Reserve() {
         {/* ── SMART DEBT MANAGEMENT TAB ───────────────────────────── */}
         {tab === "debt" && (
           <>
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border shadow-sm">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Smart Debt Repayment Plan</h2>
+                <p className="text-xs text-slate-500">Configure strategies and caps, preview distributions, and export summaries.</p>
+              </div>
+              <Button
+                onClick={() => generateSmartDebtSimulationPDF(simulation, strategy, maxAmount, reserveBalance, totalOutstanding, simTotalApplied, simNewBalance)}
+                className="flex items-center gap-2 font-semibold"
+                variant="outline"
+                disabled={debtList.length === 0}
+              >
+                <Printer className="w-4 h-4" />
+                Export Simulation PDF
+              </Button>
+            </div>
+
             {/* Explainer Banner */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 flex gap-4 shadow-sm">
               <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0 mt-0.5">

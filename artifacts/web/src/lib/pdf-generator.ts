@@ -1256,4 +1256,118 @@ export async function generateAgentLedgerPDF(
   doc.save(`agent_ledger_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
+// ─── 10. SMART DEBT SIMULATION REPORT PDF ───
+export async function generateSmartDebtSimulationPDF(
+  simulation: any[],
+  strategy: string,
+  cap: string | number,
+  reserveBalance: number,
+  totalOutstanding: number,
+  totalApplied: number,
+  newBalance: number
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF() as any;
+
+  const strategyLabel = strategy === "fifo" ? "FIFO (First In, First Out)" : strategy === "lifo" ? "LIFO (Last In, First Out)" : "Performance-Weighted (Best Performer)";
+
+  const startY = drawBrandHeader(
+    doc,
+    "Smart Debt Allocation Statement",
+    [
+      { label: "Report Ref", value: `SDA-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Repayment Strategy", value: strategyLabel },
+    ],
+    "Pool & Allocation Cap Summary",
+    [
+      `Available Reserve Balance: ${fmt(reserveBalance)}`,
+      `Allocation Cap Applied: ${cap && Number(cap) > 0 ? fmt(cap) : "No Cap (Full Pool)"}`,
+      `Total Debt Outstanding: ${fmt(totalOutstanding)}`,
+      `Projected Allocation: ${fmt(totalApplied)}`,
+      `Projected Reserve After: ${fmt(newBalance)}`
+    ],
+    logoImg
+  );
+
+  const columns = [
+    { header: "Writer Code & Name", dataKey: "writer" },
+    { header: "Agent Code", dataKey: "agent" },
+    { header: "Calc Date", dataKey: "calcDate" },
+    { header: "Outstanding Debt", dataKey: "outstanding" },
+    { header: "Allocated Amount", dataKey: "allocated" },
+    { header: "Projected Remaining", dataKey: "remaining" },
+    { header: "Allocation Status", dataKey: "status" },
+  ];
+
+  const tableData = simulation.map((d) => {
+    const outstanding = parseFloat(d.outstandingAmount || "0");
+    const allocated = d.toApply || 0;
+    const remaining = d.remaining || 0;
+    
+    let status = "Deferred";
+    if (allocated > 0) {
+      status = remaining === 0 ? "Settled" : "Partial";
+    }
+
+    return {
+      writer: `${d.writerFullCode || "—"}\n(${d.writerFullName || "—"})`,
+      agent: d.agentFullCode || "—",
+      calcDate: fmtDate(d.calcDate),
+      outstanding: fmt(outstanding),
+      allocated: fmt(allocated),
+      remaining: fmt(remaining),
+      status: status.toUpperCase(),
+    };
+  });
+
+  autoTable(doc, {
+    columns,
+    body: tableData,
+    startY,
+    theme: "striped",
+    headStyles: { ...tableTheme.headStyles, halign: "right" },
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: {
+      writer: { halign: "left" },
+      agent: { halign: "left" },
+      calcDate: { halign: "center" },
+      status: { halign: "center" },
+    },
+    margin: tableTheme.margin,
+  });
+
+  let nextY = doc.lastAutoTable.finalY + 10;
+  if (nextY > 230) {
+    doc.addPage();
+    nextY = 20;
+  }
+
+  // Summary box
+  const pageWidth = doc.internal.pageSize.width;
+  doc.setFillColor(241, 245, 249);
+  doc.rect(pageWidth - 95, nextY, 80, 28, "F");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text("Total Debt Outstanding:", pageWidth - 90, nextY + 7);
+  doc.text("Projected Allocation:", pageWidth - 90, nextY + 14);
+  doc.text("Projected Reserve After:", pageWidth - 90, nextY + 22);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(40, 40, 40);
+  doc.text(fmt(totalOutstanding), pageWidth - 20, nextY + 7, { align: "right" });
+  doc.text(fmt(totalApplied), pageWidth - 20, nextY + 14, { align: "right" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(newBalance < 0 ? 220 : 16, newBalance < 0 ? 38 : 124, newBalance < 0 ? 38 : 65);
+  doc.text(fmt(newBalance), pageWidth - 20, nextY + 23, { align: "right" });
+
+  drawSignatureBlock(doc, "Prepared By (Treasury Manager)", "Approved By (Finance Director)");
+  doc.save(`smart_debt_allocation_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+
 

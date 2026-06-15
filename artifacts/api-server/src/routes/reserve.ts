@@ -103,10 +103,16 @@ router.get(
 
     const allAllocations = await db.select().from(reserveAllocationsTable);
 
-    const covered = new Map<string, number>();
+    const autoCovered = new Map<string, number>();
+    const manualCovered = new Map<string, number>();
     for (const a of allAllocations) {
       const key = `${a.writerId}:${a.allocationDate}`;
-      covered.set(key, (covered.get(key) ?? 0) + parseFloat(a.amountDrawn));
+      const amount = parseFloat(a.amountDrawn);
+      if (a.reason?.includes("Auto-draw")) {
+        autoCovered.set(key, (autoCovered.get(key) ?? 0) + amount);
+      } else {
+        manualCovered.set(key, (manualCovered.get(key) ?? 0) + amount);
+      }
     }
 
     const agentTotalGross = new Map<string, number>();
@@ -114,20 +120,26 @@ router.get(
       agentTotalGross.set(c.agentId, (agentTotalGross.get(c.agentId) ?? 0) + parseFloat(c.grossSales));
     }
 
-    const result = calcs.map((c) => {
-      const currentBalance = Math.abs(parseFloat(c.writerBalance));
-      const key = `${c.writerId}:${c.calcDate}`;
-      const amountCovered = covered.get(key) ?? 0;
-      const originalDeficit = currentBalance + amountCovered;
-      const outstanding = currentBalance;
-      return {
-        ...c,
-        deficitAmount: originalDeficit.toFixed(2),
-        amountCovered: amountCovered.toFixed(2),
-        outstandingAmount: outstanding.toFixed(2),
-        agentTotalGross: (agentTotalGross.get(c.agentId) ?? 0).toFixed(2),
-      };
-    });
+    const result = calcs
+      .map((c) => {
+        const currentBalance = Math.abs(parseFloat(c.writerBalance));
+        const key = `${c.writerId}:${c.calcDate}`;
+        const autoDraw = autoCovered.get(key) ?? 0;
+        const manual = manualCovered.get(key) ?? 0;
+
+        const originalDeficit = currentBalance + autoDraw;
+        const amountCovered = autoDraw + manual;
+        const outstanding = Math.max(0, currentBalance - manual);
+
+        return {
+          ...c,
+          deficitAmount: originalDeficit.toFixed(2),
+          amountCovered: amountCovered.toFixed(2),
+          outstandingAmount: outstanding.toFixed(2),
+          agentTotalGross: (agentTotalGross.get(c.agentId) ?? 0).toFixed(2),
+        };
+      })
+      .filter((d) => parseFloat(d.outstandingAmount) > 0.005);
 
     res.json(result);
   },
@@ -324,10 +336,16 @@ router.post(
       .where(lt(dailyCalculationsTable.writerBalance, "0"));
 
     const allAllocations = await db.select().from(reserveAllocationsTable);
-    const covered = new Map<string, number>();
+    const autoCovered = new Map<string, number>();
+    const manualCovered = new Map<string, number>();
     for (const a of allAllocations) {
       const key = `${a.writerId}:${a.allocationDate}`;
-      covered.set(key, (covered.get(key) ?? 0) + parseFloat(a.amountDrawn));
+      const amount = parseFloat(a.amountDrawn);
+      if (a.reason?.includes("Auto-draw")) {
+        autoCovered.set(key, (autoCovered.get(key) ?? 0) + amount);
+      } else {
+        manualCovered.set(key, (manualCovered.get(key) ?? 0) + amount);
+      }
     }
 
     const agentTotalGross = new Map<string, number>();
@@ -339,11 +357,11 @@ router.post(
       .map((c) => {
         const deficit = Math.abs(parseFloat(c.writerBalance));
         const key = `${c.writerId}:${c.calcDate}`;
-        const amountCoveredVal = covered.get(key) ?? 0;
-        const outstanding = deficit;
+        const manual = manualCovered.get(key) ?? 0;
+        const outstanding = Math.max(0, deficit - manual);
         return { ...c, outstanding, agentTotalGrossVal: agentTotalGross.get(c.agentId) ?? 0 };
       })
-      .filter((d) => d.outstanding > 0);
+      .filter((d) => d.outstanding > 0.005);
 
     if (strategy === "fifo") {
       debts.sort((a, b) => a.calcDate.localeCompare(b.calcDate));
