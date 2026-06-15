@@ -544,10 +544,19 @@ router.get(
     for (const c of allCalcs) calcMap.set(`${c.writerId}__${c.calcDate}`, c);
 
     const allAllocs = await db.select().from(reserveAllocationsTable);
+    const autoCovered = new Map<string, number>();
+    const manualCovered = new Map<string, number>();
     const allocMap = new Map<string, number>();
+
     for (const a of allAllocs) {
       const key = `${a.writerId}__${a.allocationDate}`;
-      allocMap.set(key, (allocMap.get(key) ?? 0) + parseFloat(a.amountDrawn));
+      const amount = parseFloat(a.amountDrawn);
+      allocMap.set(key, (allocMap.get(key) ?? 0) + amount);
+      if (a.reason?.includes("Auto-draw")) {
+        autoCovered.set(key, (autoCovered.get(key) ?? 0) + amount);
+      } else {
+        manualCovered.set(key, (manualCovered.get(key) ?? 0) + amount);
+      }
     }
 
     const pending = allWinsEntries.filter((e) => !e.locked);
@@ -558,12 +567,19 @@ router.get(
     let remainingDeficit = 0;
     for (const calc of allCalcs) {
       const balance = parseFloat(calc.writerBalance);
-      const draws = allocMap.get(`${calc.writerId}__${calc.calcDate}`) ?? 0;
+      const key = `${calc.writerId}__${calc.calcDate}`;
+      const autoDraw = autoCovered.get(key) ?? 0;
+      const manual = manualCovered.get(key) ?? 0;
+      const draws = autoDraw + manual;
       const wins = parseFloat(calc.winsAmount);
-      if (balance >= 0) { clearedByAgentNet += wins - draws; }
-      else {
-        remainingDeficit += Math.abs(balance);
-        const ap = wins - draws - Math.abs(balance);
+
+      if (balance >= 0) {
+        clearedByAgentNet += wins - draws;
+      } else {
+        const currentBalance = Math.abs(balance);
+        const outstanding = Math.max(0, currentBalance - manual);
+        remainingDeficit += outstanding;
+        const ap = wins - draws - outstanding;
         if (ap > 0) clearedByAgentNet += ap;
       }
     }
@@ -600,8 +616,30 @@ router.get(
         const agent = agentMap.get(e.agentId);
         const draws = calc ? (allocMap.get(`${calc.writerId}__${calc.calcDate}`) ?? 0) : 0;
         const balance = calc ? parseFloat(calc.writerBalance) : 0;
+        const currentBalance = calc ? Math.abs(balance) : 0;
+        const manual = calc ? (manualCovered.get(`${calc.writerId}__${calc.calcDate}`) ?? 0) : 0;
+        const outstanding = calc ? Math.max(0, currentBalance - manual) : 0;
         const daysToCalc = calc ? Math.max(0, Math.round((new Date(calc.calcDate).getTime() - new Date(e.entryDate).getTime()) / 86400000)) : 0;
-        return { calcDate: e.entryDate, writerId: e.writerId, writerName: e.writerName, writerCode: e.writerCode, agentName: agent?.fullName ?? "—", winsAmount: e.winsAmount, clearedBy: balance < 0 ? "deficit" : draws > 0 ? "reserve" : "agent_net", reserveDrawn: draws.toFixed(2), daysToCalculate: daysToCalc, writerBalance: calc?.writerBalance ?? "0.00" };
+
+        let clearedBy: "deficit" | "reserve" | "agent_net" = "agent_net";
+        if (balance < 0) {
+          clearedBy = outstanding > 0.005 ? "deficit" : "reserve";
+        } else if (draws > 0) {
+          clearedBy = "reserve";
+        }
+
+        return {
+          calcDate: e.entryDate,
+          writerId: e.writerId,
+          writerName: e.writerName,
+          writerCode: e.writerCode,
+          agentName: agent?.fullName ?? "—",
+          winsAmount: e.winsAmount,
+          clearedBy,
+          reserveDrawn: draws.toFixed(2),
+          daysToCalculate: daysToCalc,
+          writerBalance: calc?.writerBalance ?? "0.00"
+        };
       });
 
     res.json({
