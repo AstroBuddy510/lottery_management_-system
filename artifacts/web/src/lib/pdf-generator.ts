@@ -1369,5 +1369,114 @@ export async function generateSmartDebtSimulationPDF(
   doc.save(`smart_debt_allocation_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
+// ─── 11. COMPANY EXPENSES STATEMENT REPORT PDF ───
+export async function generateCompanyExpensesPDF(
+  expenses: any[],
+  dateFrom: string,
+  dateTo: string
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF() as any;
+
+  // Compute metrics
+  let total = 0;
+  let recurringTotal = 0;
+  let nonRecurringTotal = 0;
+  expenses.forEach((item) => {
+    const val = parseFloat(item.amount);
+    total += val;
+    if (item.type === "recurring") {
+      recurringTotal += val;
+    } else {
+      nonRecurringTotal += val;
+    }
+  });
+
+  const startY = drawBrandHeader(
+    doc,
+    "Company Expenses Statement",
+    [
+      { label: "Report Ref", value: `EXP-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Filter Range", value: `${dateFrom} to ${dateTo}` },
+    ],
+    "Financial Summary",
+    [
+      `Total Combined Expenditures: ${fmt(total)}`,
+      `Recurring Expenses: ${fmt(recurringTotal)}`,
+      `Non-Recurring Expenses: ${fmt(nonRecurringTotal)}`,
+    ],
+    logoImg
+  );
+
+  const columns = [
+    { header: "Date & Time", dataKey: "dateTime" },
+    { header: "Expense Type", dataKey: "type" },
+    { header: "Description", dataKey: "description" },
+    { header: "Amount", dataKey: "amount" },
+    { header: "Payee", dataKey: "payee" },
+    { header: "Authorizing Officer", dataKey: "authorizer" },
+    { header: "Issued Cashier", dataKey: "cashier" },
+  ];
+
+  const tableData = expenses.map((d) => {
+    const amountVal = parseFloat(d.amount || "0");
+    const formattedDate = d.createdAt ? new Date(d.createdAt).toLocaleString("en-GB") : "—";
+    
+    return {
+      dateTime: formattedDate,
+      type: (d.type || "").toUpperCase(),
+      description: d.description || "—",
+      amount: fmt(amountVal),
+      payee: d.payeeName || "—",
+      authorizer: d.authorizingOfficer || "—",
+      cashier: d.cashierName || "System",
+    };
+  });
+
+  autoTable(doc, {
+    columns,
+    body: tableData,
+    startY,
+    theme: "striped",
+    headStyles: { ...tableTheme.headStyles, halign: "left" },
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "left" },
+    columnStyles: {
+      amount: { halign: "right" },
+      type: { halign: "center" },
+      dateTime: { halign: "center" },
+    },
+    margin: tableTheme.margin,
+  });
+
+  let nextY = doc.lastAutoTable.finalY + 10;
+  if (nextY > 230) {
+    doc.addPage();
+    nextY = 20;
+  }
+
+  // Summary box
+  const pageWidth = doc.internal.pageSize.width;
+  doc.setFillColor(241, 245, 249);
+  doc.rect(pageWidth - 95, nextY, 80, 20, "F");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text("Total Expenditures:", pageWidth - 90, nextY + 7);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(40, 40, 40);
+  doc.text(fmt(total), pageWidth - 20, nextY + 7, { align: "right" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(total > 0 ? 220 : 16, total > 0 ? 38 : 124, total > 0 ? 38 : 65);
+  doc.text(fmt(total), pageWidth - 20, nextY + 14, { align: "right" });
+
+  drawSignatureBlock(doc, "Prepared By (Finance Officer)", "Approved By (Managing Director)");
+  doc.save(`company_expenses_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 
 

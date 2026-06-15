@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useListCompanyExpenses,
   useCreateCompanyExpense,
@@ -11,6 +11,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { generateCompanyExpensesPDF } from "@/lib/pdf-generator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +53,43 @@ export function CompanyExpenses() {
   const { user } = useAuth();
 
   const isDirectorOrAdmin = user?.role === "director" || user?.role === "administrator";
+  
+  // ── Server-Sent Events (SSE) Real-Time Updates ──
+  useEffect(() => {
+    if (!isDirectorOrAdmin) return;
+
+    const token = localStorage.getItem("accessToken");
+    if (!token) return;
+
+    const sseUrl = `/api/company-expenses/sse?token=${encodeURIComponent(token)}`;
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "EXPENSE_ADDED") {
+          toast({
+            title: "Real-time Update",
+            description: `A new expense for ${fmtGHS(Number(data.expense.amount))} has been recorded by ${data.expense.cashierName || "System"}.`,
+          });
+          // Invalidate cache to trigger immediate update of the grid and the main summaries
+          qc.invalidateQueries({ queryKey: ["/api/company-expenses"] });
+          qc.invalidateQueries({ queryKey: getGetReserveBalanceQueryKey() });
+          qc.invalidateQueries({ queryKey: getGetSalaryWalletQueryKey() });
+        }
+      } catch (err) {
+        console.error("Error parsing SSE message:", err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("SSE Connection Error:", err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [isDirectorOrAdmin, qc, toast]);
 
   const { data: reserveBalRaw, isLoading: loadingReserve } = useGetReserveBalance({
     query: {
@@ -361,6 +399,25 @@ export function CompanyExpenses() {
 
       {/* Statement Table */}
       <Card className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden relative z-10">
+        <CardHeader className="flex flex-row items-center justify-between p-5 pb-3 flex-wrap gap-4 border-b border-border/40 bg-muted/10">
+          <div>
+            <CardTitle className="text-sm font-bold text-foreground">Statement Ledger</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground font-medium">Showing operational receipts and expense streams</CardDescription>
+          </div>
+          <Button
+            onClick={() => {
+              const startDateVal = queryParams.startDate ? new Date(queryParams.startDate).toLocaleDateString("en-GB") : "Beginning";
+              const endDateVal = queryParams.endDate ? new Date(queryParams.endDate).toLocaleDateString("en-GB") : "Present";
+              generateCompanyExpensesPDF(expenses || [], startDateVal, endDateVal);
+            }}
+            variant="outline"
+            className="gap-2 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/10 font-bold text-xs h-9 rounded-xl shadow-xs transition-all duration-300"
+            disabled={!expenses || expenses.length === 0}
+          >
+            <FileText className="w-4 h-4" />
+            Export to PDF
+          </Button>
+        </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
