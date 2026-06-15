@@ -115,13 +115,14 @@ router.get(
     }
 
     const result = calcs.map((c) => {
-      const deficit = Math.abs(parseFloat(c.writerBalance));
+      const currentBalance = Math.abs(parseFloat(c.writerBalance));
       const key = `${c.writerId}:${c.calcDate}`;
       const amountCovered = covered.get(key) ?? 0;
-      const outstanding = Math.max(0, deficit - amountCovered);
+      const originalDeficit = currentBalance + amountCovered;
+      const outstanding = currentBalance;
       return {
         ...c,
-        deficitAmount: deficit.toFixed(2),
+        deficitAmount: originalDeficit.toFixed(2),
         amountCovered: amountCovered.toFixed(2),
         outstandingAmount: outstanding.toFixed(2),
         agentTotalGross: (agentTotalGross.get(c.agentId) ?? 0).toFixed(2),
@@ -339,7 +340,7 @@ router.post(
         const deficit = Math.abs(parseFloat(c.writerBalance));
         const key = `${c.writerId}:${c.calcDate}`;
         const amountCoveredVal = covered.get(key) ?? 0;
-        const outstanding = Math.max(0, deficit - amountCoveredVal);
+        const outstanding = deficit;
         return { ...c, outstanding, agentTotalGrossVal: agentTotalGross.get(c.agentId) ?? 0 };
       })
       .filter((d) => d.outstanding > 0);

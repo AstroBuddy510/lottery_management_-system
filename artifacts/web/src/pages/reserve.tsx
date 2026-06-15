@@ -20,6 +20,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { Printer } from "lucide-react";
+import { generateAgentLedgerPDF } from "@/lib/pdf-generator";
 
 const GHS = (v: number | string) =>
   `GH₵ ${Number(v).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -755,6 +757,23 @@ function AgentLedgerTab({
 
   return (
     <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-xl border shadow-sm">
+        <div>
+          <h2 className="text-lg font-bold text-slate-800">Agent Ledger Records</h2>
+          <p className="text-xs text-slate-500">View and export receipts, payment statuses, and outstanding balance summaries.</p>
+        </div>
+        <Button
+          onClick={() => generateAgentLedgerPDF(filtered, dateFrom, dateTo)}
+          className="flex items-center gap-2 font-semibold"
+          variant="outline"
+          disabled={filtered.length === 0}
+        >
+          <Printer className="w-4 h-4" />
+          Export Ledger PDF
+        </Button>
+      </div>
+
       {/* Filters */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-xl border shadow-sm items-end">
         <div className="space-y-1.5">

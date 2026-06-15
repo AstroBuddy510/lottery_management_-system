@@ -1148,3 +1148,112 @@ export async function generatePadlockAssignmentsPDF(
   doc.save(`padlock_assignments_history.pdf`);
 }
 
+// ─── 9. AGENT LEDGER REPORT PDF ───
+export async function generateAgentLedgerPDF(
+  receipts: any[],
+  dateFrom: string,
+  dateTo: string
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF() as any;
+
+  // Calculate totals
+  const totalDue = receipts.reduce((sum, r) => sum + parseFloat(r.amountDue || "0"), 0);
+  const totalPaid = receipts.reduce((sum, r) => sum + parseFloat(r.amountPaid || "0"), 0);
+  const totalShortfall = Math.max(0, totalDue - totalPaid);
+
+  const startY = drawBrandHeader(
+    doc,
+    "Agent Ledger Statement",
+    [
+      { label: "Report Ref", value: `LDG-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
+    ],
+    "Report Summary",
+    [
+      `Total Receipts: ${receipts.length}`,
+      `Total Amount Due: ${fmt(totalDue)}`,
+      `Total Amount Paid: ${fmt(totalPaid)}`,
+      `Total Shortfall: ${fmt(totalShortfall)}`
+    ],
+    logoImg
+  );
+
+  const columns = [
+    { header: "Agent Code", dataKey: "agentCode" },
+    { header: "Agent Name", dataKey: "agentName" },
+    { header: "Calc Date", dataKey: "calcDate" },
+    { header: "Amount Due", dataKey: "amountDue" },
+    { header: "Amount Paid", dataKey: "amountPaid" },
+    { header: "Shortfall", dataKey: "shortfall" },
+    { header: "Cashier", dataKey: "cashier" },
+    { header: "Notes", dataKey: "notes" },
+  ];
+
+  const tableData = receipts.map((r) => {
+    const due = parseFloat(r.amountDue || "0");
+    const paid = parseFloat(r.amountPaid || "0");
+    const shortfall = Math.max(0, due - paid);
+    return {
+      agentCode: r.agentFullCode || "—",
+      agentName: r.agentName || "—",
+      calcDate: fmtDate(r.calcDate),
+      amountDue: fmt(due),
+      amountPaid: fmt(paid),
+      shortfall: fmt(shortfall),
+      cashier: r.markedByName || "—",
+      notes: r.notes || "—",
+    };
+  });
+
+  autoTable(doc, {
+    columns,
+    body: tableData,
+    startY,
+    theme: "striped",
+    headStyles: { ...tableTheme.headStyles, halign: "right" },
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: {
+      agentCode: { halign: "left" },
+      agentName: { halign: "left" },
+      calcDate: { halign: "center" },
+      cashier: { halign: "left" },
+      notes: { halign: "left" },
+    },
+    margin: tableTheme.margin,
+  });
+
+  let nextY = doc.lastAutoTable.finalY + 10;
+  if (nextY > 230) {
+    doc.addPage();
+    nextY = 20;
+  }
+
+  // Summary box
+  const pageWidth = doc.internal.pageSize.width;
+  doc.setFillColor(241, 245, 249);
+  doc.rect(pageWidth - 95, nextY, 80, 28, "F");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text("Total Amount Due:", pageWidth - 90, nextY + 7);
+  doc.text("Total Amount Paid:", pageWidth - 90, nextY + 14);
+  doc.text("Total Shortfall:", pageWidth - 90, nextY + 22);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(40, 40, 40);
+  doc.text(fmt(totalDue), pageWidth - 20, nextY + 7, { align: "right" });
+  doc.text(fmt(totalPaid), pageWidth - 20, nextY + 14, { align: "right" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(totalShortfall > 0 ? 220 : 16, totalShortfall > 0 ? 38 : 124, totalShortfall > 0 ? 38 : 65);
+  doc.text(fmt(totalShortfall), pageWidth - 20, nextY + 23, { align: "right" });
+
+  drawSignatureBlock(doc, "Prepared By (Finance Officer)", "Approved By (Finance Director)");
+  doc.save(`agent_ledger_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+
