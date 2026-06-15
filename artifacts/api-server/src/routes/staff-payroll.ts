@@ -8,7 +8,9 @@ import {
   agencyStaffTable,
   agentsTable,
   usersTable,
-  notificationsTable
+  notificationsTable,
+  reserveFundTable,
+  companyExpensesTable
 } from "@workspace/db";
 import { eq, and, desc, asc, gte, lte, sql } from "drizzle-orm";
 import {
@@ -197,6 +199,29 @@ router.post("/staff-payroll/payments", requireAuth, requireRole("cashier", "admi
         notes: `Salary payment for ${payment.staffType} staff`
       });
 
+      let staffName = "Unknown Staff";
+      if (payment.staffType === "company") {
+        const [staff] = await tx.select().from(companyStaffTable).where(eq(companyStaffTable.id, payment.staffId));
+        if (staff) {
+          staffName = staff.fullName;
+        }
+      } else if (payment.staffType === "agency") {
+        const [staff] = await tx.select().from(agencyStaffTable).where(eq(agencyStaffTable.id, payment.staffId));
+        if (staff) {
+          staffName = staff.name;
+        }
+      }
+
+      await tx.insert(companyExpensesTable).values({
+        type: "non-recurring",
+        description: `Salary payment for ${payment.staffType} staff member: ${staffName} (Period: ${payment.periodMonth}/${payment.periodYear})`,
+        amount: netAmount.toString(),
+        payeeName: staffName,
+        authorizingOfficer: "System (Auto-authorized)",
+        receiptImage: null,
+        cashierId: req.user!.userId,
+      });
+
       const [updatedPayment] = await tx.update(salaryPaymentsTable).set({
         deductions: deductAmount.toString(),
         netAmount: netAmount.toString(),
@@ -303,6 +328,30 @@ router.post("/staff-payroll/wallet/fund", requireAuth, requireRole("director", "
     }
 
     const result = await db.transaction(async (tx) => {
+      // Deduct from reserve fund
+      const reserveRecords = await tx
+        .select()
+        .from(reserveFundTable)
+        .orderBy(desc(reserveFundTable.periodDate));
+      
+      if (reserveRecords.length > 0) {
+        const latest = reserveRecords[0];
+        const latestBalance = parseFloat(latest.balance);
+        if (latestBalance < fundAmount) {
+          throw new Error("Insufficient reserve funds to fund the salary wallet");
+        }
+        await tx
+          .update(reserveFundTable)
+          .set({
+            balance: (latestBalance - fundAmount).toFixed(2),
+            totalAllocated: (parseFloat(latest.totalAllocated) + fundAmount).toFixed(2),
+            updatedAt: new Date(),
+          })
+          .where(eq(reserveFundTable.id, latest.id));
+      } else {
+        throw new Error("No reserve fund period record found to draw from");
+      }
+
       const wallet = await getWallet();
       const newBalance = parseFloat(wallet.balance) + fundAmount;
       const newTotalFunded = parseFloat(wallet.totalFunded) + fundAmount;
