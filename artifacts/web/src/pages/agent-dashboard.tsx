@@ -186,7 +186,7 @@ export function AgentDashboard() {
 
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
+    return gameList.filter(g => g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun));
   }, [gameList]);
 
   const writerList = Array.isArray(writers) ? writers : [];
@@ -311,34 +311,43 @@ export function AgentDashboard() {
           {/* Active Game Event Cards */}
           {liveGames.length > 0 ? (
             <div className="space-y-2 w-full">
-              {liveGames.map(g => (
-                <div key={g.id} className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1">
-                  {g.logoUrl ? (
-                    <img src={g.logoUrl} alt={g.name} className="w-10 h-10 object-contain rounded bg-white p-1 shadow-sm flex-shrink-0" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 shadow-inner">
-                      🎮
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <span className="text-[9px] font-bold text-white/70 uppercase tracking-wider block">
-                      Active Game Event
-                    </span>
-                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                      <span className="text-xs font-mono font-bold text-yellow-300 px-1.5 py-0.5 bg-white/10 rounded">
-                        {g.eventNumber}
+              {liveGames.map(g => {
+                const isGrossClosed = new Date(g.closeAt) <= getServerNow() || g.status === "closed";
+                return (
+                  <div key={g.id} className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1">
+                    {g.logoUrl ? (
+                      <img src={g.logoUrl} alt={g.name} className="w-10 h-10 object-contain rounded bg-white p-1 shadow-sm flex-shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 shadow-inner">
+                        🎮
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[9px] font-bold text-white/70 uppercase tracking-wider block">
+                        Active Game Event
                       </span>
-                      <span className="text-sm font-black tracking-tight leading-tight text-white truncate">
-                        {g.name}
-                      </span>
-                      <span className="text-[9px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-                        LIVE
-                      </span>
-                      <CountdownTimer closeAt={g.closeAt} status={g.status} className="flex items-center gap-1.5 text-[9px] font-bold text-yellow-300 bg-white/10 border border-white/20 px-2 py-0.5 rounded-lg animate-pulse" />
+                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                        <span className="text-xs font-mono font-bold text-yellow-300 px-1.5 py-0.5 bg-white/10 rounded">
+                          {g.eventNumber}
+                        </span>
+                        <span className="text-sm font-black tracking-tight leading-tight text-white truncate">
+                          {g.name}
+                        </span>
+                        {isGrossClosed ? (
+                          <span className="text-[9px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded-full shadow-sm">
+                            GROSS CLOSED
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                            LIVE
+                          </span>
+                        )}
+                        <CountdownTimer closeAt={g.closeAt} status={g.status} className="flex items-center gap-1.5 text-[9px] font-bold text-yellow-300 bg-white/10 border border-white/20 px-2 py-0.5 rounded-lg animate-pulse" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1 text-white/60 text-xs font-semibold">
@@ -417,14 +426,8 @@ export function AgentDashboard() {
                 </div>
               </div>
               <div className="text-base font-black text-gray-900 font-mono">
-                {todayGross > 0 ? (
-                  <>
-                    <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                    {todayGross.toFixed(2)}
-                  </>
-                ) : (
-                  "—"
-                )}
+                <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
+                {todayGross.toFixed(2)}
               </div>
             </div>
 
@@ -440,14 +443,8 @@ export function AgentDashboard() {
                 </div>
               </div>
               <div className="text-base font-black text-gray-900 font-mono">
-                {todayWins > 0 ? (
-                  <>
-                    <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                    {todayWins.toFixed(2)}
-                  </>
-                ) : (
-                  "—"
-                )}
+                <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
+                {todayWins.toFixed(2)}
               </div>
             </div>
 

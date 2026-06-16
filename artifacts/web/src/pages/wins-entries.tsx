@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel, SelectSeparator } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -78,6 +78,26 @@ function AgentWinsView() {
   const liveGames = useMemo(() => {
     return gameList.filter(g => g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun));
   }, [gameList]);
+
+  const groupedGames = useMemo(() => {
+    const closed: typeof liveGames = [];
+    const open: typeof liveGames = [];
+    const now = getServerNow();
+    
+    for (const g of liveGames) {
+      const isGrossClosed = new Date(g.closeAt) <= now || g.status === "closed";
+      if (isGrossClosed) {
+        closed.push(g);
+      } else {
+        open.push(g);
+      }
+    }
+    
+    closed.sort((a, b) => new Date(b.closeAt).getTime() - new Date(a.closeAt).getTime());
+    open.sort((a, b) => new Date(a.closeAt).getTime() - new Date(b.closeAt).getTime());
+    
+    return { closed, open };
+  }, [liveGames]);
 
   const { data: entries, isLoading } = useListWinsEntries({
     writerId: filterWriterId || undefined,
@@ -233,7 +253,7 @@ function AgentWinsView() {
               <Label className="text-xs font-medium text-muted-foreground">Writer</Label>
               <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)}>
                 <SelectTrigger className="h-11 text-sm bg-background rounded-xl"><SelectValue placeholder="All writers" /></SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[250px] overflow-y-auto">
                   <SelectItem value="_all">All writers</SelectItem>
                   {writerList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
                 </SelectContent>
@@ -343,7 +363,7 @@ function AgentWinsView() {
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={o => { if (!o) { setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); setWriterSearch(""); } setCreateOpen(o); }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
           {myAgent && (
             <div className="flex items-center gap-2 py-1 px-3 bg-muted/40 rounded-xl border text-sm">
@@ -369,12 +389,32 @@ function AgentWinsView() {
                 <SelectTrigger className="h-11 text-sm rounded-xl">
                   <SelectValue placeholder={liveGames.length === 0 ? "No active games available" : "Select game…"} />
                 </SelectTrigger>
-                <SelectContent>
-                  {liveGames.map(g => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name} (#{g.eventNumber})
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[250px] overflow-y-auto">
+                  {groupedGames.closed.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider px-2 py-1 bg-amber-500/5">
+                        Gross Closed (Late Entries Open)
+                      </SelectLabel>
+                      {groupedGames.closed.map(g => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name} (#{g.eventNumber}) (Late)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {groupedGames.closed.length > 0 && groupedGames.open.length > 0 && <SelectSeparator />}
+                  {groupedGames.open.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider px-2 py-1 bg-emerald-500/5">
+                        Active / Open Games
+                      </SelectLabel>
+                      {groupedGames.open.map(g => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name} (#{g.eventNumber})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -455,7 +495,7 @@ function AgentWinsView() {
 
       {/* Edit dialog */}
       <Dialog open={!!editEntry} onOpenChange={o => !o && setEditEntry(null)}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Entry</DialogTitle></DialogHeader>
           {editEntry && (
             <div className="text-sm text-muted-foreground">
@@ -480,7 +520,7 @@ function AgentWinsView() {
 
       {/* Change Request dialog */}
       <Dialog open={!!changeReqEntry} onOpenChange={o => { if (!o) { setChangeReqEntry(null); setChangeReqForm({ requestedAmount: "", reason: "" }); } }}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Request Entry Change</DialogTitle></DialogHeader>
           {changeReqEntry && (
             <div className="bg-muted/50 rounded-xl p-3 text-sm space-y-1 mb-1">
@@ -569,6 +609,26 @@ function AdminWinsView() {
       return isDateMatch && isOpenOrPreCalc;
     });
   }, [gameList]);
+
+  const groupedGames = useMemo(() => {
+    const closed: typeof liveGames = [];
+    const open: typeof liveGames = [];
+    const now = getServerNow();
+    
+    for (const g of liveGames) {
+      const isGrossClosed = new Date(g.closeAt) <= now || g.status === "closed";
+      if (isGrossClosed) {
+        closed.push(g);
+      } else {
+        open.push(g);
+      }
+    }
+    
+    closed.sort((a, b) => new Date(b.closeAt).getTime() - new Date(a.closeAt).getTime());
+    open.sort((a, b) => new Date(a.closeAt).getTime() - new Date(b.closeAt).getTime());
+    
+    return { closed, open };
+  }, [liveGames]);
 
   const today = new Date(getServerNow()).toISOString().split("T")[0];
   const [form, setForm] = useState({ writerId: "", entryDate: today, winsAmount: "", gameId: "" });
@@ -682,7 +742,7 @@ function AdminWinsView() {
             <Label className="text-xs font-medium text-muted-foreground">Agent</Label>
             <Select value={filterAgentId || "_all"} onValueChange={v => { setFilterAgentId(v === "_all" ? "" : v); setFilterWriterId(""); }}>
               <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[250px] overflow-y-auto">
                 <SelectItem value="_all">All agents</SelectItem>
                 {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
               </SelectContent>
@@ -692,7 +752,7 @@ function AdminWinsView() {
             <Label className="text-xs font-medium text-muted-foreground">Writer</Label>
             <Select value={filterWriterId || "_all"} onValueChange={v => setFilterWriterId(v === "_all" ? "" : v)} disabled={!filterAgentId}>
               <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="All writers" /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[250px] overflow-y-auto">
                 <SelectItem value="_all">All writers</SelectItem>
                 {filterWriterList.map(w => <SelectItem key={w.id} value={w.id}>{w.fullCode} — {w.fullName}</SelectItem>)}
               </SelectContent>
@@ -779,14 +839,14 @@ function AdminWinsView() {
       </div>
 
       <Dialog open={createOpen} onOpenChange={o => { if (!o) { setSelectedAgent(""); setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); setWriterSearch(""); } setCreateOpen(o); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Agent *</Label>
               <Select value={selectedAgent} onValueChange={v => { setSelectedAgent(v); setForm(f => ({ ...f, writerId: "" })); }}>
                 <SelectTrigger className="h-11 text-sm rounded-xl"><SelectValue placeholder="Select agent..." /></SelectTrigger>
-                <SelectContent>{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
+                <SelectContent className="max-h-[250px] overflow-y-auto">{agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}</SelectContent>
               </Select>
             </div>
 
@@ -808,12 +868,32 @@ function AdminWinsView() {
                 <SelectTrigger className="h-11 text-sm rounded-xl">
                   <SelectValue placeholder={!selectedAgent ? "Choose agent first…" : liveGames.length === 0 ? "No active games available" : "Select game…"} />
                 </SelectTrigger>
-                <SelectContent>
-                  {liveGames.map(g => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name} (#{g.eventNumber})
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[250px] overflow-y-auto">
+                  {groupedGames.closed.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider px-2 py-1 bg-amber-500/5">
+                        Gross Closed (Late Entries Open)
+                      </SelectLabel>
+                      {groupedGames.closed.map(g => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name} (#{g.eventNumber}) (Late)
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {groupedGames.closed.length > 0 && groupedGames.open.length > 0 && <SelectSeparator />}
+                  {groupedGames.open.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider px-2 py-1 bg-emerald-500/5">
+                        Active / Open Games
+                      </SelectLabel>
+                      {groupedGames.open.map(g => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name} (#{g.eventNumber})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -893,7 +973,7 @@ function AdminWinsView() {
       </Dialog>
 
       <Dialog open={!!editEntry} onOpenChange={o => !o && setEditEntry(null)}>
-        <DialogContent>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Entry</DialogTitle></DialogHeader>
           {editEntry && (
             <div className="text-sm text-muted-foreground">
