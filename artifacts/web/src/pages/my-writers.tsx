@@ -188,9 +188,8 @@ export function MyWriters() {
         )}
       </div>
 
-      {/* Add Writer Dialog */}
       <Dialog open={addOpen} onOpenChange={o => { if (!o) setCreateForm({ writerCode: "", fullName: "" }); setAddOpen(o); }}>
-        <DialogContent className="max-w-sm mx-4 rounded-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Writer</DialogTitle></DialogHeader>
           <p className="text-xs text-muted-foreground">
             Full code will be <span className="font-mono font-semibold">{agent.fullCode}-XXXX</span>
@@ -232,9 +231,8 @@ export function MyWriters() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Writer Dialog */}
       <Dialog open={!!editWriter} onOpenChange={o => !o && setEditWriter(null)}>
-        <DialogContent className="max-w-sm mx-4 rounded-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Writer</DialogTitle></DialogHeader>
           {editWriter && <p className="text-xs text-muted-foreground font-mono">{editWriter.fullCode}</p>}
           <form onSubmit={handleEdit} className="space-y-4">
