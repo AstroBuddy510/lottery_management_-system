@@ -157,8 +157,9 @@ export function AgentDashboard() {
   const [photoUploading, setPhotoUploading] = useState(false);
   const updatePhotoMutation = useUpdateMyPhoto();
   const today = new Date(getServerNow()).toISOString().split("T")[0];
+  const [selectedDate, setSelectedDate] = useState(today);
   const firstName = user?.fullName?.split(" ")[0] ?? "Agent";
-  const todayLabel = new Date(getServerNow()).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  const todayLabel = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 
   const handlePhotoChange = async (file: File) => {
     setPhotoUploading(true);
@@ -178,16 +179,21 @@ export function AgentDashboard() {
   const { data: writers, isLoading: writersLoading } = useListWriters(agent?.id ?? "", {}, {
     query: { queryKey: getListWritersQueryKey(agent?.id ?? "", {}), enabled: !!agent?.id }
   });
-  const { data: sales } = useListSales({ dateFrom: today, dateTo: today });
-  const { data: grossEntries } = useListGrossEntries({ dateFrom: today, dateTo: today });
-  const { data: winsEntries } = useListWinsEntries({ dateFrom: today, dateTo: today });
+  const { data: sales } = useListSales({ dateFrom: selectedDate, dateTo: selectedDate });
+  const { data: grossEntries } = useListGrossEntries({ dateFrom: selectedDate, dateTo: selectedDate });
+  const { data: winsEntries } = useListWinsEntries({ dateFrom: selectedDate, dateTo: selectedDate });
   const { data: unread } = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
   const { data: games } = useListGames();
 
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun));
-  }, [gameList]);
+    return gameList.filter(g => {
+      const gameDateStr = g.closeAt ? g.closeAt.split("T")[0] : "";
+      const isSelectedDay = gameDateStr === selectedDate;
+      const isOpenOrPreCalc = g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun);
+      return isSelectedDay && isOpenOrPreCalc;
+    });
+  }, [gameList, selectedDate]);
 
   const writerList = Array.isArray(writers) ? writers : [];
   const salesList = Array.isArray(sales) ? sales : [];
@@ -300,12 +306,18 @@ export function AgentDashboard() {
 
         {/* Date and Balance section */}
         <div className="flex flex-col gap-3 mt-4">
-          {/* Date chip */}
-          <div className="inline-flex items-center gap-1.5 bg-white/10 rounded-xl px-3 py-1.5 self-start">
+          {/* Date chip with overlay calendar input */}
+          <div className="relative inline-flex items-center gap-1.5 bg-white/10 rounded-xl px-3 py-1.5 self-start text-white cursor-pointer hover:bg-white/20 transition-colors">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
             </svg>
             <span className="text-white/80 text-xs font-medium">{todayLabel}</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value || today)}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
+            />
           </div>
 
           {/* Active Game Event Cards */}

@@ -419,7 +419,7 @@ function AgentGrossView() {
                   }
                 }}
               >
-                <SelectTrigger className="h-11 text-sm rounded-xl">
+                <SelectTrigger className="h-11 text-sm rounded-xl text-center [&>span]:w-full">
                   <SelectValue placeholder={liveGames.length === 0 ? "No active games available" : "Select game…"} />
                 </SelectTrigger>
                 <SelectContent className="max-h-[250px] overflow-y-auto">
