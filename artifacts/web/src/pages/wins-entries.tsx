@@ -343,7 +343,7 @@ function AgentWinsView() {
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={o => { if (!o) { setForm({ writerId: "", entryDate: today, winsAmount: "", gameId: "" }); setWriterSearch(""); } setCreateOpen(o); }}>
-        <DialogContent className="max-w-sm mx-4 rounded-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6">
           <DialogHeader><DialogTitle>Add Wins Entry</DialogTitle></DialogHeader>
           {myAgent && (
             <div className="flex items-center gap-2 py-1 px-3 bg-muted/40 rounded-xl border text-sm">
@@ -396,7 +396,7 @@ function AgentWinsView() {
                 <SelectTrigger className="h-11 text-sm rounded-xl">
                   <SelectValue placeholder={!form.gameId ? "Choose game first…" : filteredWriters.length === 0 ? "No matching writers" : "Select writer…"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[250px] overflow-y-auto">
                   {form.gameId && availableWriters.length > 5 && (
                     <div className="p-2 border-b">
                       <Input
@@ -455,7 +455,7 @@ function AgentWinsView() {
 
       {/* Edit dialog */}
       <Dialog open={!!editEntry} onOpenChange={o => !o && setEditEntry(null)}>
-        <DialogContent className="max-w-sm mx-4 rounded-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6">
           <DialogHeader><DialogTitle>Edit Entry</DialogTitle></DialogHeader>
           {editEntry && (
             <div className="text-sm text-muted-foreground">
@@ -480,7 +480,7 @@ function AgentWinsView() {
 
       {/* Change Request dialog */}
       <Dialog open={!!changeReqEntry} onOpenChange={o => { if (!o) { setChangeReqEntry(null); setChangeReqForm({ requestedAmount: "", reason: "" }); } }}>
-        <DialogContent className="max-w-sm mx-4 rounded-2xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6">
           <DialogHeader><DialogTitle>Request Entry Change</DialogTitle></DialogHeader>
           {changeReqEntry && (
             <div className="bg-muted/50 rounded-xl p-3 text-sm space-y-1 mb-1">
@@ -835,7 +835,7 @@ function AdminWinsView() {
                 <SelectTrigger className="h-11 text-sm rounded-xl">
                   <SelectValue placeholder={!form.gameId ? "Choose game first…" : filteredWriters.length === 0 ? "No matching writers" : "Select writer…"} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[250px] overflow-y-auto">
                   {form.gameId && availableWriters.length > 5 && (
                     <div className="p-2 border-b">
                       <Input
