@@ -96,36 +96,41 @@ router.post(
 
     let gameId = parse.data.gameId;
     if (!gameId && parse.data.entryDate) {
-      const [game] = await db
+      const candidateGames = await db
         .select()
         .from(gamesTable)
-        .where(
-          and(
-            not(eq(gamesTable.status, "closed")),
-            sql`date(go_live_at at time zone 'utc') = ${parse.data.entryDate}`
-          )
-        )
-        .limit(1);
-      if (game) {
-        gameId = game.id;
+        .where(sql`date(go_live_at at time zone 'utc') = ${parse.data.entryDate}`);
+      for (const g of candidateGames) {
+        const calculations = await db
+          .select()
+          .from(dailyCalculationsTable)
+          .where(eq(dailyCalculationsTable.gameId, g.id))
+          .limit(1);
+        if (calculations.length === 0) {
+          gameId = g.id;
+          break;
+        }
       }
     }
 
     let isLate = false;
     if (gameId) {
-      const [game] = await db
+      const calculations = await db
         .select()
+        .from(dailyCalculationsTable)
+        .where(eq(dailyCalculationsTable.gameId, gameId))
+        .limit(1);
+      if (calculations.length > 0) {
+        res.status(409).json({ error: "Cannot create gross entry: Calculations have already been run for this game and it is fully locked." });
+        return;
+      }
+      const [game] = await db
+        .select({ closeAt: gamesTable.closeAt })
         .from(gamesTable)
         .where(eq(gamesTable.id, gameId))
         .limit(1);
-      if (game) {
-        if (game.status === "closed") {
-          res.status(409).json({ error: "Cannot create gross entry: Game is fully locked/closed." });
-          return;
-        }
-        if (new Date(game.closeAt) <= new Date()) {
-          isLate = true;
-        }
+      if (game && new Date(game.closeAt) <= new Date()) {
+        isLate = true;
       }
     }
 
@@ -189,13 +194,13 @@ router.patch(
     }
 
     if (existing.gameId) {
-      const [game] = await db
+      const calculations = await db
         .select()
-        .from(gamesTable)
-        .where(eq(gamesTable.id, existing.gameId))
+        .from(dailyCalculationsTable)
+        .where(eq(dailyCalculationsTable.gameId, existing.gameId))
         .limit(1);
-      if (game && game.status === "closed") {
-        res.status(409).json({ error: "Cannot edit gross entry: Game is fully locked/closed." });
+      if (calculations.length > 0) {
+        res.status(409).json({ error: "Cannot edit gross entry: Calculations have already been run for this game and it is fully locked." });
         return;
       }
     }
@@ -248,7 +253,12 @@ router.patch(
         res.status(404).json({ error: "Game not found" });
         return;
       }
-      const isClosed = game.status === "closed" || new Date(game.closeAt) <= new Date();
+      const calculations = await db
+        .select()
+        .from(dailyCalculationsTable)
+        .where(eq(dailyCalculationsTable.gameId, existing.gameId))
+        .limit(1);
+      const isClosed = calculations.length > 0 || new Date(game.closeAt) <= new Date();
       if (isClosed) {
         res.status(409).json({ error: "Cannot edit gross entry: Game is closed" });
         return;
@@ -345,34 +355,23 @@ router.post(
 
     let gameId = parse.data.gameId;
     if (!gameId && parse.data.entryDate) {
-      const [game] = await db
+      const candidateGames = await db
         .select()
         .from(gamesTable)
-        .where(
-          and(
-            not(eq(gamesTable.status, "closed")),
-            sql`date(go_live_at at time zone 'utc') = ${parse.data.entryDate}`
-          )
-        )
-        .limit(1);
-      if (game) {
-        gameId = game.id;
+        .where(sql`date(go_live_at at time zone 'utc') = ${parse.data.entryDate}`);
+      for (const g of candidateGames) {
+        const calculations = await db
+          .select()
+          .from(dailyCalculationsTable)
+          .where(eq(dailyCalculationsTable.gameId, g.id))
+          .limit(1);
+        if (calculations.length === 0) {
+          gameId = g.id;
+          break;
+        }
       }
     }
 
-    if (gameId) {
-      const [game] = await db
-        .select()
-        .from(gamesTable)
-        .where(eq(gamesTable.id, gameId))
-        .limit(1);
-      if (game && game.status === "closed") {
-        res.status(409).json({ error: "Cannot create wins entry: Game is fully locked/closed." });
-        return;
-      }
-    }
-
-    // Check if calculations have run for this game (applies to all roles)
     if (gameId) {
       const calculations = await db
         .select()
@@ -380,18 +379,7 @@ router.post(
         .where(eq(dailyCalculationsTable.gameId, gameId))
         .limit(1);
       if (calculations.length > 0) {
-        // Flag as oversight for approval instead of blocking completely
-        const [entry] = await db
-          .insert(winsEntriesTable)
-          .values({
-            ...parse.data,
-            gameId: gameId || undefined,
-            enteredBy: req.user!.userId,
-            oversight: true,
-            status: "Request Approval",
-          })
-          .returning();
-        res.status(201).json(entry);
+        res.status(409).json({ error: "Cannot create wins entry: Calculations have already been run for this game and it is fully locked." });
         return;
       }
     }
@@ -436,13 +424,13 @@ router.patch(
     }
 
     if (existing.gameId) {
-      const [game] = await db
+      const calculations = await db
         .select()
-        .from(gamesTable)
-        .where(eq(gamesTable.id, existing.gameId))
+        .from(dailyCalculationsTable)
+        .where(eq(dailyCalculationsTable.gameId, existing.gameId))
         .limit(1);
-      if (game && game.status === "closed") {
-        res.status(409).json({ error: "Cannot edit wins entry: Game is fully locked/closed." });
+      if (calculations.length > 0) {
+        res.status(409).json({ error: "Cannot edit wins entry: Calculations have already been run for this game and it is fully locked." });
         return;
       }
     }

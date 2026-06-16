@@ -82,7 +82,7 @@ function AgentGrossView() {
   const { data: games } = useListGames();
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
+    return gameList.filter(g => g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun));
   }, [gameList]);
 
   const isGameClosed = (gameId?: string) => {

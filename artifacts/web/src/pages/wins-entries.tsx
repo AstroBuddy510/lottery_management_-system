@@ -76,7 +76,7 @@ function AgentWinsView() {
   const { data: games } = useListGames();
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
+    return gameList.filter(g => g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun));
   }, [gameList]);
 
   const { data: entries, isLoading } = useListWinsEntries({
@@ -564,7 +564,9 @@ function AdminWinsView() {
     const todayStr = new Date(getServerNow()).toISOString().split("T")[0];
     return gameList.filter(g => {
       const gameDateStr = g.closeAt ? g.closeAt.split("T")[0] : "";
-      return gameDateStr === todayStr;
+      const isDateMatch = gameDateStr === todayStr;
+      const isOpenOrPreCalc = g.status === "live" || (g.status === "closed" && !(g as any).calculationsRun);
+      return isDateMatch && isOpenOrPreCalc;
     });
   }, [gameList]);
 
