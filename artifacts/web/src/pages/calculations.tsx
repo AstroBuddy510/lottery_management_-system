@@ -1,7 +1,7 @@
 import { useState, useMemo, Fragment } from "react";
 import {
   useListCalculations, useRunCalculations, useListGames,
-  getListCalculationsQueryKey,
+  getListCalculationsQueryKey, getListGamesQueryKey,
 } from "@workspace/api-client-react";
 import type { Game } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
@@ -153,6 +153,7 @@ export function Calculations() {
       const count = (result as { calculated?: number })?.calculated ?? 0;
       toast({ title: `Calculations complete — ${count} writer${count !== 1 ? "s" : ""} processed` });
       qc.invalidateQueries({ queryKey: getListCalculationsQueryKey({}) });
+      qc.invalidateQueries({ queryKey: getListGamesQueryKey() });
       setWinningNumbers(["", "", "", "", ""]);
       setMachineNumbers(["", "", "", "", ""]);
       setSelectedRunGameId("_none");

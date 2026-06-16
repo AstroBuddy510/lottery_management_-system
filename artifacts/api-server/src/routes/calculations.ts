@@ -59,6 +59,10 @@ router.post(
           winningNumbers,
           machineNumbers,
           status: "closed",
+          closedAt: new Date(),
+          closedBy: req.user!.userId,
+          closeType: "manual",
+          updatedAt: new Date(),
         })
         .where(eq(gamesTable.id, gameId));
     }

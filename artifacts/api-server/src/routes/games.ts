@@ -16,20 +16,8 @@ async function generateEventNumber(): Promise<string> {
 }
 
 async function autoClosePastGames(): Promise<void> {
-  await db
-    .update(gamesTable)
-    .set({
-      status: "closed",
-      closedAt: new Date(),
-      closeType: "automatic",
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        lt(gamesTable.closeAt, new Date()),
-        not(eq(gamesTable.status, "closed"))
-      )
-    );
+  // Games must not automatically close at close time.
+  // They are only closed manually when calculations are successfully run.
 }
 
 router.get("/games", requireAuth, async (req, res) => {

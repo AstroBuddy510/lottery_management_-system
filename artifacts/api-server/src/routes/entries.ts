@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db, grossEntriesTable, winsEntriesTable, writersTable, agentsTable, gamesTable, dailyCalculationsTable, usersTable } from "@workspace/db";
-import { eq, and, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, sql, not } from "drizzle-orm";
 import {
   CreateGrossEntryBody,
   UpdateGrossEntryParams,
@@ -94,6 +94,41 @@ router.post(
       return;
     }
 
+    let gameId = parse.data.gameId;
+    if (!gameId && parse.data.entryDate) {
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(
+          and(
+            not(eq(gamesTable.status, "closed")),
+            sql`date(go_live_at at time zone 'utc') = ${parse.data.entryDate}`
+          )
+        )
+        .limit(1);
+      if (game) {
+        gameId = game.id;
+      }
+    }
+
+    let isLate = false;
+    if (gameId) {
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(eq(gamesTable.id, gameId))
+        .limit(1);
+      if (game) {
+        if (game.status === "closed") {
+          res.status(409).json({ error: "Cannot create gross entry: Game is fully locked/closed." });
+          return;
+        }
+        if (new Date(game.closeAt) <= new Date()) {
+          isLate = true;
+        }
+      }
+    }
+
     // Agents can only add entries for their own writers
     if (req.user!.role === "agent") {
       const agentId = await getAgentIdForUser(req.user!.userId);
@@ -107,35 +142,9 @@ router.post(
         return;
       }
 
-      // Check if game is closed
-      if (!parse.data.gameId) {
+      if (!gameId) {
         res.status(400).json({ error: "gameId is required" });
         return;
-      }
-      const [game] = await db
-        .select()
-        .from(gamesTable)
-        .where(eq(gamesTable.id, parse.data.gameId))
-        .limit(1);
-      if (!game) {
-        res.status(404).json({ error: "Game not found" });
-        return;
-      }
-      if (game.status === "closed") {
-        res.status(409).json({ error: "Cannot create gross entry: Game is closed" });
-        return;
-      }
-    }
-
-    let isLate = false;
-    if (parse.data.gameId) {
-      const [game] = await db
-        .select({ closeAt: gamesTable.closeAt })
-        .from(gamesTable)
-        .where(eq(gamesTable.id, parse.data.gameId))
-        .limit(1);
-      if (game && new Date(game.closeAt) <= new Date()) {
-        isLate = true;
       }
     }
 
@@ -143,6 +152,7 @@ router.post(
       .insert(grossEntriesTable)
       .values({
         ...parse.data,
+        gameId: gameId || undefined,
         bookletsCount: parse.data.bookletsCount ?? 0,
         enteredBy: req.user!.userId,
         isLate,
@@ -177,6 +187,19 @@ router.patch(
       res.status(404).json({ error: "Entry not found" });
       return;
     }
+
+    if (existing.gameId) {
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(eq(gamesTable.id, existing.gameId))
+        .limit(1);
+      if (game && game.status === "closed") {
+        res.status(409).json({ error: "Cannot edit gross entry: Game is fully locked/closed." });
+        return;
+      }
+    }
+
     if (existing.locked) {
       if (req.user!.role !== "administrator" && req.user!.role !== "director") {
         res.status(409).json({ error: "Entry is locked and cannot be modified" });
@@ -320,12 +343,41 @@ router.post(
       }
     }
 
+    let gameId = parse.data.gameId;
+    if (!gameId && parse.data.entryDate) {
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(
+          and(
+            not(eq(gamesTable.status, "closed")),
+            sql`date(go_live_at at time zone 'utc') = ${parse.data.entryDate}`
+          )
+        )
+        .limit(1);
+      if (game) {
+        gameId = game.id;
+      }
+    }
+
+    if (gameId) {
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(eq(gamesTable.id, gameId))
+        .limit(1);
+      if (game && game.status === "closed") {
+        res.status(409).json({ error: "Cannot create wins entry: Game is fully locked/closed." });
+        return;
+      }
+    }
+
     // Check if calculations have run for this game (applies to all roles)
-    if (parse.data.gameId) {
+    if (gameId) {
       const calculations = await db
         .select()
         .from(dailyCalculationsTable)
-        .where(eq(dailyCalculationsTable.gameId, parse.data.gameId))
+        .where(eq(dailyCalculationsTable.gameId, gameId))
         .limit(1);
       if (calculations.length > 0) {
         // Flag as oversight for approval instead of blocking completely
@@ -333,6 +385,7 @@ router.post(
           .insert(winsEntriesTable)
           .values({
             ...parse.data,
+            gameId: gameId || undefined,
             enteredBy: req.user!.userId,
             oversight: true,
             status: "Request Approval",
@@ -345,7 +398,13 @@ router.post(
 
     const [entry] = await db
       .insert(winsEntriesTable)
-      .values({ ...parse.data, enteredBy: req.user!.userId, oversight: false, status: "approved" })
+      .values({
+        ...parse.data,
+        gameId: gameId || undefined,
+        enteredBy: req.user!.userId,
+        oversight: false,
+        status: "approved",
+      })
       .returning();
     res.status(201).json(entry);
   },
@@ -375,6 +434,19 @@ router.patch(
       res.status(404).json({ error: "Entry not found" });
       return;
     }
+
+    if (existing.gameId) {
+      const [game] = await db
+        .select()
+        .from(gamesTable)
+        .where(eq(gamesTable.id, existing.gameId))
+        .limit(1);
+      if (game && game.status === "closed") {
+        res.status(409).json({ error: "Cannot edit wins entry: Game is fully locked/closed." });
+        return;
+      }
+    }
+
     if (existing.locked) {
       res.status(409).json({ error: "Entry is locked and cannot be modified" });
       return;

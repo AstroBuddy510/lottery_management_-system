@@ -539,6 +539,7 @@ export function Games() {
   const renderGameCard = (g: Game) => {
     const cfg = STATUS_CONFIG[g.status] ?? STATUS_CONFIG.offline;
     const isClosed = g.status === "closed";
+    const isGrossClosed = g.status === "live" && new Date(g.closeAt) <= getServerNow();
 
     return (
       <div
@@ -553,15 +554,23 @@ export function Games() {
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                g.status === "live"
-                  ? "bg-green-500 ring-4 ring-green-500/20 animate-pulse"
-                  : g.status === "closed"
+                isClosed
                   ? "bg-rose-500/60"
+                  : isGrossClosed
+                  ? "bg-amber-500 ring-4 ring-amber-500/20 animate-pulse"
+                  : g.status === "live"
+                  ? "bg-green-500 ring-4 ring-green-500/20 animate-pulse"
                   : "bg-muted-foreground/30"
               }`}
             />
-            <Badge className={`text-[9px] uppercase tracking-wider px-2 py-0 h-5 font-bold ${cfg.className}`}>
-              {cfg.label}
+            <Badge className={`text-[9px] uppercase tracking-wider px-2 py-0 h-5 font-bold ${
+              isClosed
+                ? cfg.className
+                : isGrossClosed
+                ? "bg-amber-600 text-white dark:bg-amber-700"
+                : cfg.className
+            }`}>
+              {isGrossClosed ? "Gross Closed" : cfg.label}
             </Badge>
             <CountdownTimer closeAt={g.closeAt} status={g.status} />
           </div>
@@ -619,7 +628,7 @@ export function Games() {
               className="data-[state=checked]:bg-green-600"
             />
             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              {isClosed ? "Closed" : g.status === "live" ? "Live" : "Offline"}
+              {isClosed ? "Closed" : isGrossClosed ? "Gross Closed" : g.status === "live" ? "Live" : "Offline"}
             </span>
             {!isClosed && isAdminOrDirector && (
               <Button

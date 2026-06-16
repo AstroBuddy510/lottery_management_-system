@@ -337,6 +337,15 @@ function AgentGrossView() {
                     }`}>
                       {isLocked ? "Locked" : "Open"}
                     </span>
+                    {entry.isLate && (
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-1 ${
+                        entry.adminConfirmed
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400"
+                          : "bg-destructive text-destructive-foreground"
+                      }`}>
+                        {entry.adminConfirmed ? "Late (Confirmed)" : "Late (Pending)"}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -394,11 +403,14 @@ function AgentGrossView() {
                   <SelectValue placeholder={liveGames.length === 0 ? "No active games available" : "Select game…"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {liveGames.map(g => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name} (#{g.eventNumber})
-                    </SelectItem>
-                  ))}
+                  {liveGames.map(g => {
+                    const isGrossClosed = new Date(g.closeAt) <= getServerNow();
+                    return (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name} (#{g.eventNumber}){isGrossClosed ? " (Late Entries)" : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -747,9 +759,9 @@ function AdminGrossView() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">Loading...</TableCell></TableRow>
             ) : !Array.isArray(entries) || entries.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-sm">No entries found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground text-sm">No entries found.</TableCell></TableRow>
             ) : entries.map(entry => {
               const writer = writerMap[entry.writerId];
               const ts = entry.createdAt ? new Date(entry.createdAt) : null;
@@ -765,7 +777,16 @@ function AdminGrossView() {
                   <TableCell className="text-sm tabular-nums pl-8">
                     {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>
-                  <TableCell><Badge variant={entry.locked ? "secondary" : "default"} className="text-xs">{entry.locked ? "Locked" : "Open"}</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant={entry.locked ? "secondary" : "default"} className="text-xs w-fit">{entry.locked ? "Locked" : "Open"}</Badge>
+                      {entry.isLate && (
+                        <Badge variant={entry.adminConfirmed ? "secondary" : "destructive"} className={`text-xs w-fit ${entry.adminConfirmed ? "bg-emerald-100 text-emerald-800 border-emerald-200" : ""}`}>
+                          {entry.adminConfirmed ? "Late (Confirmed)" : "Late (Pending)"}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => { setEditEntry(entry); setEditForm({ grossAmount: entry.grossAmount, bookletsCount: String(entry.bookletsCount ?? 0) }); }}>Edit</Button>
                   </TableCell>
