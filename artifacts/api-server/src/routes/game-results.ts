@@ -31,7 +31,10 @@ function checkWin(ticketNumbersStr: string, winningNumbersStr: string, betType: 
 
 router.post("/game-results", requireAuth, requireRole("director", "administrator"), async (req, res) => {
   const parse = gameResultSchema.safeParse(req.body);
-  if (!parse.success) return res.status(400).json({ error: "Invalid data" });
+  if (!parse.success) {
+    res.status(400).json({ error: "Invalid data" });
+    return;
+  }
   const { gameId, winningNumbers, machineNumbers } = parse.data;
 
   // Ensure game is closed
@@ -99,10 +102,13 @@ router.post("/game-results", requireAuth, requireRole("director", "administrator
 });
 
 router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("director", "administrator"), async (req, res) => {
-  const gameId = req.params.gameId;
+  const gameId = req.params["gameId"] as string;
   
   const [gameResult] = await db.select().from(gameResultsTable).where(eq(gameResultsTable.gameId, gameId)).limit(1);
-  if (!gameResult) return res.status(404).json({ error: "Game result not found" });
+  if (!gameResult) {
+    res.status(404).json({ error: "Game result not found" });
+    return;
+  }
 
   const payouts = await db.select().from(payoutRequestsTable).where(and(eq(payoutRequestsTable.gameResultId, gameResult.id), eq(payoutRequestsTable.status, "pending")));
 

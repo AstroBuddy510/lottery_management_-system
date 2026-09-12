@@ -22,25 +22,40 @@ async function generateTicketNumber(): Promise<string> {
 
 router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => {
   const parse = placeBetSchema.safeParse(req.body);
-  if (!parse.success) return res.status(400).json({ error: "Invalid data", details: parse.error.errors });
+  if (!parse.success) {
+    res.status(400).json({ error: "Invalid data", details: parse.error.issues });
+    return;
+  }
   const { gameId, betTypeCode, numbers, stakeAmount } = parse.data;
   const writerId = req.user!.userId;
 
   // 1. Validate writer and model
   const [writer] = await db.select().from(writersTable).where(eq(writersTable.id, writerId)).limit(1);
-  if (!writer || !writer.isActive) return res.status(403).json({ error: "Account inactive" });
+  if (!writer || !writer.isActive) {
+    res.status(403).json({ error: "Account inactive" });
+    return;
+  }
 
   // 2. Validate game
   const [game] = await db.select().from(gamesTable).where(eq(gamesTable.id, gameId)).limit(1);
-  if (!game || game.status !== "live") return res.status(400).json({ error: "Game is not live" });
+  if (!game || game.status !== "live") {
+    res.status(400).json({ error: "Game is not live" });
+    return;
+  }
 
   // 3. Validate bet type
   const [betType] = await db.select().from(betTypesTable).where(eq(betTypesTable.code, betTypeCode)).limit(1);
-  if (!betType || !betType.isActive) return res.status(400).json({ error: "Invalid bet type" });
+  if (!betType || !betType.isActive) {
+    res.status(400).json({ error: "Invalid bet type" });
+    return;
+  }
 
   // Check number format
   const numArr = numbers.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 1 && n <= 90);
-  if (numArr.length !== betType.numbersRequired) return res.status(400).json({ error: `Requires exactly ${betType.numbersRequired} numbers between 1-90` });
+  if (numArr.length !== betType.numbersRequired) {
+    res.status(400).json({ error: `Requires exactly ${betType.numbersRequired} numbers between 1-90` });
+    return;
+  }
 
   const potentialPayout = stakeAmount * parseFloat(betType.payoutMultiplier);
   const ticketNumber = await generateTicketNumber();

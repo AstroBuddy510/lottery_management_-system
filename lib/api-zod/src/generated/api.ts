@@ -227,11 +227,14 @@ export const LoginResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent', 'writer']),
   "isActive": zod.boolean(),
   "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
+  "lastLogin": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "fullCode": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish()
 })
 })
 
@@ -250,11 +253,14 @@ export const RefreshTokenResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent', 'writer']),
   "isActive": zod.boolean(),
   "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
+  "lastLogin": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "fullCode": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish()
 })
 })
 
@@ -266,11 +272,14 @@ export const GetMeResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent', 'writer']),
   "isActive": zod.boolean(),
   "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
+  "lastLogin": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "fullCode": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish()
 })
 
 
@@ -294,11 +303,14 @@ export const ListUsersResponseItem = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent', 'writer']),
   "isActive": zod.boolean(),
   "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
+  "lastLogin": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "fullCode": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
 
@@ -344,11 +356,14 @@ export const UpdateUserResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent', 'writer']),
   "isActive": zod.boolean(),
   "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
+  "lastLogin": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "fullCode": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish()
 })
 
 
@@ -363,11 +378,14 @@ export const DeactivateUserResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent', 'writer']),
   "isActive": zod.boolean(),
   "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
+  "lastLogin": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "fullCode": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish()
 })
 
 
@@ -382,11 +400,14 @@ export const UpdateMyPhotoResponse = zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
   "phone": zod.string(),
-  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent']),
+  "role": zod.enum(['director', 'administrator', 'cashier', 'gross_entry', 'wins_entry', 'agent', 'writer']),
   "isActive": zod.boolean(),
   "profilePicture": zod.string().nullish(),
   "createdAt": zod.string(),
-  "lastLogin": zod.string().nullish()
+  "lastLogin": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "fullCode": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish()
 })
 
 

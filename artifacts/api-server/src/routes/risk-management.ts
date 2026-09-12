@@ -23,13 +23,16 @@ router.get("/risk/flags", requireAuth, requireRole("director", "administrator"),
 });
 
 router.patch("/risk/flags/:id", requireAuth, requireRole("director", "administrator"), async (req, res) => {
-  const id = req.params.id;
+  const id = req.params["id"] as string;
   const parse = z.object({
     status: z.enum(["open", "reviewed", "dismissed", "escalated"]),
     reviewNotes: z.string().optional(),
   }).safeParse(req.body);
   
-  if (!parse.success) return res.status(400).json({ error: "Invalid data" });
+  if (!parse.success) {
+    res.status(400).json({ error: "Invalid data" });
+    return;
+  }
 
   const [updated] = await db.update(riskFlagsTable)
     .set({
