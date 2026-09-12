@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { getServerNow } from "../lib/time-sync";
+import { LiveSalesSection } from "@/components/live-sales";
 import { useAuth } from "@/lib/auth";
 import { AgentDashboard } from "@/pages/agent-dashboard";
 import { CountdownTimer } from "@/pages/games";
@@ -1751,6 +1752,12 @@ export function Dashboard() {
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <Badge variant="secondary" className="text-xs">{ROLE_LABELS[role] ?? role}</Badge>
       </div>
+
+      {(role === "director" || role === "administrator") && (
+        <div className="mb-6">
+          <LiveSalesSection />
+        </div>
+      )}
 
       {(role === "director" || role === "administrator") && <DirectorDashboard />}
       {role === "cashier" && <CashierDashboard />}

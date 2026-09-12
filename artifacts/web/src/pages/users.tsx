@@ -22,6 +22,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQuery } from "@tanstack/react-query";
+import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS } from "@/components/live-sales";
+import { fmtGHS } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 
@@ -89,6 +92,17 @@ function resizeImageToDataUrl(file: File, maxPx = 320): Promise<string> {
 
 // ─── Writers sub-section (inside Agents tab) ─────────────────────────────────
 
+interface WriterLiveStats {
+  writerId: string;
+  phone: string | null;
+  operationModel: string;
+  approvalStatus: string;
+  ticketCount: number;
+  totalStakes: string;
+  winningTickets: number;
+  totalWins: string;
+}
+
 function WritersSection({ agentId }: { agentId: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -102,6 +116,28 @@ function WritersSection({ agentId }: { agentId: string }) {
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
   const [form, setForm] = useState({ writerCode: "", fullName: "" });
   const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
+
+  // Live per-writer figures for the selected game, polled on the shared cadence.
+  const [selectedGameId, setSelectedGameId] = useLiveGameSelection();
+  const { games } = useLiveGames(selectedGameId, setSelectedGameId);
+
+  const { data: liveRows } = useQuery<WriterLiveStats[]>({
+    queryKey: ["/api/live-sales/agents", agentId, selectedGameId],
+    queryFn: async () => {
+      const url = `/api/live-sales/agents/${agentId}/writers${selectedGameId ? `?gameId=${encodeURIComponent(selectedGameId)}` : ""}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` } });
+      if (!res.ok) throw new Error("Failed to load writer stats");
+      return res.json();
+    },
+    enabled: !!agentId,
+    refetchInterval: LIVE_REFETCH_MS,
+  });
+
+  const stats: Record<string, WriterLiveStats> = useMemo(() => {
+    const map: Record<string, WriterLiveStats> = {};
+    for (const r of liveRows ?? []) map[r.writerId] = r;
+    return map;
+  }, [liveRows]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWritersQueryKey(agentId) });
 
@@ -140,9 +176,12 @@ function WritersSection({ agentId }: { agentId: string }) {
             {writers ? writers.length : 0} Total
           </span>
         </div>
-        <Button size="sm" variant="outline" className="h-7 text-xs px-3 font-bold rounded-lg border-border/60 hover:bg-muted/50 transition-colors shadow-xs" onClick={() => setAddOpen(true)}>
-          + Add Writer
-        </Button>
+        <div className="flex items-center gap-2">
+          <GamePicker games={games} selectedId={selectedGameId} onSelect={setSelectedGameId} />
+          <Button size="sm" variant="outline" className="h-7 text-xs px-3 font-bold rounded-lg border-border/60 hover:bg-muted/50 transition-colors shadow-xs" onClick={() => setAddOpen(true)}>
+            + Add Writer
+          </Button>
+        </div>
       </div>
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading writers...</p>
@@ -154,7 +193,12 @@ function WritersSection({ agentId }: { agentId: string }) {
             <tr className="text-[10px] text-muted-foreground/75 border-b border-border/40 uppercase tracking-wider font-bold">
               <th className="text-left pb-2 font-bold">Code</th>
               <th className="text-left pb-2 font-bold">Name</th>
+              <th className="text-left pb-2 font-bold">Phone</th>
+              <th className="text-left pb-2 font-bold">Model</th>
               <th className="text-left pb-2 font-bold">Status</th>
+              <th className="text-right pb-2 font-bold">Tickets</th>
+              <th className="text-right pb-2 font-bold">Stakes</th>
+              <th className="text-right pb-2 font-bold">Wins</th>
               <th className="pb-2 w-16 text-right pr-2"></th>
             </tr>
           </thead>
@@ -163,6 +207,8 @@ function WritersSection({ agentId }: { agentId: string }) {
               <tr key={w.id} className={`hover:bg-muted/20 transition-colors ${!w.isActive ? "opacity-50" : ""}`}>
                 <td className="py-2 font-mono text-xs font-semibold text-foreground/90">{w.fullCode}</td>
                 <td className="py-2 text-xs font-medium text-foreground/90">{w.fullName}</td>
+                <td className="py-2 text-xs text-muted-foreground">{stats[w.id]?.phone ?? "—"}</td>
+                <td className="py-2 text-xs capitalize text-muted-foreground">{stats[w.id]?.operationModel ?? "—"}</td>
                 <td className="py-2">
                   <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0.1 rounded-full border ${
                     w.isActive 
@@ -172,6 +218,9 @@ function WritersSection({ agentId }: { agentId: string }) {
                     {w.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </td>
+                <td className="py-2 text-right text-xs tabular-nums">{stats[w.id]?.ticketCount ?? 0}</td>
+                <td className="py-2 text-right text-xs tabular-nums">{fmtGHS(stats[w.id]?.totalStakes ?? 0)}</td>
+                <td className="py-2 text-right text-xs tabular-nums">{fmtGHS(stats[w.id]?.totalWins ?? 0)}</td>
                 <td className="py-2 text-right pr-2">
                   <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold rounded-md text-primary hover:bg-primary/10 transition-colors" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}>Edit</Button>
                 </td>

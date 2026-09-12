@@ -67,6 +67,9 @@ export function WriterPlaceBet() {
       setStakeAmount("");
       queryClient.invalidateQueries({ queryKey: ["/api/writer-tokens/balance"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
+      // Reflect the new ticket in live figures immediately rather than
+      // waiting for the next poll.
+      queryClient.invalidateQueries({ queryKey: ["/api/live-sales"] });
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });

@@ -33,6 +33,7 @@ export function AdminGameResults() {
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/live-sales"] });
       toast({ title: "Results posted successfully!" });
       setWinningNumbers("");
       setMachineNumbers("");
@@ -50,6 +51,7 @@ export function AdminGameResults() {
       return res.json();
     },
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/live-sales"] });
       toast({ title: "Payouts Processed", description: `Processed ${data.processedCount} payouts & sent SMS notifications.` });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" })

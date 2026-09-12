@@ -29,6 +29,7 @@ import gameResultsRouter from "./game-results";
 import postpaidSettlementRouter from "./postpaid-settlement";
 import riskManagementRouter from "./risk-management";
 import writerApprovalsRouter from "./writer-approvals";
+import liveSalesRouter from "./live-sales";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(gameResultsRouter);
 router.use(postpaidSettlementRouter);
 router.use(riskManagementRouter);
 router.use(writerApprovalsRouter);
+router.use(liveSalesRouter);
 
 export default router;
