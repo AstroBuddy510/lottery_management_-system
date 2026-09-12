@@ -110,8 +110,11 @@ export function expiryDate(drawDate: Date, validityDays: number): Date {
 export function buildReceiptText(d: ReceiptData): string {
   const out: string[] = [];
 
-  out.push(centre(d.companyName.toUpperCase()));
-  if (d.tagline) out.push(centre(d.tagline));
+  // The registered name and slogan are centred, and wrapped rather than
+  // clipped: the current slogan is exactly RECEIPT_COLUMNS characters, so any
+  // future rewording would otherwise be silently truncated mid-word.
+  for (const line of wrap(d.companyName.toUpperCase())) out.push(centre(line));
+  if (d.tagline) for (const line of wrap(d.tagline)) out.push(centre(line));
   out.push("");
   out.push(centre(d.drawName));
   out.push(rule("="));

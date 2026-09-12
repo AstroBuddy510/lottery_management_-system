@@ -20,8 +20,11 @@ import {
 
 const router = Router();
 
-const COMPANY_NAME = process.env["COMPANY_NAME"] ?? "VS2000 Smart Office";
-const COMPANY_TAGLINE = process.env["COMPANY_TAGLINE"] ?? "";
+// Overridable per-deployment, but these are the registered trading name and
+// slogan that must appear on every printed ticket.
+const COMPANY_NAME = process.env["COMPANY_NAME"] ?? "VISION 2000 LOTTO COM.LTD";
+const COMPANY_TAGLINE =
+  process.env["COMPANY_TAGLINE"] ?? "Gaming in aid of Street Children";
 
 /**
  * One ticket with everything a receipt needs. `q` accepts either the ticket's
