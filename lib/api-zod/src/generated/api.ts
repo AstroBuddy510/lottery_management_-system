@@ -584,7 +584,11 @@ export const ListWritersResponseItem = zod.object({
   "fullCode": zod.string(),
   "fullName": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "phone": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
+  "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "pin": zod.string().nullish()
 })
 export const ListWritersResponse = zod.array(ListWritersResponseItem)
 
@@ -599,11 +603,15 @@ export const CreateWriterParams = zod.object({
 export const createWriterBodyWriterCodeMin = 2;
 export const createWriterBodyWriterCodeMax = 6;
 
+export const createWriterBodyPhoneMax = 20;
+
 
 
 export const CreateWriterBody = zod.object({
   "writerCode": zod.string().min(createWriterBodyWriterCodeMin).max(createWriterBodyWriterCodeMax),
-  "fullName": zod.string()
+  "fullName": zod.string(),
+  "phone": zod.string().min(1).max(createWriterBodyPhoneMax).optional(),
+  "operationModel": zod.enum(['prepaid', 'postpaid']).optional()
 })
 
 
@@ -626,7 +634,11 @@ export const UpdateWriterResponse = zod.object({
   "fullCode": zod.string(),
   "fullName": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "phone": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
+  "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "pin": zod.string().nullish()
 })
 
 
@@ -1713,7 +1725,11 @@ export const GetWriterReportResponse = zod.object({
   "fullCode": zod.string(),
   "fullName": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "phone": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
+  "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "pin": zod.string().nullish()
 }),
   "totals": zod.object({
   "calcDate": zod.string().optional(),
@@ -1789,7 +1805,11 @@ export const GetAgentReportResponse = zod.object({
   "fullCode": zod.string(),
   "fullName": zod.string(),
   "isActive": zod.boolean(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "phone": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
+  "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "pin": zod.string().nullish()
 }),
   "totals": zod.object({
   "calcDate": zod.string().optional(),

@@ -3,6 +3,7 @@ import { db, writersTable, agentsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { generatePin, hashPin } from "../lib/writer-onboarding";
 
 const router = Router();
 
@@ -64,7 +65,10 @@ async function decide(
   nextStatus: "approved" | "rejected",
   reviewerId: string,
   reviewerRole: string,
-): Promise<{ ok: true; writer: typeof writersTable.$inferSelect } | { ok: false; status: number; error: string }> {
+): Promise<
+  | { ok: true; writer: typeof writersTable.$inferSelect; pin?: string }
+  | { ok: false; status: number; error: string }
+> {
   const [writer] = await db
     .select()
     .from(writersTable)
@@ -94,6 +98,10 @@ async function decide(
     }
   }
 
+  // Approval is what issues the writer's credential. Generate it before the
+  // UPDATE so the PIN and the status change land together.
+  const pin = nextStatus === "approved" && !writer.pinHash ? generatePin() : undefined;
+
   const [updated] = await db
     .update(writersTable)
     .set({
@@ -102,6 +110,7 @@ async function decide(
       // what approved_by references.
       approvedBy: reviewerId,
       isActive: nextStatus === "approved" ? writer.isActive : false,
+      ...(pin ? { pinHash: await hashPin(pin) } : {}),
     })
     .where(
       // Re-check status in the WHERE so two concurrent reviewers can't both win.
@@ -112,7 +121,7 @@ async function decide(
   if (!updated) {
     return { ok: false, status: 409, error: "Writer was reviewed by someone else" };
   }
-  return { ok: true, writer: updated };
+  return { ok: true, writer: updated, ...(pin ? { pin } : {}) };
 }
 
 router.patch(
@@ -126,7 +135,9 @@ router.patch(
       res.status(result.status).json({ error: result.error });
       return;
     }
-    res.json(result.writer);
+    // `pin` is plaintext and is returned exactly once, here. Only the hash is
+    // stored, so it cannot be recovered later - it must be reset instead.
+    res.json({ ...result.writer, pinHash: undefined, pin: result.pin ?? null });
   },
 );
 
@@ -146,7 +157,7 @@ router.patch(
       res.status(result.status).json({ error: result.error });
       return;
     }
-    res.json(result.writer);
+    res.json({ ...result.writer, pinHash: undefined });
   },
 );
 

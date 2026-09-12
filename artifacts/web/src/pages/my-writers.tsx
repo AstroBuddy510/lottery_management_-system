@@ -58,7 +58,8 @@ export function MyWriters() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
-  const [createForm, setCreateForm] = useState({ writerCode: "", fullName: "" });
+  const [createForm, setCreateForm] = useState({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid" });
+  const [issued, setIssued] = useState<{ name: string; fullCode: string; pin: string } | null>(null);
   const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
 
   const invalidate = () => agent?.id && qc.invalidateQueries({ queryKey: getListWritersQueryKey(agent.id, {}) });
@@ -67,14 +68,24 @@ export function MyWriters() {
     e.preventDefault();
     if (!agent?.id) return;
     try {
-      await createMutation.mutateAsync({
+      const created = await createMutation.mutateAsync({
         agentId: agent.id,
-        data: { writerCode: createForm.writerCode.trim().toUpperCase(), fullName: createForm.fullName.trim() },
+        data: {
+          writerCode: createForm.writerCode.trim().toUpperCase(),
+          fullName: createForm.fullName.trim(),
+          phone: createForm.phone.trim(),
+          operationModel: createForm.operationModel as "prepaid" | "postpaid",
+        },
       });
-      toast.success("Writer added successfully");
       setAddOpen(false);
-      setCreateForm({ writerCode: "", fullName: "" });
+      setCreateForm({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid" });
       invalidate();
+      if (created?.pin) {
+        // Shown once - only the hash is stored server-side.
+        setIssued({ name: created.fullName, fullCode: created.fullCode, pin: created.pin });
+      } else {
+        toast.success("Writer added successfully");
+      }
     } catch (err: any) {
       toast.error(err?.data?.error ?? err?.response?.data?.error ?? "Failed to add writer");
     }
@@ -188,7 +199,7 @@ export function MyWriters() {
         )}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={o => { if (!o) setCreateForm({ writerCode: "", fullName: "" }); setAddOpen(o); }}>
+      <Dialog open={addOpen} onOpenChange={o => { if (!o) setCreateForm({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid" }); setAddOpen(o); }}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Writer</DialogTitle></DialogHeader>
           <p className="text-xs text-muted-foreground">
@@ -221,6 +232,30 @@ export function MyWriters() {
                 autoComplete="name"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Phone Number</Label>
+              <Input
+                type="tel"
+                value={createForm.phone}
+                onChange={e => setCreateForm(f => ({ ...f, phone: e.target.value }))}
+                required
+                className="h-11 text-sm rounded-xl"
+                placeholder="024XXXXXXX"
+                autoComplete="tel"
+              />
+              <p className="text-[11px] text-muted-foreground">Used to sign in to the writer portal.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Operation Model</Label>
+              <select
+                value={createForm.operationModel}
+                onChange={e => setCreateForm(f => ({ ...f, operationModel: e.target.value }))}
+                className="h-11 w-full rounded-xl border bg-background px-3 text-sm"
+              >
+                <option value="postpaid">Postpaid (settle daily)</option>
+                <option value="prepaid">Prepaid (buy tokens up front)</option>
+              </select>
+            </div>
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setAddOpen(false)}>Cancel</Button>
               <Button type="submit" className="flex-1 h-11 rounded-xl font-semibold" disabled={createMutation.isPending}>
@@ -228,6 +263,31 @@ export function MyWriters() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!issued} onOpenChange={o => !o && setIssued(null)}>
+        <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6">
+          <DialogHeader><DialogTitle>Writer added</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Give this PIN to {issued?.name}. It is shown only once and cannot be
+            retrieved later — if it is lost, reset the PIN instead.
+          </p>
+          <div className="rounded-xl border bg-muted/50 p-4 text-center space-y-2">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Writer ID</div>
+              <div className="font-mono font-semibold">{issued?.fullCode}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">PIN</div>
+              <div className="text-3xl font-mono font-bold tracking-[0.3em]">{issued?.pin}</div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full h-11 rounded-xl font-semibold" onClick={() => setIssued(null)}>
+              I have recorded it
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

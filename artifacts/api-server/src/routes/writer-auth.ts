@@ -1,10 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { db, usersTable, writersTable } from "@workspace/db";
+import { db, usersTable, writersTable, agentsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { composeWriterFullCode } from "../lib/writer-onboarding";
 import type { JwtPayload } from "../middleware/auth";
 
 const router = Router();
@@ -18,10 +19,16 @@ const writerLoginSchema = z.object({
 });
 
 const writerRegisterSchema = z.object({
-  fullName: z.string().min(1),
-  phone: z.string().min(1),
+  fullName: z.string().min(1).max(100),
+  phone: z.string().min(1).max(20),
+  // The agent's printed full code, e.g. "AG-01". Typed rather than picked
+  // from a list so the agency roster stays private on this public route.
+  agentCode: z.string().min(1).max(10),
+  // The writer's own code, unique within that agent.
+  writerCode: z.string().min(2).max(6),
   idType: z.enum(["ghana_card", "voters_id", "drivers_license"]),
-  idNumber: z.string().min(1),
+  idNumber: z.string().min(1).max(50),
+  operationModel: z.enum(["prepaid", "postpaid"]),
 });
 
 const resetPinSchema = z.object({
@@ -96,18 +103,68 @@ router.post("/writer-auth/register", async (req, res) => {
   }
   const data = parse.data;
 
-  // Check if phone already exists
-  const existing = await db.select().from(writersTable).where(eq(writersTable.phone, data.phone)).limit(1);
-  if (existing.length > 0) {
+  const [agent] = await db
+    .select()
+    .from(agentsTable)
+    .where(eq(agentsTable.fullCode, data.agentCode.toUpperCase()))
+    .limit(1);
+  if (!agent || !agent.isActive) {
+    // Same message either way - don't confirm which agent codes exist.
+    res.status(404).json({ error: "Agent code not recognised" });
+    return;
+  }
+
+  const fullCode = composeWriterFullCode(agent.fullCode, data.writerCode);
+  if (!fullCode) {
+    res.status(400).json({ error: "Writer code is too long for this agent" });
+    return;
+  }
+
+  const [codeTaken] = await db
+    .select({ id: writersTable.id })
+    .from(writersTable)
+    .where(eq(writersTable.fullCode, fullCode))
+    .limit(1);
+  if (codeTaken) {
+    res.status(409).json({ error: "Writer code already in use for this agent" });
+    return;
+  }
+
+  const [phoneTaken] = await db
+    .select({ id: writersTable.id })
+    .from(writersTable)
+    .where(eq(writersTable.phone, data.phone))
+    .limit(1);
+  if (phoneTaken) {
     res.status(409).json({ error: "Phone number already in use" });
     return;
   }
 
-  // NOTE: For a real system, you might want to assign them to a default "Self-Service Agent" 
-  // or put them in a pending queue without an agentId until approved.
-  // Since agentId is non-null in writersTable, we must assign an agent.
-  // We'll find the first active agent as a placeholder, or require agent code in registration.
-  res.status(501).json({ error: "Self-registration requires assigning an agent code, please use agent onboarding for now." });
+  // No PIN is issued here: the writer is not usable until an agent or
+  // administrator approves them, and the PIN is generated at that point.
+  const [writer] = await db
+    .insert(writersTable)
+    .values({
+      agentId: agent.id,
+      writerCode: data.writerCode.toUpperCase(),
+      fullCode,
+      fullName: data.fullName,
+      phone: data.phone,
+      idType: data.idType,
+      idNumber: data.idNumber,
+      operationModel: data.operationModel,
+      registrationSource: "self",
+      approvalStatus: "pending",
+    })
+    .returning();
+
+  res.status(201).json({
+    id: writer.id,
+    fullCode: writer.fullCode,
+    fullName: writer.fullName,
+    approvalStatus: writer.approvalStatus,
+    agencyName: agent.agencyName,
+  });
 });
 
 router.post(

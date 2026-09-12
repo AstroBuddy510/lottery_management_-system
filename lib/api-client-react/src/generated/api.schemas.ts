@@ -357,6 +357,29 @@ export interface AgentUpdate {
   outstandingDebt?: string;
 }
 
+/**
+ * @nullable
+ */
+export type WriterOperationModel = typeof WriterOperationModel[keyof typeof WriterOperationModel] | null;
+
+
+export const WriterOperationModel = {
+  prepaid: 'prepaid',
+  postpaid: 'postpaid',
+} as const;
+
+/**
+ * @nullable
+ */
+export type WriterApprovalStatus = typeof WriterApprovalStatus[keyof typeof WriterApprovalStatus] | null;
+
+
+export const WriterApprovalStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
 export interface Writer {
   id: string;
   agentId: string;
@@ -365,7 +388,23 @@ export interface Writer {
   fullName: string;
   isActive: boolean;
   createdAt: string;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  operationModel?: WriterOperationModel;
+  /** @nullable */
+  approvalStatus?: WriterApprovalStatus;
+  /** @nullable */
+  pin?: string | null;
 }
+
+export type WriterInputOperationModel = typeof WriterInputOperationModel[keyof typeof WriterInputOperationModel];
+
+
+export const WriterInputOperationModel = {
+  prepaid: 'prepaid',
+  postpaid: 'postpaid',
+} as const;
 
 export interface WriterInput {
   /**
@@ -374,6 +413,12 @@ export interface WriterInput {
      */
   writerCode: string;
   fullName: string;
+  /**
+     * @minLength 1
+     * @maxLength 20
+     */
+  phone?: string;
+  operationModel?: WriterInputOperationModel;
 }
 
 export interface WriterUpdate {

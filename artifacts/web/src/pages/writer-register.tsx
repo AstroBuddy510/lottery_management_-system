@@ -11,16 +11,21 @@ export function WriterRegister() {
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
+    agentCode: "",
+    writerCode: "",
     idType: "",
     idNumber: "",
+    operationModel: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [issuedCode, setIssuedCode] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.fullName || !formData.phone || !formData.idType || !formData.idNumber) {
+    const missing = Object.entries(formData).filter(([, v]) => !v);
+    if (missing.length > 0) {
       toast({ title: "Missing fields", description: "Please fill out all fields", variant: "destructive" });
       return;
     }
@@ -38,6 +43,7 @@ export function WriterRegister() {
         throw new Error(data.error || "Registration failed");
       }
 
+      setIssuedCode(data.fullCode ?? null);
       setIsSuccess(true);
     } catch (error: any) {
       toast({
@@ -59,8 +65,15 @@ export function WriterRegister() {
               <CheckCircle2 className="h-8 w-8 text-green-600" />
             </div>
             <h2 className="text-2xl font-bold">Registration Submitted</h2>
+            {issuedCode && (
+              <div className="rounded-lg border bg-muted/50 py-3 px-4 max-w-xs mx-auto">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Your Writer ID</div>
+                <div className="text-xl font-mono font-bold tracking-tight">{issuedCode}</div>
+              </div>
+            )}
             <p className="text-muted-foreground max-w-sm mx-auto">
-              Your registration request has been submitted successfully. An administrator or agent will review your application and generate a PIN for you.
+              Your registration is awaiting review. Once your agent or an administrator approves it,
+              they will give you the 4-digit PIN you use to sign in.
             </p>
             <div className="pt-6">
               <Link href="/writer/login">
@@ -103,6 +116,42 @@ export function WriterRegister() {
                 onChange={(e) => setFormData(p => ({ ...p, phone: e.target.value }))}
                 required
               />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Agent Code</label>
+                <Input
+                  placeholder="e.g. AG-01"
+                  value={formData.agentCode}
+                  onChange={(e) => setFormData(p => ({ ...p, agentCode: e.target.value.toUpperCase() }))}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Your Code</label>
+                <Input
+                  placeholder="2-6 chars"
+                  maxLength={6}
+                  value={formData.writerCode}
+                  onChange={(e) => setFormData(p => ({ ...p, writerCode: e.target.value.toUpperCase() }))}
+                  required
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Ask your agent for their code. Your Writer ID is built from both.
+            </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Operation Model</label>
+              <Select onValueChange={(v) => setFormData(p => ({ ...p, operationModel: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select model" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="prepaid">Prepaid (buy tokens up front)</SelectItem>
+                  <SelectItem value="postpaid">Postpaid (settle daily)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">ID Type</label>

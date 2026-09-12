@@ -6,6 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 interface PendingWriter {
   id: string;
@@ -36,6 +38,7 @@ function authHeaders(): Record<string, string> {
 export function AdminWriterApprovals() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [issued, setIssued] = useState<{ name: string; fullCode: string; pin: string } | null>(null);
 
   const { data: writers, isLoading, isError, error } = useQuery<PendingWriter[]>({
     queryKey: ["/api/writers/pending"],
@@ -60,8 +63,13 @@ export function AdminWriterApprovals() {
       }
       return res.json();
     },
-    onSuccess: (_data, variables) => {
-      toast({ title: variables.action === "approve" ? "Writer approved" : "Writer rejected" });
+    onSuccess: (data, variables) => {
+      if (variables.action === "approve" && data?.pin) {
+        // Shown once - the server stores only the hash and cannot return it again.
+        setIssued({ name: data.fullName, fullCode: data.fullCode, pin: data.pin });
+      } else {
+        toast({ title: variables.action === "approve" ? "Writer approved" : "Writer rejected" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/writers/pending"] });
     },
     onError: (err: Error) =>
@@ -171,6 +179,33 @@ export function AdminWriterApprovals() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={!!issued} onOpenChange={(o) => !o && setIssued(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Writer approved</DialogTitle>
+            <DialogDescription>
+              Give this PIN to {issued?.name}. It is shown only once and cannot be
+              retrieved later &mdash; if it is lost, reset the PIN instead.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border bg-muted/50 p-4 text-center space-y-2">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Writer ID</div>
+              <div className="font-mono font-semibold">{issued?.fullCode}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">PIN</div>
+              <div className="text-3xl font-mono font-bold tracking-[0.3em]">{issued?.pin}</div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full" onClick={() => setIssued(null)}>
+              I have recorded it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
