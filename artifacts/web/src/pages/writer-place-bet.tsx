@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { TicketReceiptDialog } from "@/components/ticket-receipt";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ export function WriterPlaceBet() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [receiptTicketId, setReceiptTicketId] = useState<string | null>(null);
   const [location] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const initialGameId = searchParams.get("game") || "";
@@ -61,8 +63,10 @@ export function WriterPlaceBet() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (created: any) => {
       toast({ title: "Bet placed successfully!", variant: "default" });
+      // Straight to the printable slip - the writer needs it in hand now.
+      if (created?.id) setReceiptTicketId(created.id);
       setNumbers("");
       setStakeAmount("");
       queryClient.invalidateQueries({ queryKey: ["/api/writer-tokens/balance"] });
@@ -189,6 +193,8 @@ export function WriterPlaceBet() {
           </form>
         </CardContent>
       </Card>
+
+      <TicketReceiptDialog ticketId={receiptTicketId} onClose={() => setReceiptTicketId(null)} />
     </div>
   );
 }

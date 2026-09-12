@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Game Results", path: "/game-results", roles: ["administrator", "director"] },
   { label: "Risk Management", path: "/risk-management", roles: ["administrator", "director"] },
   { label: "Writer Approvals", path: "/writer-approvals", roles: ["administrator", "director"] },
+  { label: "Ticket Lookup", path: "/ticket-lookup", roles: ["administrator", "director", "cashier"] },
   { label: "Postpaid Settlement", path: "/postpaid-settlement", roles: ["administrator", "director", "cashier"] },
   { label: "Settings", path: "/settings", roles: ["administrator", "director"] },
   { label: "My Writers", path: "/my-writers", roles: ["agent"] },

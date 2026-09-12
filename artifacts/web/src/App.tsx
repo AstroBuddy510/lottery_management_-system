@@ -48,6 +48,7 @@ import { AdminGameResults } from "@/pages/admin-game-results";
 import { AdminRiskManagement } from "@/pages/admin-risk-management";
 import { AdminPostpaidSettlement } from "@/pages/admin-postpaid-settlement";
 import { AdminWriterApprovals } from "@/pages/admin-writer-approvals";
+import { TicketLookup } from "@/pages/ticket-lookup";
 
 import { Layout } from "@/components/layout";
 
@@ -139,6 +140,10 @@ function Router() {
       </Route>
 
       {/* Writer Routes */}
+      <Route path="/ticket-lookup">
+        {() => <ProtectedRoute component={TicketLookup} roles={['director', 'administrator', 'cashier', 'agent']} />}
+      </Route>
+
       <Route path="/writer/login" component={WriterLogin} />
       <Route path="/writer/register" component={WriterRegister} />
       <Route path="/writer/dashboard">

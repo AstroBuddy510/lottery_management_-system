@@ -94,12 +94,26 @@ function NavWriters({ active }: { active: boolean }) {
   );
 }
 
+function NavScan({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={active ? "2.5" : "1.8"} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+      <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+    </svg>
+  );
+}
+
 const NAV_TABS = [
   { label: "Home",    path: "/dashboard",     icon: (a: boolean) => <NavHome active={a} /> },
   // { label: "Sales",   path: "/sales",          icon: (a: boolean) => <NavSales active={a} /> },
   { label: "Gross",   path: "/entries/gross",  icon: (a: boolean) => <NavGross active={a} /> },
   { label: "Wins",    path: "/entries/wins",   icon: (a: boolean) => <NavWins active={a} /> },
   { label: "Writers", path: "/my-writers",     icon: (a: boolean) => <NavWriters active={a} /> },
+  { label: "Tickets", path: "/ticket-lookup",  icon: (a: boolean) => <NavScan active={a} /> },
 ];
 
 export function AgentLayout({ children }: { children: React.ReactNode }) {

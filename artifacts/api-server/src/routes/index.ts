@@ -30,6 +30,7 @@ import postpaidSettlementRouter from "./postpaid-settlement";
 import riskManagementRouter from "./risk-management";
 import writerApprovalsRouter from "./writer-approvals";
 import liveSalesRouter from "./live-sales";
+import ticketReceiptsRouter from "./ticket-receipts";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(postpaidSettlementRouter);
 router.use(riskManagementRouter);
 router.use(writerApprovalsRouter);
 router.use(liveSalesRouter);
+router.use(ticketReceiptsRouter);
 
 export default router;
