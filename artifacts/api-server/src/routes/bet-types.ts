@@ -26,7 +26,7 @@ router.get("/bet-types", requireAuth, async (req, res) => {
 router.post("/bet-types", requireAuth, requireRole("director", "administrator"), async (req, res) => {
   const parse = betTypeSchema.safeParse(req.body);
   if (!parse.success) {
-    res.status(400).json({ error: "Invalid data", details: parse.error.errors });
+    res.status(400).json({ error: "Invalid data", details: parse.error.issues });
     return;
   }
   const data = parse.data;
@@ -53,7 +53,7 @@ router.put("/bet-types/:id", requireAuth, requireRole("director", "administrator
   const id = req.params["id"] as string;
   const parse = updateBetTypeSchema.safeParse(req.body);
   if (!parse.success) {
-    res.status(400).json({ error: "Invalid data", details: parse.error.errors });
+    res.status(400).json({ error: "Invalid data", details: parse.error.issues });
     return;
   }
   const data = parse.data;

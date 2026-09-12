@@ -18,7 +18,7 @@ export class SmsAdapter {
       logger.info(`[SMS SENT] To: ${to}`);
       return { success: true, messageId: `hubtel-${Date.now()}` };
     } catch (error) {
-      logger.error(`[SMS ERROR] Failed to send to ${to}`, error);
+      logger.error({ err: error }, `[SMS ERROR] Failed to send to ${to}`);
       return { success: false };
     }
   }

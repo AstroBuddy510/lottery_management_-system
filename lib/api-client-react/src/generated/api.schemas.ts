@@ -49,6 +49,18 @@ export const UserRole = {
   gross_entry: 'gross_entry',
   wins_entry: 'wins_entry',
   agent: 'agent',
+  writer: 'writer',
+} as const;
+
+/**
+ * @nullable
+ */
+export type UserOperationModel = typeof UserOperationModel[keyof typeof UserOperationModel] | null;
+
+
+export const UserOperationModel = {
+  prepaid: 'prepaid',
+  postpaid: 'postpaid',
 } as const;
 
 export interface User {
@@ -62,6 +74,12 @@ export interface User {
   createdAt: string;
   /** @nullable */
   lastLogin?: string | null;
+  /** @nullable */
+  agentId?: string | null;
+  /** @nullable */
+  fullCode?: string | null;
+  /** @nullable */
+  operationModel?: UserOperationModel;
 }
 
 export interface AuthTokens {

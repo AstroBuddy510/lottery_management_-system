@@ -37,12 +37,18 @@ router.get("/postpaid/outstanding", requireAuth, requireRole("director", "admini
 });
 
 router.post("/postpaid/settle/:ledgerId", requireAuth, requireRole("director", "administrator", "cashier"), async (req, res) => {
-  const ledgerId = req.params.ledgerId;
+  const ledgerId = req.params["ledgerId"] as string;
   const parse = settleSchema.safeParse(req.body);
-  if (!parse.success) return res.status(400).json({ error: "Invalid data" });
+  if (!parse.success) {
+    res.status(400).json({ error: "Invalid data" });
+    return;
+  }
   
   const [ledger] = await db.select().from(postpaidDailyLedgerTable).where(eq(postpaidDailyLedgerTable.id, ledgerId)).limit(1);
-  if (!ledger) return res.status(404).json({ error: "Ledger not found" });
+  if (!ledger) {
+    res.status(404).json({ error: "Ledger not found" });
+    return;
+  }
 
   const [updated] = await db.update(postpaidDailyLedgerTable)
     .set({

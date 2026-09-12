@@ -37,7 +37,7 @@ function generateTokens(payload: JwtPayload): { accessToken: string; refreshToke
 router.post("/writer-auth/login", async (req, res) => {
   const parse = writerLoginSchema.safeParse(req.body);
   if (!parse.success) {
-    res.status(400).json({ error: "Invalid request body", details: parse.error.errors });
+    res.status(400).json({ error: "Invalid request body", details: parse.error.issues });
     return;
   }
   const { phone, pin } = parse.data;
@@ -91,7 +91,7 @@ router.post("/writer-auth/login", async (req, res) => {
 router.post("/writer-auth/register", async (req, res) => {
   const parse = writerRegisterSchema.safeParse(req.body);
   if (!parse.success) {
-    res.status(400).json({ error: "Invalid input", details: parse.error.errors });
+    res.status(400).json({ error: "Invalid input", details: parse.error.issues });
     return;
   }
   const data = parse.data;

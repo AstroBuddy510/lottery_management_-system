@@ -2511,7 +2511,7 @@ components:
           type: string
         role:
           type: string
-          enum: [director, administrator, cashier, gross_entry, wins_entry, agent]
+          enum: [director, administrator, cashier, gross_entry, wins_entry, agent, writer]
         isActive:
           type: boolean
         profilePicture:
@@ -2520,6 +2520,14 @@ components:
           type: string
         lastLogin:
           type: ["string", "null"]
+        # Writer-portal only: present when role == writer
+        agentId:
+          type: ["string", "null"]
+        fullCode:
+          type: ["string", "null"]
+        operationModel:
+          type: ["string", "null"]
+          enum: [prepaid, postpaid, null]
 
     UserCreated:
       type: object
