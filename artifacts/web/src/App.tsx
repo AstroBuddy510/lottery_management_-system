@@ -33,6 +33,22 @@ import { StaffsEmployees } from "@/pages/staffs-employees";
 import { CompanyExpenses } from "@/pages/company-expenses";
 import { Inventory } from "@/pages/inventory";
 
+// Writer Pages
+import { WriterLogin } from "@/pages/writer-login";
+import { WriterRegister } from "@/pages/writer-register";
+import { WriterDashboard } from "@/pages/writer-dashboard";
+import { WriterPlaceBet } from "@/pages/writer-place-bet";
+import { WriterTickets } from "@/pages/writer-tickets";
+import { WriterWallet } from "@/pages/writer-wallet";
+import { WriterLayout } from "@/components/writer-layout";
+
+// Admin Pages
+import { AdminBetTypes } from "@/pages/admin-bet-types";
+import { AdminGameResults } from "@/pages/admin-game-results";
+import { AdminRiskManagement } from "@/pages/admin-risk-management";
+import { AdminPostpaidSettlement } from "@/pages/admin-postpaid-settlement";
+import { AdminWriterApprovals } from "@/pages/admin-writer-approvals";
+
 import { Layout } from "@/components/layout";
 
 const queryClient = new QueryClient({
@@ -103,6 +119,55 @@ function Router() {
 
       <Route path="/games">
         {() => <ProtectedRoute component={Games} roles={['administrator', 'director']} />}
+      </Route>
+
+      {/* Admin Added Routes */}
+      <Route path="/bet-types">
+        {() => <ProtectedRoute component={AdminBetTypes} roles={['administrator', 'director']} />}
+      </Route>
+      <Route path="/game-results">
+        {() => <ProtectedRoute component={AdminGameResults} roles={['administrator', 'director']} />}
+      </Route>
+      <Route path="/risk-management">
+        {() => <ProtectedRoute component={AdminRiskManagement} roles={['administrator', 'director']} />}
+      </Route>
+      <Route path="/postpaid-settlement">
+        {() => <ProtectedRoute component={AdminPostpaidSettlement} roles={['administrator', 'director', 'cashier']} />}
+      </Route>
+      <Route path="/writer-approvals">
+        {() => <ProtectedRoute component={AdminWriterApprovals} roles={['administrator', 'director']} />}
+      </Route>
+
+      {/* Writer Routes */}
+      <Route path="/writer/login" component={WriterLogin} />
+      <Route path="/writer/register" component={WriterRegister} />
+      <Route path="/writer/dashboard">
+        {() => (
+          <WriterLayout>
+             <ProtectedRoute component={WriterDashboard} roles={['writer']} />
+          </WriterLayout>
+        )}
+      </Route>
+      <Route path="/writer/place-bet">
+        {() => (
+          <WriterLayout>
+             <ProtectedRoute component={WriterPlaceBet} roles={['writer']} />
+          </WriterLayout>
+        )}
+      </Route>
+      <Route path="/writer/tickets">
+        {() => (
+          <WriterLayout>
+             <ProtectedRoute component={WriterTickets} roles={['writer']} />
+          </WriterLayout>
+        )}
+      </Route>
+      <Route path="/writer/wallet">
+        {() => (
+          <WriterLayout>
+             <ProtectedRoute component={WriterWallet} roles={['writer']} />
+          </WriterLayout>
+        )}
       </Route>
 
       <Route path="/settings">

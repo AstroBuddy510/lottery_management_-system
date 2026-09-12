@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, boolean, timestamp, numeric, text } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -25,6 +25,14 @@ export const writersTable = pgTable("writers", {
   writerCode: varchar("writer_code", { length: 6 }).notNull(),
   fullCode: varchar("full_code", { length: 16 }).notNull().unique(),
   fullName: varchar("full_name", { length: 100 }).notNull(),
+  phone: varchar("phone", { length: 20 }).unique(),
+  pinHash: text("pin_hash"),
+  idType: varchar("id_type", { length: 30 }),
+  idNumber: varchar("id_number", { length: 50 }),
+  operationModel: varchar("operation_model", { length: 10 }).notNull().default("postpaid"),
+  registrationSource: varchar("registration_source", { length: 20 }).notNull().default("agent"),
+  approvalStatus: varchar("approval_status", { length: 20 }).notNull().default("approved"),
+  approvedBy: uuid("approved_by").references(() => usersTable.id),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

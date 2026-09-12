@@ -21,6 +21,13 @@ import agencyStaffRouter from "./agency-staff";
 import companyStaffRouter from "./company-staff";
 import staffPayrollRouter from "./staff-payroll";
 import inventoryRouter from "./inventory";
+import writerAuthRouter from "./writer-auth";
+import betTypesRouter from "./bet-types";
+import writerTicketsRouter from "./writer-tickets";
+import writerTokensRouter from "./writer-tokens";
+import gameResultsRouter from "./game-results";
+import postpaidSettlementRouter from "./postpaid-settlement";
+import riskManagementRouter from "./risk-management";
 
 const router: IRouter = Router();
 
@@ -46,5 +53,12 @@ router.use(paystackRouter);
 router.use(companyStaffRouter);
 router.use(staffPayrollRouter);
 router.use(inventoryRouter);
+router.use(writerAuthRouter);
+router.use(betTypesRouter);
+router.use(writerTicketsRouter);
+router.use(writerTokensRouter);
+router.use(gameResultsRouter);
+router.use(postpaidSettlementRouter);
+router.use(riskManagementRouter);
 
 export default router;

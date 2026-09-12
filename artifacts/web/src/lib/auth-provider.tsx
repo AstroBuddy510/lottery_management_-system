@@ -247,11 +247,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await performLogout();
   };
+  const setTokens = useCallback((accessToken: string, refreshToken: string, userData: any) => {
+    localStorage.setItem("accessToken", accessToken);
+    localStorage.setItem("refreshToken", refreshToken);
+    setUser(userData);
+    setIsInitializing(false);
+  }, []);
 
   const isLoading = isInitializing || (hasToken && isLoadingMe) || loginMutation.isPending;
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, setTokens }}>
       {children}
 
       {/* ── Inactivity warning overlay — premium glassmorphic modal ─────────── */}
