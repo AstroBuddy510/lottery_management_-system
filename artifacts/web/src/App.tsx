@@ -59,7 +59,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ component: Component, roles }: { component: React.ComponentType, roles?: string[] }) {
+function ProtectedRoute({ component: Component, roles, bare }: { component: React.ComponentType, roles?: string[], bare?: boolean }) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -72,6 +72,13 @@ function ProtectedRoute({ component: Component, roles }: { component: React.Comp
 
   if (roles && !roles.includes(user.role)) {
     return <Redirect to="/dashboard" />;
+  }
+
+  // Writer routes supply their own chrome (WriterLayout). Wrapping them in the
+  // admin Layout as well nested two layouts and rendered its fixed w-56
+  // sidebar on phones, squeezing the content into the remaining strip.
+  if (bare) {
+    return <Component />;
   }
 
   return (
@@ -140,28 +147,28 @@ function Router() {
       <Route path="/writer/dashboard">
         {() => (
           <WriterLayout>
-             <ProtectedRoute component={WriterDashboard} roles={['writer']} />
+             <ProtectedRoute component={WriterDashboard} roles={['writer']} bare />
           </WriterLayout>
         )}
       </Route>
       <Route path="/writer/place-bet">
         {() => (
           <WriterLayout>
-             <ProtectedRoute component={WriterPlaceBet} roles={['writer']} />
+             <ProtectedRoute component={WriterPlaceBet} roles={['writer']} bare />
           </WriterLayout>
         )}
       </Route>
       <Route path="/writer/tickets">
         {() => (
           <WriterLayout>
-             <ProtectedRoute component={WriterTickets} roles={['writer']} />
+             <ProtectedRoute component={WriterTickets} roles={['writer']} bare />
           </WriterLayout>
         )}
       </Route>
       <Route path="/writer/wallet">
         {() => (
           <WriterLayout>
-             <ProtectedRoute component={WriterWallet} roles={['writer']} />
+             <ProtectedRoute component={WriterWallet} roles={['writer']} bare />
           </WriterLayout>
         )}
       </Route>

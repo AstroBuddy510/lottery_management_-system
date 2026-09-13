@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getServerNow } from "../lib/time-sync";
 import { LiveSalesSection } from "@/components/live-sales";
@@ -157,10 +158,16 @@ type AgentStat = {
   gross: number; commission: number; net: number; wins: number; reserve: number; balance: number;
   submittedWriters: number; totalWriters: number; hasPaid: boolean;
   isPending: boolean;
+  /** Where this agent's gross came from, for the source breakdown. */
+  entryGross?: number; ticketGross?: number; ticketCount?: number;
 };
 
 function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void }) {
   const { agent, gross, commission, net, wins, reserve, balance, submittedWriters, totalWriters, hasPaid, isPending } = stat;
+  const entryGross = stat.entryGross ?? 0;
+  const ticketGross = stat.ticketGross ?? 0;
+  const ticketCount = stat.ticketCount ?? 0;
+  const hasSourceSplit = entryGross > 0 || ticketGross > 0;
   const name = agent.user.fullName;
   const submitPercentage = totalWriters > 0 ? (submittedWriters / totalWriters) * 100 : 0;
 
@@ -242,6 +249,32 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
             </div>
           ))}
         </div>
+
+        {/* Where this agent's gross came from */}
+        {hasSourceSplit && (
+          <div className="px-5 py-2.5 border-t border-border/40 bg-muted/10 space-y-1">
+            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80">
+              <span>Agent Entries</span>
+              <span className="font-mono text-foreground">{fmtGHS(entryGross)}</span>
+            </div>
+            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80">
+              <span>Writer Portal{ticketCount > 0 ? ` · ${ticketCount}` : ""}</span>
+              <span className="font-mono text-foreground">{fmtGHS(ticketGross)}</span>
+            </div>
+            <div className="w-full h-1 rounded-full overflow-hidden bg-muted/50 flex">
+              <div
+                className="h-full bg-blue-500"
+                style={{ width: `${gross > 0 ? (entryGross / gross) * 100 : 0}%` }}
+                title="Agent entries"
+              />
+              <div
+                className="h-full bg-violet-500"
+                style={{ width: `${gross > 0 ? (ticketGross / gross) * 100 : 0}%` }}
+                title="Writer portal sales"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Writer Submissions Progress Bar */}
         <div className="px-5 pb-4 space-y-1.5 bg-muted/5 border-t border-border/40 pt-3">
@@ -375,6 +408,43 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
   );
 }
 
+/**
+ * Platform totals for the displayed draw, unified across agent entries and
+ * writer-portal sales. Computed server-side with the same calculateWriter the
+ * daily run uses, so these cards cannot drift from the committed figures.
+ */
+function useUnifiedSummary(gameId: string | undefined, date: string | undefined) {
+  return useQuery<{
+    calcDate: string;
+    isPending: boolean;
+    totals: {
+      gross: number; commission: number; netBeforeDeduction: number;
+      reserve: number; netAfterReserve: number; wins: number; profitOrDeficit: number;
+    };
+    sourceSplit: { entryGross: number; ticketGross: number; entryWins: number; ticketWins: number; ticketCount: number };
+    breakdown: Array<{
+      agentId: string; agentCode: string; agentName: string; agencyName: string | null;
+      gross: number; commission: number; netBeforeDeduction: number; reserve: number;
+      netAfterReserve: number; wins: number; profitOrDeficit: number;
+      writerCount: number; ticketCount: number; isPending: boolean;
+      entryGross: number; ticketGross: number; entryWins: number; ticketWins: number;
+    }>;
+  }>({
+    queryKey: ["/api/dashboard/unified-summary", gameId, date],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (gameId) params.set("gameId", gameId);
+      if (date) params.set("date", date);
+      const res = await fetch(`/api/dashboard/unified-summary?${params}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.ok) throw new Error("Failed to load summary");
+      return res.json();
+    },
+    refetchInterval: 15_000,
+  });
+}
+
 function DirectorDashboard() {
   const [, navigate] = useLocation();
   const today = new Date(getServerNow()).toISOString().split("T")[0];
@@ -464,6 +534,18 @@ function DirectorDashboard() {
   const liveGrossList = Array.isArray(liveGross) ? liveGross : [];
   const liveWinsList  = Array.isArray(liveWins)  ? liveWins  : [];
 
+  // Platform totals come from the server, which unifies agent-entered figures
+  // with writer-portal ticket sales and applies the same calculateWriter the
+  // daily run uses. The per-agent table below still drives its own rows.
+  const { data: unified } = useUnifiedSummary(displayGame?.id, viewDate);
+
+  // Per-agent figures from the server, unified across both submission routes.
+  const unifiedByAgent = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof unified>["breakdown"][number]>();
+    for (const row of unified?.breakdown ?? []) map.set(row.agentId, row);
+    return map;
+  }, [unified]);
+
   const agentStats: AgentStat[] = useMemo(() =>
     agentList.map(agent => {
       const writerIds = new Set(allWriters.filter(w => w.agentId === agent.id).map(w => w.id));
@@ -475,6 +557,29 @@ function DirectorDashboard() {
         id: agent.id, agentCode: agent.agentCode, fullCode: agent.fullCode, isActive: agent.isActive,
         user: { fullName: agent.user?.fullName ?? agent.fullCode, profilePicture: agent.user?.profilePicture },
       };
+
+      const server = unifiedByAgent.get(agent.id);
+
+      // Prefer the server's unified figures - they include writer-portal
+      // sales, which neither the stored rows below nor the local live
+      // fallback account for on their own.
+      if (server) {
+        return {
+          agent: agentInfo,
+          gross:      server.gross,
+          commission: server.commission,
+          net:        server.netBeforeDeduction,
+          reserve:    server.reserve,
+          wins:       server.wins,
+          balance:    server.profitOrDeficit,
+          submittedWriters: server.writerCount,
+          totalWriters, hasPaid,
+          isPending: server.isPending,
+          entryGross: server.entryGross,
+          ticketGross: server.ticketGross,
+          ticketCount: server.ticketCount,
+        };
+      }
 
       if (agentCalcs.length > 0) {
         return {
@@ -511,10 +616,10 @@ function DirectorDashboard() {
         totalWriters, hasPaid, isPending,
       };
     }),
-    [agentList, allWriters, dateCalcs, paymentList, viewDate, liveGrossList, liveWinsList, commPct, resvPct, displayGame]
+    [agentList, allWriters, dateCalcs, paymentList, viewDate, liveGrossList, liveWinsList, commPct, resvPct, displayGame, unifiedByAgent]
   );
 
-  const totals = useMemo(() => agentStats.reduce(
+  const localTotals = useMemo(() => agentStats.reduce(
     (acc, s) => ({
       gross:      acc.gross      + s.gross,
       commission: acc.commission + s.commission,
@@ -526,7 +631,25 @@ function DirectorDashboard() {
     { gross: 0, commission: 0, net: 0, wins: 0, reserve: 0, balance: 0 }
   ), [agentStats]);
 
-  const anyPending = useMemo(() => agentStats.some(s => s.isPending), [agentStats]);
+  // Fall back to the entry-only figures if the summary hasn't loaded yet.
+  const totals = unified
+    ? {
+        gross:      unified.totals.gross,
+        commission: unified.totals.commission,
+        net:        unified.totals.netBeforeDeduction,
+        wins:       unified.totals.wins,
+        reserve:    unified.totals.reserve,
+        balance:    unified.totals.profitOrDeficit,
+      }
+    : localTotals;
+
+  const portalTicketCount = unified?.sourceSplit.ticketCount ?? 0;
+  const portalGross = unified?.sourceSplit.ticketGross ?? 0;
+  const entryGross = unified?.sourceSplit.entryGross ?? 0;
+
+  const anyPending = unified
+    ? unified.isPending
+    : agentStats.some(s => s.isPending);
 
   const accumulatedReserve = Number(reserve?.balance ?? 0);
 
@@ -775,6 +898,23 @@ function DirectorDashboard() {
           )}
         </div>
       </div>
+
+      {/* Where the gross came from — agent entries vs writer portal */}
+      {unified && (entryGross > 0 || portalGross > 0) && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs rounded-xl border border-border/40 bg-card/45 px-4 py-2.5">
+          <span className="font-semibold text-muted-foreground">Gross by source:</span>
+          <span>
+            <span className="text-muted-foreground">Agent entries </span>
+            <span className="font-mono font-bold">{fmtGHS(entryGross)}</span>
+          </span>
+          <span>
+            <span className="text-muted-foreground">Writer portal </span>
+            <span className="font-mono font-bold">{fmtGHS(portalGross)}</span>
+            <span className="text-muted-foreground"> ({portalTicketCount} ticket{portalTicketCount === 1 ? "" : "s"})</span>
+          </span>
+          <span className="text-muted-foreground/70">Both use the same commission and reserve criteria.</span>
+        </div>
+      )}
 
       {/* Redesigned Summary cards — 7 KPI Grid showing the sequential financial formula flow */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">

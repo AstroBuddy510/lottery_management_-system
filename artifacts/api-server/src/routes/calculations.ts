@@ -19,6 +19,7 @@ import { calculateWriter } from "../lib/calculator";
 import { verifyLedgerAndEscalate } from "../lib/accountant";
 import { dispatchSystemNotification } from "../lib/notify";
 import { settleGameTickets } from "../lib/settle-tickets";
+import { getUnifiedWriterTotals } from "../lib/unified-sales";
 
 const router = Router();
 
@@ -89,37 +90,18 @@ router.post(
     const commissionPct = parseFloat(settings.commissionPct);
     const reservePct = parseFloat(settings.reservePct);
 
-    const grossConditions = [eq(grossEntriesTable.entryDate, calcDate)];
-    const winsConditions = [eq(winsEntriesTable.entryDate, calcDate)];
-    if (gameId && gameId !== "undefined" && gameId !== "null") {
-      grossConditions.push(eq(grossEntriesTable.gameId, gameId));
-      winsConditions.push(eq(winsEntriesTable.gameId, gameId));
-    }
-
-    const grossEntries = await db
-      .select()
-      .from(grossEntriesTable)
-      .where(and(...grossConditions));
-
-    const winsEntries = await db
-      .select()
-      .from(winsEntriesTable)
-      .where(and(...winsConditions));
-
+    // Gross and wins now come from one place, covering both agent-entered
+    // figures and writer-portal tickets. Settlement above has already set
+    // ticket win amounts, so portal wins are included in the same pass.
+    const unified = await getUnifiedWriterTotals(db, { calcDate, gameId });
     const grossMap = new Map<string, number>();
-    for (const e of grossEntries) {
-      if (e.isLate && !e.adminConfirmed) {
-        continue;
-      }
-      grossMap.set(e.writerId, (grossMap.get(e.writerId) ?? 0) + parseFloat(e.grossAmount));
-    }
-
     const winsMap = new Map<string, number>();
-    for (const e of winsEntries) {
-      winsMap.set(e.writerId, (winsMap.get(e.writerId) ?? 0) + parseFloat(e.winsAmount));
+    for (const [writerId, t] of unified) {
+      grossMap.set(writerId, t.gross);
+      winsMap.set(writerId, t.wins);
     }
 
-    const allWriterIds = [...new Set([...grossMap.keys(), ...winsMap.keys()])];
+    const allWriterIds = [...unified.keys()];
 
     if (allWriterIds.length === 0) {
       res.json({ calculated: 0, calcDate, results: [], reserveAllocations: 0, settlement });

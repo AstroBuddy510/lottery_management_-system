@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { Ticket, AlertCircle, Clock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { LiveSalesSection } from "@/components/live-sales";
+import { MySummarySection } from "@/components/my-summary";
 
 export function WriterDashboard() {
   const { user } = useAuth();
@@ -36,7 +36,7 @@ export function WriterDashboard() {
         </div>
       </div>
 
-      <LiveSalesSection title="My Live Sales" />
+      <MySummarySection title="My Live Sales" />
 
       <h2 className="text-lg font-bold mt-8 mb-4">Live Games</h2>
       
