@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import { Ticket, AlertCircle, Clock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { MySummarySection } from "@/components/my-summary";
+import { SettlementBanner } from "@/components/settlement-banner";
 
 export function WriterDashboard() {
   const { user } = useAuth();
@@ -35,6 +36,8 @@ export function WriterDashboard() {
           </Link>
         </div>
       </div>
+
+      <SettlementBanner />
 
       <MySummarySection title="My Live Sales" />
 

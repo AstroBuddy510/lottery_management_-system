@@ -198,4 +198,50 @@ router.post(
   }
 );
 
+/**
+ * A writer may move themselves to Prepaid at any time: buying units up front
+ * carries no risk to the company. Moving to Postpaid means selling on the
+ * company's money, so it is a request an agent or administrator approves
+ * rather than something a writer grants themselves.
+ */
+router.post("/writer-auth/operation-model", requireAuth, requireRole("writer"), async (req, res) => {
+  const parse = z.object({ operationModel: z.enum(["prepaid", "postpaid"]) }).safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: "Invalid mode", details: parse.error.issues });
+    return;
+  }
+  const target = parse.data.operationModel;
+
+  const [writer] = await db
+    .select()
+    .from(writersTable)
+    .where(eq(writersTable.id, req.user!.userId))
+    .limit(1);
+  if (!writer) {
+    res.status(404).json({ error: "Writer not found" });
+    return;
+  }
+  if (writer.operationModel === target) {
+    res.json({ operationModel: target, changed: false });
+    return;
+  }
+
+  if (target === "postpaid") {
+    res.status(403).json({
+      error:
+        "Switching to postpaid needs approval from your agent, because it means selling on credit. Ask them to change it for you.",
+      requiresApproval: true,
+    });
+    return;
+  }
+
+  const [updated] = await db
+    .update(writersTable)
+    .set({ operationModel: "prepaid" })
+    .where(eq(writersTable.id, writer.id))
+    .returning();
+
+  res.json({ operationModel: updated.operationModel, changed: true });
+});
+
 export default router;

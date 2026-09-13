@@ -48,8 +48,15 @@ export function WriterLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-muted/30 pb-16 lg:pb-0 lg:pl-64 flex flex-col">
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex fixed inset-y-0 left-0 w-64 bg-background border-r flex-col z-50">
-        <div className="h-16 flex items-center px-6 border-b">
-          <h2 className="text-lg font-bold text-primary tracking-tight">VS2000 Writer</h2>
+        <div className="h-16 flex items-center gap-2.5 px-5 border-b">
+          <img
+            src="/company-logo-v3.png"
+            alt="Vision 2000"
+            className="h-9 w-9 shrink-0 object-contain"
+          />
+          <h2 className="text-sm font-extrabold text-primary tracking-tight leading-tight">
+            Vision 2000 Writers Portal
+          </h2>
         </div>
         
         <div className="flex-1 py-6 px-4 flex flex-col gap-2">
@@ -96,9 +103,18 @@ export function WriterLayout({ children }: { children: ReactNode }) {
       {/* Full width on phones; the max-width only kicks in once there is room
           for it. min-w-0 lets children shrink instead of forcing the page wide. */}
       <main className="flex-1 w-full min-w-0 max-w-full lg:max-w-5xl mx-auto px-3 py-4 sm:px-4 lg:p-8 animate-in fade-in duration-200">
-        <div className="lg:hidden flex items-center justify-between mb-6 pb-4 border-b">
-           <h2 className="text-lg font-bold text-primary tracking-tight">VS2000 Writer</h2>
-           <Button variant="ghost" size="icon" onClick={() => logout()} className="text-muted-foreground">
+        <div className="lg:hidden flex items-center justify-between gap-2 mb-5 pb-3 border-b">
+           <div className="flex items-center gap-2 min-w-0">
+             <img
+               src="/company-logo-v3.png"
+               alt="Vision 2000"
+               className="h-8 w-8 shrink-0 object-contain"
+             />
+             <h2 className="text-sm font-extrabold text-primary tracking-tight leading-tight truncate">
+               Vision 2000 Writers Portal
+             </h2>
+           </div>
+           <Button variant="ghost" size="icon" onClick={() => logout()} className="text-muted-foreground shrink-0">
              <LogOut className="h-5 w-5" />
            </Button>
         </div>
