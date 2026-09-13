@@ -36,6 +36,10 @@ interface Totals {
   profitOrDeficit: number;
 }
 
+function emptySplit() {
+  return { entryGross: 0, ticketGross: 0, entryWins: 0, ticketWins: 0, ticketCount: 0 };
+}
+
 function emptyTotals(): Totals {
   return {
     gross: 0,
@@ -140,8 +144,20 @@ router.get(
     const agentMeta = new Map(agents.map((a) => [a.id, a]));
 
     const totals = emptyTotals();
-    const perAgent = new Map<string, Totals & { writerCount: number; ticketCount: number; isPending: boolean }>();
-    const sourceSplit = { entryGross: 0, ticketGross: 0, entryWins: 0, ticketWins: 0, ticketCount: 0 };
+    const perAgent = new Map<
+      string,
+      Totals & {
+        writerCount: number;
+        ticketCount: number;
+        isPending: boolean;
+        // Where this agent's gross came from, so a card can show the split.
+        entryGross: number;
+        ticketGross: number;
+        entryWins: number;
+        ticketWins: number;
+      }
+    >();
+    const sourceSplit = emptySplit();
 
     // Every writer with either committed figures or live activity.
     const writerIds = new Set<string>([...unified.keys(), ...committedByWriter.keys()]);
@@ -154,7 +170,16 @@ router.get(
 
       let bucket = perAgent.get(agentId);
       if (!bucket) {
-        bucket = { ...emptyTotals(), writerCount: 0, ticketCount: 0, isPending: false };
+        bucket = {
+          ...emptyTotals(),
+          writerCount: 0,
+          ticketCount: 0,
+          isPending: false,
+          entryGross: 0,
+          ticketGross: 0,
+          entryWins: 0,
+          ticketWins: 0,
+        };
         perAgent.set(agentId, bucket);
       }
       bucket.writerCount += 1;
@@ -166,6 +191,10 @@ router.get(
         sourceSplit.ticketWins += live.ticketWins;
         sourceSplit.ticketCount += live.ticketCount;
         bucket.ticketCount += live.ticketCount;
+        bucket.entryGross += live.entryGross;
+        bucket.ticketGross += live.ticketGross;
+        bucket.entryWins += live.entryWins;
+        bucket.ticketWins += live.ticketWins;
       }
 
       if (stored) {
@@ -206,5 +235,113 @@ router.get(
     });
   },
 );
+
+/**
+ * The same figures, scoped to whoever is asking:
+ *   agent  - their own entries for their writers, plus those writers' portal
+ *            sales: one consolidated view of their whole agency
+ *   writer - only sales they made in their own portal
+ *
+ * Uses the same unified aggregation and calculateWriter as the platform
+ * summary, so an agent's figures always reconcile with the slice of the
+ * director's dashboard that covers them.
+ */
+router.get("/dashboard/my-summary", requireAuth, async (req, res) => {
+  const role = req.user!.role;
+  const gameId = typeof req.query["gameId"] === "string" ? req.query["gameId"] : undefined;
+  let calcDate = typeof req.query["date"] === "string" ? req.query["date"] : undefined;
+
+  if (gameId) {
+    const [g] = await db
+      .select({ closeAt: gamesTable.closeAt })
+      .from(gamesTable)
+      .where(eq(gamesTable.id, gameId))
+      .limit(1);
+    if (g) calcDate ??= new Date(g.closeAt).toISOString().slice(0, 10);
+  }
+  calcDate ??= new Date().toISOString().slice(0, 10);
+
+  const [settings] = await db
+    .select()
+    .from(systemSettingsTable)
+    .orderBy(desc(systemSettingsTable.updatedAt))
+    .limit(1);
+  if (!settings) {
+    res.status(400).json({ error: "System settings not configured" });
+    return;
+  }
+  const commissionPct = parseFloat(settings.commissionPct);
+  const reservePct = parseFloat(settings.reservePct);
+
+  // Which writers this viewer's figures cover.
+  let writerIds: Set<string>;
+  if (role === "writer") {
+    writerIds = new Set([req.user!.userId]);
+  } else if (role === "agent") {
+    const [myAgent] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, req.user!.userId))
+      .limit(1);
+    if (!myAgent) {
+      res.json({ calcDate, scope: role, totals: emptyTotals(), sourceSplit: emptySplit(), writers: [] });
+      return;
+    }
+    const mine = await db
+      .select({ id: writersTable.id })
+      .from(writersTable)
+      .where(eq(writersTable.agentId, myAgent.id));
+    writerIds = new Set(mine.map((w) => w.id));
+  } else {
+    res.status(403).json({ error: "Not applicable for this role" });
+    return;
+  }
+
+  const unified = await getUnifiedWriterTotals(db, { calcDate, gameId });
+  const meta = new Map(
+    (
+      await db
+        .select({ id: writersTable.id, fullName: writersTable.fullName, fullCode: writersTable.fullCode })
+        .from(writersTable)
+    ).map((w) => [w.id, w]),
+  );
+
+  const totals = emptyTotals();
+  const sourceSplit = emptySplit();
+  const writers: Array<Record<string, unknown>> = [];
+
+  for (const [writerId, t] of unified) {
+    if (!writerIds.has(writerId)) continue;
+
+    // A writer sees only what they sold themselves; their agent's entries on
+    // their behalf belong to the agent's view, not theirs.
+    const gross = role === "writer" ? t.ticketGross : t.gross;
+    const wins = role === "writer" ? t.ticketWins : t.wins;
+    if (gross === 0 && wins === 0) continue;
+
+    addWriter(totals, gross, wins, commissionPct, reservePct);
+    sourceSplit.entryGross += role === "writer" ? 0 : t.entryGross;
+    sourceSplit.ticketGross += t.ticketGross;
+    sourceSplit.entryWins += role === "writer" ? 0 : t.entryWins;
+    sourceSplit.ticketWins += t.ticketWins;
+    sourceSplit.ticketCount += t.ticketCount;
+
+    const m = meta.get(writerId);
+    writers.push({
+      writerId,
+      writerName: m?.fullName ?? "—",
+      writerCode: m?.fullCode ?? "—",
+      gross,
+      wins,
+      entryGross: role === "writer" ? 0 : t.entryGross,
+      ticketGross: t.ticketGross,
+      ticketCount: t.ticketCount,
+    });
+  }
+
+  writers.sort((a, b) => Number(b["gross"]) - Number(a["gross"]));
+
+  res.json({ calcDate, scope: role, commissionPct, reservePct, totals, sourceSplit, writers });
+});
 
 export default router;

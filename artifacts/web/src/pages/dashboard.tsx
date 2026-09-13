@@ -158,10 +158,16 @@ type AgentStat = {
   gross: number; commission: number; net: number; wins: number; reserve: number; balance: number;
   submittedWriters: number; totalWriters: number; hasPaid: boolean;
   isPending: boolean;
+  /** Where this agent's gross came from, for the source breakdown. */
+  entryGross?: number; ticketGross?: number; ticketCount?: number;
 };
 
 function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void }) {
   const { agent, gross, commission, net, wins, reserve, balance, submittedWriters, totalWriters, hasPaid, isPending } = stat;
+  const entryGross = stat.entryGross ?? 0;
+  const ticketGross = stat.ticketGross ?? 0;
+  const ticketCount = stat.ticketCount ?? 0;
+  const hasSourceSplit = entryGross > 0 || ticketGross > 0;
   const name = agent.user.fullName;
   const submitPercentage = totalWriters > 0 ? (submittedWriters / totalWriters) * 100 : 0;
 
@@ -243,6 +249,32 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
             </div>
           ))}
         </div>
+
+        {/* Where this agent's gross came from */}
+        {hasSourceSplit && (
+          <div className="px-5 py-2.5 border-t border-border/40 bg-muted/10 space-y-1">
+            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80">
+              <span>Agent Entries</span>
+              <span className="font-mono text-foreground">{fmtGHS(entryGross)}</span>
+            </div>
+            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80">
+              <span>Writer Portal{ticketCount > 0 ? ` · ${ticketCount}` : ""}</span>
+              <span className="font-mono text-foreground">{fmtGHS(ticketGross)}</span>
+            </div>
+            <div className="w-full h-1 rounded-full overflow-hidden bg-muted/50 flex">
+              <div
+                className="h-full bg-blue-500"
+                style={{ width: `${gross > 0 ? (entryGross / gross) * 100 : 0}%` }}
+                title="Agent entries"
+              />
+              <div
+                className="h-full bg-violet-500"
+                style={{ width: `${gross > 0 ? (ticketGross / gross) * 100 : 0}%` }}
+                title="Writer portal sales"
+              />
+            </div>
+          </div>
+        )}
 
         {/* Writer Submissions Progress Bar */}
         <div className="px-5 pb-4 space-y-1.5 bg-muted/5 border-t border-border/40 pt-3">
@@ -390,6 +422,13 @@ function useUnifiedSummary(gameId: string | undefined, date: string | undefined)
       reserve: number; netAfterReserve: number; wins: number; profitOrDeficit: number;
     };
     sourceSplit: { entryGross: number; ticketGross: number; entryWins: number; ticketWins: number; ticketCount: number };
+    breakdown: Array<{
+      agentId: string; agentCode: string; agentName: string; agencyName: string | null;
+      gross: number; commission: number; netBeforeDeduction: number; reserve: number;
+      netAfterReserve: number; wins: number; profitOrDeficit: number;
+      writerCount: number; ticketCount: number; isPending: boolean;
+      entryGross: number; ticketGross: number; entryWins: number; ticketWins: number;
+    }>;
   }>({
     queryKey: ["/api/dashboard/unified-summary", gameId, date],
     queryFn: async () => {
@@ -495,6 +534,18 @@ function DirectorDashboard() {
   const liveGrossList = Array.isArray(liveGross) ? liveGross : [];
   const liveWinsList  = Array.isArray(liveWins)  ? liveWins  : [];
 
+  // Platform totals come from the server, which unifies agent-entered figures
+  // with writer-portal ticket sales and applies the same calculateWriter the
+  // daily run uses. The per-agent table below still drives its own rows.
+  const { data: unified } = useUnifiedSummary(displayGame?.id, viewDate);
+
+  // Per-agent figures from the server, unified across both submission routes.
+  const unifiedByAgent = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof unified>["breakdown"][number]>();
+    for (const row of unified?.breakdown ?? []) map.set(row.agentId, row);
+    return map;
+  }, [unified]);
+
   const agentStats: AgentStat[] = useMemo(() =>
     agentList.map(agent => {
       const writerIds = new Set(allWriters.filter(w => w.agentId === agent.id).map(w => w.id));
@@ -506,6 +557,29 @@ function DirectorDashboard() {
         id: agent.id, agentCode: agent.agentCode, fullCode: agent.fullCode, isActive: agent.isActive,
         user: { fullName: agent.user?.fullName ?? agent.fullCode, profilePicture: agent.user?.profilePicture },
       };
+
+      const server = unifiedByAgent.get(agent.id);
+
+      // Prefer the server's unified figures - they include writer-portal
+      // sales, which neither the stored rows below nor the local live
+      // fallback account for on their own.
+      if (server) {
+        return {
+          agent: agentInfo,
+          gross:      server.gross,
+          commission: server.commission,
+          net:        server.netBeforeDeduction,
+          reserve:    server.reserve,
+          wins:       server.wins,
+          balance:    server.profitOrDeficit,
+          submittedWriters: server.writerCount,
+          totalWriters, hasPaid,
+          isPending: server.isPending,
+          entryGross: server.entryGross,
+          ticketGross: server.ticketGross,
+          ticketCount: server.ticketCount,
+        };
+      }
 
       if (agentCalcs.length > 0) {
         return {
@@ -542,13 +616,8 @@ function DirectorDashboard() {
         totalWriters, hasPaid, isPending,
       };
     }),
-    [agentList, allWriters, dateCalcs, paymentList, viewDate, liveGrossList, liveWinsList, commPct, resvPct, displayGame]
+    [agentList, allWriters, dateCalcs, paymentList, viewDate, liveGrossList, liveWinsList, commPct, resvPct, displayGame, unifiedByAgent]
   );
-
-  // Platform totals come from the server, which unifies agent-entered figures
-  // with writer-portal ticket sales and applies the same calculateWriter the
-  // daily run uses. The per-agent table below still drives its own rows.
-  const { data: unified } = useUnifiedSummary(displayGame?.id, viewDate);
 
   const localTotals = useMemo(() => agentStats.reduce(
     (acc, s) => ({
