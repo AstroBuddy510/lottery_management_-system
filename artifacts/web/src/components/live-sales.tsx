@@ -82,17 +82,19 @@ export function GamePicker({
   // One game running: name it, don't make anyone choose.
   if (games.length <= 1) {
     const only = games[0];
+    // The event number is long; let it truncate rather than force the badge
+    // wider than its container and squeeze whatever sits beside it.
     return only ? (
-      <Badge variant="outline" className="font-medium">
-        {only.name}
-        <span className="ml-1.5 text-muted-foreground">{only.eventNumber}</span>
+      <Badge variant="outline" className="font-medium max-w-full inline-flex min-w-0">
+        <span className="truncate">{only.name}</span>
+        <span className="ml-1.5 text-muted-foreground truncate">{only.eventNumber}</span>
       </Badge>
     ) : null;
   }
 
   return (
     <Select value={selectedId ?? undefined} onValueChange={onSelect}>
-      <SelectTrigger className="w-[220px] h-9">
+      <SelectTrigger className="w-full sm:w-[220px] h-9">
         <SelectValue placeholder="Select a game" />
       </SelectTrigger>
       <SelectContent>
