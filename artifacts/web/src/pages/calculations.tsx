@@ -19,7 +19,7 @@ import {
   Calculator, History, Play, AlertCircle, TrendingUp, Trophy, Percent, Wallet, Shield, Coins, Search, Filter, X, RefreshCw,
   ArrowUpDown
 } from "lucide-react";
-import { AdminGameResults } from "@/pages/admin-game-results";
+import { PayoutApprovals } from "@/pages/payout-approvals";
 
 function fmtGHS(v: number, bold = true) {
   return (
@@ -462,7 +462,7 @@ export function Calculations() {
         {/* ── HISTORY TAB ── */}
         {/* ── PROCESS PAYOUTS & SMS ── */}
         <TabsContent value="payouts" className="mt-4">
-          <AdminGameResults />
+          <PayoutApprovals />
         </TabsContent>
 
         <TabsContent value="history" className="mt-4 space-y-6">

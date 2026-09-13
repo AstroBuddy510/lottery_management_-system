@@ -18,6 +18,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
 import { verifyLedgerAndEscalate } from "../lib/accountant";
 import { dispatchSystemNotification } from "../lib/notify";
+import { settleGameTickets } from "../lib/settle-tickets";
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.post(
     const gameId = parse.data.gameId;
     const winningNumbers = parse.data.winningNumbers;
     const machineNumbers = parse.data.machineNumbers;
+    let settlement: Awaited<ReturnType<typeof settleGameTickets>> | null = null;
 
     if (gameId && gameId !== "undefined" && gameId !== "null") {
       const [game] = await db
@@ -65,6 +67,13 @@ router.post(
           updatedAt: new Date(),
         })
         .where(eq(gamesTable.id, gameId));
+
+      // Posting the declared numbers also settles the writer tickets for this
+      // draw, creating the payout requests the payout review screen works
+      // from. Idempotent - a game already settled is left alone.
+      settlement = await db.transaction((tx) =>
+        settleGameTickets(tx, gameId, winningNumbers, machineNumbers, req.user!.userId),
+      );
     }
 
     const [settings] = await db
@@ -113,7 +122,7 @@ router.post(
     const allWriterIds = [...new Set([...grossMap.keys(), ...winsMap.keys()])];
 
     if (allWriterIds.length === 0) {
-      res.json({ calculated: 0, calcDate, results: [], reserveAllocations: 0 });
+      res.json({ calculated: 0, calcDate, results: [], reserveAllocations: 0, settlement });
       return;
     }
 
@@ -401,6 +410,7 @@ router.post(
     res.json({
       calculated: results.length,
       calcDate,
+      settlement,
       results,
       reserveAllocations: allocations.length,
       debtReductions: debtReductionSummary,

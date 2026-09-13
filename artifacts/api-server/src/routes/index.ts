@@ -31,6 +31,7 @@ import riskManagementRouter from "./risk-management";
 import writerApprovalsRouter from "./writer-approvals";
 import liveSalesRouter from "./live-sales";
 import ticketReceiptsRouter from "./ticket-receipts";
+import payoutApprovalsRouter from "./payout-approvals";
 
 const router: IRouter = Router();
 
@@ -66,5 +67,6 @@ router.use(riskManagementRouter);
 router.use(writerApprovalsRouter);
 router.use(liveSalesRouter);
 router.use(ticketReceiptsRouter);
+router.use(payoutApprovalsRouter);
 
 export default router;

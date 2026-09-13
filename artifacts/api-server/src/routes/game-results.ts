@@ -119,7 +119,10 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
     return;
   }
 
-  const payouts = await db.select().from(payoutRequestsTable).where(and(eq(payoutRequestsTable.gameResultId, gameResult.id), eq(payoutRequestsTable.status, "pending")));
+  // Pay only what a reviewer has approved. Before approval existed this read
+  // "pending"; leaving it that way would have paid unreviewed requests and
+  // skipped approved ones exactly backwards.
+  const payouts = await db.select().from(payoutRequestsTable).where(and(eq(payoutRequestsTable.gameResultId, gameResult.id), eq(payoutRequestsTable.status, "approved")));
   const skipped: Array<{ payoutId: string; reason: string }> = [];
 
   for (const payout of payouts) {
