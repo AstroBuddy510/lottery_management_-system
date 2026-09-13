@@ -28,11 +28,29 @@ interface MySummary {
   }>;
 }
 
-function Figure({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function Figure({
+  label,
+  value,
+  accent,
+  negative,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+  negative?: boolean;
+}) {
   return (
     <div className="rounded-lg border bg-card px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{label}</div>
-      <div className={`text-base font-bold tabular-nums mt-0.5 ${accent ? "text-primary" : ""}`}>{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold leading-tight">
+        {label}
+      </div>
+      <div
+        className={`text-base font-bold tabular-nums mt-0.5 ${
+          negative ? "text-destructive" : accent ? "text-primary" : ""
+        }`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
@@ -67,10 +85,13 @@ export function MySummarySection({ title }: { title?: string }) {
             <Radio className={`h-4 w-4 ${isFetching ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
             {title ?? (isWriter ? "My Sales" : "My Agency")}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-xs leading-snug">
             {isWriter
-              ? "Sales you made in your portal. Updates every 15s."
-              : "Your own entries plus your writers' portal sales. Updates every 15s."}
+              ? "Sales made in your portal"
+              : "Your own entries plus your writers' portal sales"}
+            <span className="block text-[10px] text-muted-foreground/70 mt-0.5">
+              Live · refreshes every {LIVE_REFETCH_MS / 1000}s
+            </span>
           </CardDescription>
         </div>
         <GamePicker games={games} selectedId={gameId} onSelect={setGameId} />
@@ -85,16 +106,32 @@ export function MySummarySection({ title }: { title?: string }) {
           <p className="py-6 text-center text-sm text-muted-foreground">No sales recorded for this draw yet.</p>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <Figure label="Gross" value={fmtGHS(t.gross)} />
-              <Figure label="Commission" value={fmtGHS(t.commission)} />
-              <Figure label="Net Before Deduction" value={fmtGHS(t.netBeforeDeduction)} />
-              <Figure label="Reserve Fund" value={fmtGHS(t.reserve)} />
-              <Figure label="Net After Reserve" value={fmtGHS(t.netAfterReserve)} />
-              <Figure label="Wins" value={fmtGHS(t.wins)} />
-              <Figure label="Profit / Deficit" value={fmtGHS(t.profitOrDeficit)} accent />
-              {!isWriter && <Figure label="Writers Active" value={String(data!.writers.length)} />}
-            </div>
+            {isWriter ? (
+              // Gross, Net, Commission, Wins, Profit/Deficit - in that order.
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <Figure label="Gross" value={fmtGHS(t.gross)} />
+                <Figure label="Net" value={fmtGHS(t.netBeforeDeduction)} />
+                <Figure label="Commission" value={fmtGHS(t.commission)} />
+                <Figure label="Wins" value={fmtGHS(t.wins)} />
+                <Figure
+                  label="Profit / Deficit"
+                  value={fmtGHS(t.profitOrDeficit)}
+                  accent
+                  negative={t.profitOrDeficit < 0}
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Figure label="Gross" value={fmtGHS(t.gross)} />
+                <Figure label="Commission" value={fmtGHS(t.commission)} />
+                <Figure label="Net Before Deduction" value={fmtGHS(t.netBeforeDeduction)} />
+                <Figure label="Reserve Fund" value={fmtGHS(t.reserve)} />
+                <Figure label="Net After Reserve" value={fmtGHS(t.netAfterReserve)} />
+                <Figure label="Wins" value={fmtGHS(t.wins)} />
+                <Figure label="Profit / Deficit" value={fmtGHS(t.profitOrDeficit)} accent />
+                <Figure label="Writers Active" value={String(data!.writers.length)} />
+              </div>
+            )}
 
             {/* An agent needs to see which route their gross came through. */}
             {!isWriter && split && (
