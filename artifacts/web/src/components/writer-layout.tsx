@@ -93,7 +93,9 @@ export function WriterLayout({ children }: { children: ReactNode }) {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-5xl mx-auto p-4 lg:p-8 animate-in fade-in zoom-in-95 duration-200">
+      {/* Full width on phones; the max-width only kicks in once there is room
+          for it. min-w-0 lets children shrink instead of forcing the page wide. */}
+      <main className="flex-1 w-full min-w-0 max-w-full lg:max-w-5xl mx-auto px-3 py-4 sm:px-4 lg:p-8 animate-in fade-in duration-200">
         <div className="lg:hidden flex items-center justify-between mb-6 pb-4 border-b">
            <h2 className="text-lg font-bold text-primary tracking-tight">VS2000 Writer</h2>
            <Button variant="ghost" size="icon" onClick={() => logout()} className="text-muted-foreground">

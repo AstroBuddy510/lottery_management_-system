@@ -4,11 +4,12 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { TicketReceiptDialog } from "@/components/ticket-receipt";
+import { NumberKeypad } from "@/components/number-keypad";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export function WriterPlaceBet() {
@@ -22,7 +23,8 @@ export function WriterPlaceBet() {
 
   const [gameId, setGameId] = useState(initialGameId);
   const [betTypeCode, setBetTypeCode] = useState("");
-  const [numbers, setNumbers] = useState("");
+  const [picked, setPicked] = useState<number[]>([]);
+  const numbers = picked.join(",");
   const [stakeAmount, setStakeAmount] = useState("");
 
   const { data: games, isLoading: loadingGames } = useQuery({
@@ -67,7 +69,7 @@ export function WriterPlaceBet() {
       toast({ title: "Bet placed successfully!", variant: "default" });
       // Straight to the printable slip - the writer needs it in hand now.
       if (created?.id) setReceiptTicketId(created.id);
-      setNumbers("");
+      setPicked([]);
       setStakeAmount("");
       queryClient.invalidateQueries({ queryKey: ["/api/writer-tokens/balance"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tickets"] });
@@ -88,8 +90,8 @@ export function WriterPlaceBet() {
     return (parseFloat(stakeAmount) * parseFloat(selectedBetType.payoutMultiplier)).toFixed(2);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!gameId || !betTypeCode || !numbers || !stakeAmount) return;
     
     placeBetMutation.mutate({
@@ -152,13 +154,18 @@ export function WriterPlaceBet() {
 
             {selectedBetType && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Numbers (Required: {selectedBetType.numbersRequired})</label>
-                <Input 
-                  placeholder="e.g. 23, 45, 67" 
-                  value={numbers}
-                  onChange={(e) => setNumbers(e.target.value)}
+                <label className="text-sm font-medium">
+                  Numbers (Required: {selectedBetType.numbersRequired})
+                </label>
+                <NumberKeypad
+                  selected={picked}
+                  onChange={setPicked}
+                  required={Number(selectedBetType.numbersRequired)}
+                  submitting={placeBetMutation.isPending}
+                  disabled={!gameId || !betTypeCode}
+                  onSubmit={!stakeAmount ? undefined : () => handleSubmit()}
+                  submitLabel="Place Bet"
                 />
-                <p className="text-xs text-muted-foreground">Separate numbers with commas (1-90)</p>
               </div>
             )}
 
@@ -181,15 +188,16 @@ export function WriterPlaceBet() {
               </div>
             )}
 
-            <Button 
-              type="submit" 
-              className="w-full mt-6" 
-              size="lg"
-              disabled={placeBetMutation.isPending || !gameId || !betTypeCode || !numbers || !stakeAmount}
-            >
-              {placeBetMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Place Bet
-            </Button>
+            {!selectedBetType && (
+              <Button
+                type="submit"
+                className="w-full mt-6"
+                size="lg"
+                disabled
+              >
+                Select a game and bet type
+              </Button>
+            )}
           </form>
         </CardContent>
       </Card>
