@@ -186,6 +186,8 @@ router.get("/live-sales/agents/:agentId/writers", requireAuth, async (req, res) 
       operationModel: writersTable.operationModel,
       approvalStatus: writersTable.approvalStatus,
       phone: writersTable.phone,
+      // Whether this writer can sign in at all; the hash itself never leaves.
+      hasPin: sql<boolean>`${writersTable.pinHash} is not null`,
       ticketCount: sql<number>`count(${ticketsTable.id})::int`,
       totalStakes: sql<string>`coalesce(sum(${ticketsTable.stakeAmount}), 0)::text`,
       winningTickets: sql<number>`count(${ticketsTable.id}) filter (where ${ticketsTable.isWinner})::int`,

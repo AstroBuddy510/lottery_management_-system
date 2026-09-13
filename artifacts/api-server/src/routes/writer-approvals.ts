@@ -161,4 +161,94 @@ router.patch(
   },
 );
 
+const issuePinSchema = z.object({
+  phone: z.string().min(1).max(20).optional(),
+});
+
+/**
+ * Issue a PIN to an existing writer.
+ *
+ * Writers created before PIN issuance existed have no pin_hash and often no
+ * phone either, so they cannot sign in at all - they authenticate by phone
+ * and PIN. Re-creating them would lose their code and history, so this gives
+ * an existing record a working credential instead.
+ *
+ * The PIN is returned exactly once. Only the hash is stored, so a lost PIN is
+ * reissued here rather than looked up.
+ */
+router.post(
+  "/writers/:writerId/issue-pin",
+  requireAuth,
+  requireRole("director", "administrator", "agent"),
+  async (req, res) => {
+    const writerId = req.params["writerId"] as string;
+    const parse = issuePinSchema.safeParse(req.body ?? {});
+    if (!parse.success) {
+      res.status(400).json({ error: "Invalid phone number", details: parse.error.issues });
+      return;
+    }
+
+    const [writer] = await db
+      .select()
+      .from(writersTable)
+      .where(eq(writersTable.id, writerId))
+      .limit(1);
+    if (!writer) {
+      res.status(404).json({ error: "Writer not found" });
+      return;
+    }
+
+    // An agent may only issue to their own writers.
+    if (req.user!.role === "agent") {
+      const [myAgent] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, req.user!.userId))
+        .limit(1);
+      if (!myAgent || myAgent.id !== writer.agentId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    }
+
+    const phone = parse.data.phone?.trim() || writer.phone;
+    if (!phone) {
+      res.status(400).json({
+        error: "This writer has no phone number. Provide one - it is what they sign in with.",
+        needsPhone: true,
+      });
+      return;
+    }
+
+    // Login looks writers up by phone, so a duplicate would make one of them
+    // permanently unreachable.
+    const [phoneTaken] = await db
+      .select({ id: writersTable.id })
+      .from(writersTable)
+      .where(eq(writersTable.phone, phone))
+      .limit(1);
+    if (phoneTaken && phoneTaken.id !== writer.id) {
+      res.status(409).json({ error: "That phone number belongs to another writer" });
+      return;
+    }
+
+    const pin = generatePin();
+    const [updated] = await db
+      .update(writersTable)
+      .set({ phone, pinHash: await hashPin(pin) })
+      .where(eq(writersTable.id, writer.id))
+      .returning();
+
+    res.json({
+      id: updated.id,
+      fullName: updated.fullName,
+      fullCode: updated.fullCode,
+      phone: updated.phone,
+      // Shown once; only the hash is kept.
+      pin,
+      reissued: !!writer.pinHash,
+    });
+  },
+);
+
 export default router;
