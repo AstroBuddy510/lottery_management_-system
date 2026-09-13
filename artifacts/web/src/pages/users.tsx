@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AdminWriterApprovals } from "@/pages/admin-writer-approvals";
 import { useQuery } from "@tanstack/react-query";
 import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS } from "@/components/live-sales";
+import { IssuePinDialog, type IssuePinTarget } from "@/components/issue-pin-dialog";
 import { fmtGHS } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
@@ -96,6 +97,7 @@ function resizeImageToDataUrl(file: File, maxPx = 320): Promise<string> {
 interface WriterLiveStats {
   writerId: string;
   phone: string | null;
+  hasPin: boolean;
   operationModel: string;
   approvalStatus: string;
   ticketCount: number;
@@ -119,6 +121,7 @@ function WritersSection({ agentId }: { agentId: string }) {
   const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
 
   // Live per-writer figures for the selected game, polled on the shared cadence.
+  const [pinWriter, setPinWriter] = useState<IssuePinTarget | null>(null);
   const [selectedGameId, setSelectedGameId] = useLiveGameSelection();
   const { games } = useLiveGames(selectedGameId, setSelectedGameId);
 
@@ -184,6 +187,8 @@ function WritersSection({ agentId }: { agentId: string }) {
           </Button>
         </div>
       </div>
+      <IssuePinDialog writer={pinWriter} onClose={() => setPinWriter(null)} />
+
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading writers...</p>
       ) : !Array.isArray(writers) || writers.length === 0 ? (
@@ -196,6 +201,7 @@ function WritersSection({ agentId }: { agentId: string }) {
               <th className="text-left pb-2 font-bold">Name</th>
               <th className="text-left pb-2 font-bold">Phone</th>
               <th className="text-left pb-2 font-bold">Model</th>
+              <th className="text-left pb-2 font-bold">Sign-in</th>
               <th className="text-left pb-2 font-bold">Status</th>
               <th className="text-right pb-2 font-bold">Tickets</th>
               <th className="text-right pb-2 font-bold">Stakes</th>
@@ -211,6 +217,27 @@ function WritersSection({ agentId }: { agentId: string }) {
                 <td className="py-2 text-xs text-muted-foreground">{stats[w.id]?.phone ?? "—"}</td>
                 <td className="py-2 text-xs capitalize text-muted-foreground">{stats[w.id]?.operationModel ?? "—"}</td>
                 <td className="py-2">
+                  {stats[w.id]?.hasPin ? (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 border border-emerald-200/40">
+                      PIN SET
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPinWriter({
+                        id: w.id,
+                        fullName: w.fullName,
+                        fullCode: w.fullCode,
+                        phone: stats[w.id]?.phone ?? null,
+                        hasPin: false,
+                      })}
+                      className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-300/50 hover:bg-amber-500/20 transition-colors"
+                    >
+                      ISSUE PIN
+                    </button>
+                  )}
+                </td>
+                <td className="py-2">
                   <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0.1 rounded-full border ${
                     w.isActive 
                       ? "bg-emerald-500/10 text-emerald-700 border-emerald-200/40 dark:bg-emerald-500/5 dark:text-emerald-300" 
@@ -224,6 +251,15 @@ function WritersSection({ agentId }: { agentId: string }) {
                 <td className="py-2 text-right text-xs tabular-nums">{fmtGHS(stats[w.id]?.totalWins ?? 0)}</td>
                 <td className="py-2 text-right pr-2">
                   <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold rounded-md text-primary hover:bg-primary/10 transition-colors" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}>Edit</Button>
+                  {stats[w.id]?.hasPin && (
+                    <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold rounded-md text-muted-foreground hover:bg-muted transition-colors" onClick={() => setPinWriter({
+                      id: w.id,
+                      fullName: w.fullName,
+                      fullCode: w.fullCode,
+                      phone: stats[w.id]?.phone ?? null,
+                      hasPin: true,
+                    })}>Reset PIN</Button>
+                  )}
                 </td>
               </tr>
             ))}

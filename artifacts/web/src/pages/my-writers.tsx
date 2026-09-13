@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { IssuePinDialog, type IssuePinTarget } from "@/components/issue-pin-dialog";
 
 const AVATAR_COLORS = [
   "bg-blue-600","bg-emerald-600","bg-violet-600","bg-orange-500",
@@ -58,6 +59,7 @@ export function MyWriters() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
+  const [pinWriter, setPinWriter] = useState<IssuePinTarget | null>(null);
   const [createForm, setCreateForm] = useState({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid" });
   const [issued, setIssued] = useState<{ name: string; fullCode: string; pin: string } | null>(null);
   const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
@@ -187,6 +189,24 @@ export function MyWriters() {
                     {w.isActive ? "Active" : "Inactive"}
                   </span>
                   <button
+                    title="Issue or reset sign-in PIN"
+                    aria-label="Issue or reset sign-in PIN"
+                    onClick={() => setPinWriter({
+                      id: w.id,
+                      fullName: w.fullName,
+                      fullCode: w.fullCode,
+                      phone: (w as { phone?: string | null }).phone ?? null,
+                      hasPin: undefined,
+                    })}
+                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="7.5" cy="15.5" r="5.5"/>
+                      <path d="m21 2-9.6 9.6"/>
+                      <path d="m15.5 7.5 3 3L22 7l-3-3"/>
+                    </svg>
+                  </button>
+                  <button
                     onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}
                     className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
                   >
@@ -290,6 +310,8 @@ export function MyWriters() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <IssuePinDialog writer={pinWriter} onClose={() => setPinWriter(null)} />
 
       <Dialog open={!!editWriter} onOpenChange={o => !o && setEditWriter(null)}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
