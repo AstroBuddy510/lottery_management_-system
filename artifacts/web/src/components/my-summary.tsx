@@ -79,10 +79,13 @@ export function MySummarySection({ title }: { title?: string }) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Radio className={`h-4 w-4 ${isFetching ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
+      {/* Stacked on a phone. Side by side, the game badge would not shrink and
+          squeezed the title column until "My Live Sales" wrapped one word per
+          line and the description was clipped. */}
+      <CardHeader className="flex-col items-stretch gap-2 space-y-0 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="min-w-0">
+          <CardTitle className="flex items-center gap-2 text-base whitespace-nowrap">
+            <Radio className={`h-4 w-4 shrink-0 ${isFetching ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
             {title ?? (isWriter ? "My Sales" : "My Agency")}
           </CardTitle>
           <CardDescription className="text-xs leading-snug">
@@ -98,7 +101,9 @@ export function MySummarySection({ title }: { title?: string }) {
             )}
           </CardDescription>
         </div>
-        <GamePicker games={games} selectedId={gameId} onSelect={setGameId} />
+        <div className="min-w-0 sm:shrink-0">
+          <GamePicker games={games} selectedId={gameId} onSelect={setGameId} />
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-4">

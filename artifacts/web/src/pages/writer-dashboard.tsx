@@ -44,9 +44,11 @@ export function WriterDashboard() {
   };
 
   return (
-    /* One vertical rhythm for the whole page; sections never set their own
-       outer spacing, so nothing drifts out of alignment. */
-    <div className="space-y-5">
+    /* A single centred column, read top to bottom on one vertical rhythm.
+       Sections never set their own outer spacing, so nothing drifts out of
+       alignment, and the column stays narrow enough to scan on a phone or a
+       wide screen alike. */
+    <div className="mx-auto w-full max-w-lg space-y-5">
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -68,18 +70,6 @@ export function WriterDashboard() {
 
       <SettlementBanner />
 
-      <MySummarySection title="My Live Sales" />
-
-      {/* Refresh note sits between the stats and the games, so the figures
-          above are plainly what it refers to. */}
-      <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-        </span>
-        Live · refreshes every {LIVE_REFETCH_MS / 1000}s
-      </p>
-
       {/* Live games */}
       <section className="space-y-2.5">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -97,7 +87,7 @@ export function WriterDashboard() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 gap-2.5">
             {liveGames.map((game) => {
               const remaining = closesIn(game.closeAt);
               const closed = remaining === null;
@@ -143,6 +133,18 @@ export function WriterDashboard() {
           </div>
         )}
       </section>
+
+      {/* Sits directly above the figures it describes, and between the two
+          sections, so it reads as introducing the sales block. */}
+      <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        </span>
+        Live · refreshes every {LIVE_REFETCH_MS / 1000}s
+      </p>
+
+      <MySummarySection title="My Live Sales" />
     </div>
   );
 }
