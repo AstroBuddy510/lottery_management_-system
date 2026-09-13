@@ -33,6 +33,7 @@ import liveSalesRouter from "./live-sales";
 import ticketReceiptsRouter from "./ticket-receipts";
 import payoutApprovalsRouter from "./payout-approvals";
 import dashboardSummaryRouter from "./dashboard-summary";
+import writerTokenPurchasesRouter from "./writer-token-purchases";
 
 const router: IRouter = Router();
 
@@ -70,5 +71,6 @@ router.use(liveSalesRouter);
 router.use(ticketReceiptsRouter);
 router.use(payoutApprovalsRouter);
 router.use(dashboardSummaryRouter);
+router.use(writerTokenPurchasesRouter);
 
 export default router;

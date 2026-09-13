@@ -49,3 +49,42 @@ export const insertWriterTokenTransactionSchema = createInsertSchema(writerToken
 });
 export type InsertWriterTokenTransaction = z.infer<typeof insertWriterTokenTransactionSchema>;
 export type WriterTokenTransaction = typeof writerTokenTransactionsTable.$inferSelect;
+
+/**
+ * A writer's request to buy e-token units, paid by mobile money via Paystack.
+ *
+ * Payment and crediting are deliberately separate: Paystack confirming a
+ * charge marks the request paid, but the units only reach the wallet when a
+ * cashier credits them. That keeps a human between "money arrived" and
+ * "betting credit issued", and leaves an auditable record of who issued it.
+ */
+export const tokenPurchaseStatusEnum = pgEnum("token_purchase_status", [
+  "pending",   // initialised, awaiting payment
+  "paid",      // Paystack confirmed the charge; awaiting a cashier
+  "credited",  // units added to the wallet
+  "failed",    // payment failed or abandoned
+  "cancelled",
+]);
+
+export const writerTokenPurchasesTable = pgTable("writer_token_purchases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  writerId: uuid("writer_id").notNull().references(() => writersTable.id),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  status: tokenPurchaseStatusEnum("status").notNull().default("pending"),
+  // Paystack's transaction reference, unique so a webhook replay cannot
+  // create or credit the same purchase twice.
+  paystackReference: text("paystack_reference").unique(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  creditedBy: uuid("credited_by").references(() => usersTable.id),
+  creditedAt: timestamp("credited_at", { withTimezone: true }),
+  transactionId: uuid("transaction_id"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertWriterTokenPurchaseSchema = createInsertSchema(writerTokenPurchasesTable).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertWriterTokenPurchase = z.infer<typeof insertWriterTokenPurchaseSchema>;
+export type WriterTokenPurchase = typeof writerTokenPurchasesTable.$inferSelect;

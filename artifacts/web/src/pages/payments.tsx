@@ -45,6 +45,7 @@ import {
   ArrowRightLeft
 } from "lucide-react";
 import { AdminPostpaidSettlement } from "@/pages/admin-postpaid-settlement";
+import { UnitRequests } from "@/pages/unit-requests";
 
 type ExpenseItem = { expenseCategoryId: string; name: string; amount: string };
 type CreatedPayment = {
@@ -509,6 +510,9 @@ export function Payments() {
               </span>
             )}
           </TabsTrigger>
+          <TabsTrigger value="unit-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+            Unit Requests
+          </TabsTrigger>
           <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Transaction History
           </TabsTrigger>
@@ -751,6 +755,11 @@ export function Payments() {
         </TabsContent>
 
         {/* ── Transaction History ── */}
+        {/* ── Writer unit purchases ── */}
+        <TabsContent value="unit-requests" className="space-y-4 outline-none">
+          <UnitRequests />
+        </TabsContent>
+
         <TabsContent value="history" className="space-y-4 outline-none">
           {/* Filters */}
           <div className="bg-card/45 border border-border/40 backdrop-blur-md rounded-2xl p-4 shadow-sm relative">
