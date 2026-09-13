@@ -32,6 +32,7 @@ import writerApprovalsRouter from "./writer-approvals";
 import liveSalesRouter from "./live-sales";
 import ticketReceiptsRouter from "./ticket-receipts";
 import payoutApprovalsRouter from "./payout-approvals";
+import dashboardSummaryRouter from "./dashboard-summary";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(writerApprovalsRouter);
 router.use(liveSalesRouter);
 router.use(ticketReceiptsRouter);
 router.use(payoutApprovalsRouter);
+router.use(dashboardSummaryRouter);
 
 export default router;
