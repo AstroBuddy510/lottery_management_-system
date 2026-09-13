@@ -89,9 +89,13 @@ export function MySummarySection({ title }: { title?: string }) {
             {isWriter
               ? "Sales made in your portal"
               : "Your own entries plus your writers' portal sales"}
-            <span className="block text-[10px] text-muted-foreground/70 mt-0.5">
-              Live · refreshes every {LIVE_REFETCH_MS / 1000}s
-            </span>
+            {/* Writers get the live indicator below the stats instead, where it
+                sits between the figures and the games list. */}
+            {!isWriter && (
+              <span className="block text-[10px] text-muted-foreground/70 mt-0.5">
+                Live · refreshes every {LIVE_REFETCH_MS / 1000}s
+              </span>
+            )}
           </CardDescription>
         </div>
         <GamePicker games={games} selectedId={gameId} onSelect={setGameId} />

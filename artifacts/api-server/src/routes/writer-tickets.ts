@@ -43,6 +43,18 @@ router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => 
     return;
   }
 
+  // Games deliberately stay 'live' past their close time - they are only
+  // closed when calculations run. So status alone does not prove a draw is
+  // still open, and without this check a ticket could be sold after the
+  // numbers are drawn. Server time decides; a device clock cannot be trusted.
+  if (new Date() >= new Date(game.closeAt)) {
+    res.status(400).json({
+      error: "Betting has closed for this game",
+      closedAt: game.closeAt,
+    });
+    return;
+  }
+
   // 3. Validate bet type
   const [betType] = await db.select().from(betTypesTable).where(eq(betTypesTable.code, betTypeCode)).limit(1);
   if (!betType || !betType.isActive) {

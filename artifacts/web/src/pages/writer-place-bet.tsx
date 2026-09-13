@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { TicketReceiptDialog } from "@/components/ticket-receipt";
 import { NumberKeypad } from "@/components/number-keypad";
+import { getServerNow } from "@/lib/time-sync";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,7 +83,36 @@ export function WriterPlaceBet() {
     }
   });
 
-  const liveGames = games?.filter((g: any) => g.status === "live") || [];
+  // A game stays 'live' past its close time by design - only calculations
+  // close it - so status alone does not mean betting is open. Server time
+  // decides, since a writer's device clock can be wrong or changed.
+  const [now, setNow] = useState(() => getServerNow().getTime());
+  useEffect(() => {
+    const t = setInterval(() => setNow(getServerNow().getTime()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const isOpenForBets = (g: any) =>
+    g.status === "live" && new Date(g.closeAt).getTime() > now;
+
+  const liveGames = (games ?? []).filter(isOpenForBets);
+  const selectedGame = (games ?? []).find((g: any) => g.id === gameId);
+  const bettingClosed = !!selectedGame && !isOpenForBets(selectedGame);
+
+  // Clear a selection the moment its draw closes, so the form cannot be
+  // submitted against a game that shut while the writer was picking numbers.
+  useEffect(() => {
+    if (bettingClosed) setGameId("");
+  }, [bettingClosed]);
+
+  const timeLeft = (closeAt: string) => {
+    const ms = new Date(closeAt).getTime() - now;
+    if (ms <= 0) return "closed";
+    const m = Math.floor(ms / 60000);
+    const sec = Math.floor((ms % 60000) / 1000);
+    if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m left`;
+    return m > 0 ? `${m}m ${sec}s left` : `${sec}s left`;
+  };
   const selectedBetType = betTypes?.find((b: any) => b.code === betTypeCode);
 
   const calculatePotentialPayout = () => {
@@ -93,6 +123,10 @@ export function WriterPlaceBet() {
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!gameId || !betTypeCode || !numbers || !stakeAmount) return;
+    if (bettingClosed) {
+      toast({ title: "Betting has closed for this game", variant: "destructive" });
+      return;
+    }
     
     placeBetMutation.mutate({
       gameId,
@@ -132,7 +166,9 @@ export function WriterPlaceBet() {
                 </SelectTrigger>
                 <SelectContent>
                   {liveGames.map((g: any) => (
-                    <SelectItem key={g.id} value={g.id}>{g.name} ({g.eventNumber})</SelectItem>
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.name} ({g.eventNumber}) · {timeLeft(g.closeAt)}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -152,6 +188,12 @@ export function WriterPlaceBet() {
               </Select>
             </div>
 
+            {liveGames.length === 0 && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+                No game is open for betting right now.
+              </div>
+            )}
+
             {selectedBetType && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">
@@ -162,7 +204,7 @@ export function WriterPlaceBet() {
                   onChange={setPicked}
                   required={Number(selectedBetType.numbersRequired)}
                   submitting={placeBetMutation.isPending}
-                  disabled={!gameId || !betTypeCode}
+                  disabled={!gameId || !betTypeCode || bettingClosed}
                   onSubmit={!stakeAmount ? undefined : () => handleSubmit()}
                   submitLabel="Place Bet"
                 />
