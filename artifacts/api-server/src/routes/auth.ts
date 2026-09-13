@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db";
+import { usersTable, writersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { LoginBody, RefreshTokenBody } from "@workspace/api-zod";
 import { requireAuth } from "../middleware/auth";
@@ -109,6 +109,35 @@ router.get("/auth/time", (req, res) => {
 });
 
 router.get("/auth/me", requireAuth, async (req, res) => {
+  // Writers live in writersTable, not usersTable. Their JWT carries a
+  // writers.id, so resolve them separately or session hydration 404s on
+  // every page reload.
+  if (req.user!.role === "writer") {
+    const [writer] = await db
+      .select()
+      .from(writersTable)
+      .where(eq(writersTable.id, req.user!.userId))
+      .limit(1);
+    if (!writer || !writer.isActive) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    res.json({
+      id: writer.id,
+      fullName: writer.fullName,
+      phone: writer.phone,
+      role: "writer",
+      isActive: writer.isActive,
+      profilePicture: null,
+      createdAt: writer.createdAt,
+      lastLogin: null,
+      agentId: writer.agentId,
+      fullCode: writer.fullCode,
+      operationModel: writer.operationModel,
+    });
+    return;
+  }
+
   const [user] = await db
     .select()
     .from(usersTable)

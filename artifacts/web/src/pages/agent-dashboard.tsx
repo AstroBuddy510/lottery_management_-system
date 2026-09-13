@@ -15,6 +15,7 @@ import { fmtGHS } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CountdownTimer } from "@/pages/games";
+import { LiveSalesSection } from "@/components/live-sales";
 
 const AVATAR_COLORS = [
   "#2563eb","#059669","#7c3aed","#ea580c",
@@ -240,6 +241,8 @@ export function AgentDashboard() {
 
   return (
     <div className="px-4 max-w-xl mx-auto md:max-w-2xl mt-4 pb-6 space-y-5">
+
+      <LiveSalesSection title="Live Sales · My Writers" />
 
       {/* Page Title Block */}
       <div className="flex items-center gap-2 mb-1">

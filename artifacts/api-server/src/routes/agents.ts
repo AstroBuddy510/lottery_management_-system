@@ -13,6 +13,7 @@ import {
   UpdateWriterBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { composeWriterFullCode, generatePin, hashPin } from "../lib/writer-onboarding";
 
 const ORG_PREFIX = "VS";
 const router = Router();
@@ -279,21 +280,49 @@ router.post(
         return;
       }
     }
-    const { writerCode, fullName } = bodyResult.data;
+    const { writerCode, fullName, phone, operationModel } = bodyResult.data;
     const upperWriterCode = writerCode.toUpperCase();
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId)).limit(1);
     if (!agent) {
       res.status(404).json({ error: "Agent not found" });
       return;
     }
-    const fullCode = `${agent.fullCode}-${upperWriterCode}`;
+    const fullCode = composeWriterFullCode(agent.fullCode, upperWriterCode);
+    if (!fullCode) {
+      res.status(400).json({ error: "Writer code is too long for this agent" });
+      return;
+    }
     const [existing] = await db.select({ id: writersTable.id }).from(writersTable).where(eq(writersTable.fullCode, fullCode)).limit(1);
     if (existing) {
       res.status(409).json({ error: "Writer code already in use for this agent" });
       return;
     }
-    const [writer] = await db.insert(writersTable).values({ agentId, writerCode: upperWriterCode, fullCode, fullName }).returning();
-    res.status(201).json(writer);
+    if (phone) {
+      const [phoneTaken] = await db.select({ id: writersTable.id }).from(writersTable).where(eq(writersTable.phone, phone)).limit(1);
+      if (phoneTaken) {
+        res.status(409).json({ error: "Phone number already in use" });
+        return;
+      }
+    }
+    // Agent-led onboarding is pre-approved, so the PIN is issued immediately.
+    // Without this the writer has no credential and cannot sign in at all.
+    const pin = generatePin();
+    const [writer] = await db
+      .insert(writersTable)
+      .values({
+        agentId,
+        writerCode: upperWriterCode,
+        fullCode,
+        fullName,
+        ...(phone ? { phone } : {}),
+        ...(operationModel ? { operationModel } : {}),
+        pinHash: await hashPin(pin),
+        registrationSource: "agent",
+        approvalStatus: "approved",
+      })
+      .returning();
+    // Plaintext PIN returned exactly once; only the hash is stored.
+    res.status(201).json({ ...writer, pinHash: undefined, pin });
   },
 );
 

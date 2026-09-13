@@ -38,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { LayoutGrid, List } from "lucide-react";
+import { AdminBetTypes } from "@/pages/admin-bet-types";
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -430,6 +431,7 @@ export function Settings() {
           <TabsTrigger value="hours">Cashier Hours</TabsTrigger>
           <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
           <TabsTrigger value="templates">Game Templates</TabsTrigger>
+          <TabsTrigger value="bet-types">Bet Types</TabsTrigger>
         </TabsList>
 
         {/* ── Commission Rates ── */}
@@ -772,6 +774,11 @@ export function Settings() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── Bet Types ── */}
+        <TabsContent value="bet-types">
+          <AdminBetTypes />
         </TabsContent>
 
       </Tabs>

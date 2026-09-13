@@ -74,11 +74,20 @@ router.post("/game-results", requireAuth, requireRole("director", "administrator
           .set({ status: "won", isWinner: true, winAmount: ticket.potentialPayout })
           .where(eq(ticketsTable.id, ticket.id));
           
+        const [ticketWriter] = await tx
+          .select({ agentId: writersTable.agentId })
+          .from(writersTable)
+          .where(eq(writersTable.id, ticket.writerId))
+          .limit(1);
+        if (!ticketWriter) {
+          throw new Error(`Writer ${ticket.writerId} not found for ticket ${ticket.id}`);
+        }
+
         await tx.insert(payoutRequestsTable).values({
           ticketId: ticket.id,
           gameResultId: gameResult.id,
           writerId: ticket.writerId,
-          agentId: (await tx.select({ agentId: writersTable.agentId }).from(writersTable).where(eq(writersTable.id, ticket.writerId)).limit(1))[0].agentId,
+          agentId: ticketWriter.agentId,
           payoutAmount: ticket.potentialPayout,
         });
       } else {
@@ -110,14 +119,26 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
     return;
   }
 
-  const payouts = await db.select().from(payoutRequestsTable).where(and(eq(payoutRequestsTable.gameResultId, gameResult.id), eq(payoutRequestsTable.status, "pending")));
+  // Pay only what a reviewer has approved. Before approval existed this read
+  // "pending"; leaving it that way would have paid unreviewed requests and
+  // skipped approved ones exactly backwards.
+  const payouts = await db.select().from(payoutRequestsTable).where(and(eq(payoutRequestsTable.gameResultId, gameResult.id), eq(payoutRequestsTable.status, "approved")));
+  const skipped: Array<{ payoutId: string; reason: string }> = [];
 
   for (const payout of payouts) {
     const [writer] = await db.select().from(writersTable).where(eq(writersTable.id, payout.writerId)).limit(1);
-    
+    if (!writer) {
+      skipped.push({ payoutId: payout.id, reason: "writer not found" });
+      continue;
+    }
+
     if (writer.operationModel === "prepaid") {
       // Credit wallet
-      let [wallet] = await db.select().from(writerTokenWalletsTable).where(eq(writerTokenWalletsTable.writerId, writer.id)).limit(1);
+      const [wallet] = await db.select().from(writerTokenWalletsTable).where(eq(writerTokenWalletsTable.writerId, writer.id)).limit(1);
+      if (!wallet) {
+        skipped.push({ payoutId: payout.id, reason: "token wallet not found" });
+        continue;
+      }
       const newBalance = parseFloat(wallet.balance) + parseFloat(payout.payoutAmount);
       await db.update(writerTokenWalletsTable).set({ balance: newBalance.toString() }).where(eq(writerTokenWalletsTable.writerId, writer.id));
       
@@ -154,7 +175,12 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
 
   await db.update(gameResultsTable).set({ smsNotificationsSent: true }).where(eq(gameResultsTable.id, gameResult.id));
 
-  res.json({ success: true, processedCount: payouts.length });
+  res.json({
+    success: true,
+    processedCount: payouts.length - skipped.length,
+    skippedCount: skipped.length,
+    skipped,
+  });
 });
 
 export default router;

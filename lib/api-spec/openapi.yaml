@@ -2816,6 +2816,18 @@ components:
           type: boolean
         createdAt:
           type: string
+        phone:
+          type: ["string", "null"]
+        operationModel:
+          type: ["string", "null"]
+          enum: [prepaid, postpaid, null]
+        approvalStatus:
+          type: ["string", "null"]
+          enum: [pending, approved, rejected, null]
+        # Plaintext PIN, returned ONCE at creation/approval and never stored
+        # or returned again. Absent on every other response.
+        pin:
+          type: ["string", "null"]
 
     WriterInput:
       type: object
@@ -2827,6 +2839,13 @@ components:
           maxLength: 6
         fullName:
           type: string
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 20
+        operationModel:
+          type: string
+          enum: [prepaid, postpaid]
 
     WriterUpdate:
       type: object
