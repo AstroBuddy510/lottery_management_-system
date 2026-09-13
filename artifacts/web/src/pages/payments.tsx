@@ -44,6 +44,7 @@ import {
   User,
   ArrowRightLeft
 } from "lucide-react";
+import { AdminPostpaidSettlement } from "@/pages/admin-postpaid-settlement";
 
 type ExpenseItem = { expenseCategoryId: string; name: string; amount: string };
 type CreatedPayment = {
@@ -497,6 +498,9 @@ export function Payments() {
           <TabsTrigger value="settlement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Settlement Board
           </TabsTrigger>
+          <TabsTrigger value="postpaid" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+            Postpaid Settlement
+          </TabsTrigger>
           <TabsTrigger value="pending-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
             Pending Cash Requests
             {pendingList.length > 0 && (
@@ -672,6 +676,11 @@ export function Payments() {
         </TabsContent>
 
         {/* ── Pending Cash Requests ── */}
+        {/* ── Postpaid Settlement ── */}
+        <TabsContent value="postpaid" className="space-y-4 outline-none">
+          <AdminPostpaidSettlement />
+        </TabsContent>
+
         <TabsContent value="pending-requests" className="space-y-4 outline-none">
           <div className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
             <Table>

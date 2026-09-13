@@ -43,11 +43,7 @@ import { WriterWallet } from "@/pages/writer-wallet";
 import { WriterLayout } from "@/components/writer-layout";
 
 // Admin Pages
-import { AdminBetTypes } from "@/pages/admin-bet-types";
-import { AdminGameResults } from "@/pages/admin-game-results";
 import { AdminRiskManagement } from "@/pages/admin-risk-management";
-import { AdminPostpaidSettlement } from "@/pages/admin-postpaid-settlement";
-import { AdminWriterApprovals } from "@/pages/admin-writer-approvals";
 import { TicketLookup } from "@/pages/ticket-lookup";
 
 import { Layout } from "@/components/layout";
@@ -123,21 +119,16 @@ function Router() {
       </Route>
 
       {/* Admin Added Routes */}
-      <Route path="/bet-types">
-        {() => <ProtectedRoute component={AdminBetTypes} roles={['administrator', 'director']} />}
-      </Route>
-      <Route path="/game-results">
-        {() => <ProtectedRoute component={AdminGameResults} roles={['administrator', 'director']} />}
-      </Route>
       <Route path="/risk-management">
         {() => <ProtectedRoute component={AdminRiskManagement} roles={['administrator', 'director']} />}
       </Route>
-      <Route path="/postpaid-settlement">
-        {() => <ProtectedRoute component={AdminPostpaidSettlement} roles={['administrator', 'director', 'cashier']} />}
-      </Route>
-      <Route path="/writer-approvals">
-        {() => <ProtectedRoute component={AdminWriterApprovals} roles={['administrator', 'director']} />}
-      </Route>
+
+      {/* These screens now live as tabs inside other sections. The old paths
+          redirect so existing bookmarks and links keep working. */}
+      <Route path="/bet-types">{() => <Redirect to="/settings" />}</Route>
+      <Route path="/game-results">{() => <Redirect to="/calculations" />}</Route>
+      <Route path="/postpaid-settlement">{() => <Redirect to="/payments" />}</Route>
+      <Route path="/writer-approvals">{() => <Redirect to="/users" />}</Route>
 
       {/* Writer Routes */}
       <Route path="/ticket-lookup">

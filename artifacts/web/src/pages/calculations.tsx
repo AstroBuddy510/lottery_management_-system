@@ -19,6 +19,7 @@ import {
   Calculator, History, Play, AlertCircle, TrendingUp, Trophy, Percent, Wallet, Shield, Coins, Search, Filter, X, RefreshCw,
   ArrowUpDown
 } from "lucide-react";
+import { AdminGameResults } from "@/pages/admin-game-results";
 
 function fmtGHS(v: number, bold = true) {
   return (
@@ -244,10 +245,14 @@ export function Calculations() {
       </div>
 
       <Tabs defaultValue="run" className="space-y-6">
-        <TabsList className="grid w-full max-w-[400px] grid-cols-2 bg-muted/40 p-1 rounded-xl">
+        <TabsList className="grid w-full max-w-[620px] grid-cols-3 bg-muted/40 p-1 rounded-xl">
           <TabsTrigger value="run" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Calculator className="w-4 h-4" />
             Run Calculations
+          </TabsTrigger>
+          <TabsTrigger value="payouts" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Trophy className="w-4 h-4" />
+            Process Payouts &amp; SMS
           </TabsTrigger>
           <TabsTrigger value="history" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <History className="w-4 h-4" />
@@ -455,6 +460,11 @@ export function Calculations() {
         </TabsContent>
 
         {/* ── HISTORY TAB ── */}
+        {/* ── PROCESS PAYOUTS & SMS ── */}
+        <TabsContent value="payouts" className="mt-4">
+          <AdminGameResults />
+        </TabsContent>
+
         <TabsContent value="history" className="mt-4 space-y-6">
           <Card className="border-border/40 bg-card/60 backdrop-blur-sm shadow-sm rounded-xl">
             <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">

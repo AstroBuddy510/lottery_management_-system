@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AdminWriterApprovals } from "@/pages/admin-writer-approvals";
 import { useQuery } from "@tanstack/react-query";
 import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS } from "@/components/live-sales";
 import { fmtGHS } from "@/lib/utils";
@@ -1872,6 +1873,15 @@ export function Users() {
           )}
           {isAdmin && (
             <TabsTrigger
+              value="writer-approvals"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent"
+            >
+              Writer Approvals
+            </TabsTrigger>
+          )}
+
+          {isAdmin && (
+            <TabsTrigger
               value="agency-staff"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent"
             >
@@ -1895,6 +1905,12 @@ export function Users() {
         {isAdmin && (
           <TabsContent value="agents">
             <AgentsTab />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="writer-approvals">
+            <AdminWriterApprovals />
           </TabsContent>
         )}
 
