@@ -6,6 +6,8 @@ import {
   writerTokenWalletsTable,
   writerTokenTransactionsTable,
   writerTokenPurchasesTable,
+  cashierTokenWalletsTable,
+  cashierTokenTransactionsTable,
   usersTable,
 } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -282,53 +284,105 @@ router.post(
       return;
     }
 
-    // Credit the wallet, creating it if this is the writer's first purchase.
-    const [wallet] = await db
-      .select()
-      .from(writerTokenWalletsTable)
-      .where(eq(writerTokenWalletsTable.writerId, claimed.writerId))
-      .limit(1);
-
     const amount = Number(claimed.amount);
-    let newBalance: number;
 
-    if (wallet) {
-      newBalance = Number(wallet.balance) + amount;
-      await db
-        .update(writerTokenWalletsTable)
-        .set({
-          balance: newBalance.toFixed(2),
-          totalPurchased: (Number(wallet.totalPurchased) + amount).toFixed(2),
-        })
-        .where(eq(writerTokenWalletsTable.writerId, claimed.writerId));
-    } else {
-      newBalance = amount;
-      await db.insert(writerTokenWalletsTable).values({
-        writerId: claimed.writerId,
-        balance: newBalance.toFixed(2),
-        totalPurchased: amount.toFixed(2),
+    // Units are disbursed from this cashier's float, not created here. If the
+    // float cannot cover it the whole credit is rolled back, including the
+    // status claim above, so the request stays available to whoever recharges.
+    try {
+      const out = await db.transaction(async (tx) => {
+        const [float] = await tx
+          .select()
+          .from(cashierTokenWalletsTable)
+          .where(eq(cashierTokenWalletsTable.cashierId, req.user!.userId))
+          .limit(1);
+
+        const floatBalance = float ? Number(float.balance) : 0;
+        if (floatBalance < amount) {
+          throw new Error(
+            `Your float holds ${floatBalance.toFixed(2)} but this request needs ${amount.toFixed(2)}. Ask an administrator to recharge you.`,
+          );
+        }
+
+        const newFloat = floatBalance - amount;
+        await tx
+          .update(cashierTokenWalletsTable)
+          .set({
+            balance: newFloat.toFixed(2),
+            totalDisbursed: (Number(float!.totalDisbursed) + amount).toFixed(2),
+          })
+          .where(eq(cashierTokenWalletsTable.cashierId, req.user!.userId));
+
+        await tx.insert(cashierTokenTransactionsTable).values({
+          cashierId: req.user!.userId,
+          transactionType: "disbursement",
+          amount: amount.toFixed(2),
+          balanceAfter: newFloat.toFixed(2),
+          writerId: claimed.writerId,
+          purchaseId: claimed.id,
+          createdBy: req.user!.userId,
+        });
+
+        // Credit the wallet, creating it on a first purchase.
+        const [wallet] = await tx
+          .select()
+          .from(writerTokenWalletsTable)
+          .where(eq(writerTokenWalletsTable.writerId, claimed.writerId))
+          .limit(1);
+
+        let newBalance: number;
+        if (wallet) {
+          newBalance = Number(wallet.balance) + amount;
+          await tx
+            .update(writerTokenWalletsTable)
+            .set({
+              balance: newBalance.toFixed(2),
+              totalPurchased: (Number(wallet.totalPurchased) + amount).toFixed(2),
+            })
+            .where(eq(writerTokenWalletsTable.writerId, claimed.writerId));
+        } else {
+          newBalance = amount;
+          await tx.insert(writerTokenWalletsTable).values({
+            writerId: claimed.writerId,
+            balance: newBalance.toFixed(2),
+            totalPurchased: amount.toFixed(2),
+          });
+        }
+
+        const [txn] = await tx
+          .insert(writerTokenTransactionsTable)
+          .values({
+            writerId: claimed.writerId,
+            transactionType: "purchase",
+            amount: amount.toFixed(2),
+            balanceAfter: newBalance.toFixed(2),
+            referenceId: claimed.id,
+            description: `Unit purchase${claimed.paystackReference ? ` · ${claimed.paystackReference}` : ""}`,
+            createdBy: req.user!.userId,
+          })
+          .returning();
+
+        await tx
+          .update(writerTokenPurchasesTable)
+          .set({ transactionId: txn.id })
+          .where(eq(writerTokenPurchasesTable.id, claimed.id));
+
+        return { txnId: txn.id, balance: newBalance.toFixed(2), float: newFloat.toFixed(2) };
       });
+
+      res.json({
+        purchase: { ...claimed, transactionId: out.txnId },
+        balance: out.balance,
+        floatBalance: out.float,
+      });
+    } catch (e) {
+      // Put the request back so it can be credited once the float is topped up.
+      await db
+        .update(writerTokenPurchasesTable)
+        .set({ status: "paid", creditedBy: null, creditedAt: null })
+        .where(eq(writerTokenPurchasesTable.id, claimed.id));
+      res.status(409).json({ error: (e as Error).message });
     }
-
-    const [txn] = await db
-      .insert(writerTokenTransactionsTable)
-      .values({
-        writerId: claimed.writerId,
-        transactionType: "purchase",
-        amount: amount.toFixed(2),
-        balanceAfter: newBalance.toFixed(2),
-        referenceId: claimed.id,
-        description: `Unit purchase${claimed.paystackReference ? ` · ${claimed.paystackReference}` : ""}`,
-        createdBy: req.user!.userId,
-      })
-      .returning();
-
-    await db
-      .update(writerTokenPurchasesTable)
-      .set({ transactionId: txn.id })
-      .where(eq(writerTokenPurchasesTable.id, claimed.id));
-
-    res.json({ purchase: { ...claimed, transactionId: txn.id }, balance: newBalance.toFixed(2) });
   },
 );
 

@@ -24,6 +24,7 @@ import {
   generateOrgReportPDF,
   generateGameSalesReportPDF,
 } from "@/lib/pdf-generator";
+import { TokenReportView } from "@/components/token-report";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1165,11 +1166,13 @@ export function Reports() {
           <TabsTrigger value="agent">Agent</TabsTrigger>
           <TabsTrigger value="gamesales">Game Sales</TabsTrigger>
           {isDirectorOrAdmin && <TabsTrigger value="org">Organisation</TabsTrigger>}
+          {isDirectorOrAdmin && <TabsTrigger value="tokens">E-Tokens</TabsTrigger>}
         </TabsList>
         <TabsContent value="writer"><WriterReportView /></TabsContent>
         <TabsContent value="agent"><AgentReportView /></TabsContent>
         <TabsContent value="gamesales"><GameSalesView /></TabsContent>
         {isDirectorOrAdmin && <TabsContent value="org"><OrgReportView /></TabsContent>}
+        {isDirectorOrAdmin && <TabsContent value="tokens"><TokenReportView /></TabsContent>}
       </Tabs>
     </div>
   );

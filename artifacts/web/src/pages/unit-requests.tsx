@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { Loader2, Check, Coins } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
+import { Wallet } from "lucide-react";
 
 /**
  * Paid unit purchases awaiting a cashier. Paystack confirming the charge
@@ -61,8 +62,21 @@ export function UnitRequests() {
     onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  // The float is what funds these credits, so show it beside the queue.
+  const { data: float } = useQuery<{ wallet: { balance: string; totalDisbursed: string } }>({
+    queryKey: ["/api/tokens/my-float"],
+    queryFn: async () => {
+      const res = await fetch("/api/tokens/my-float", { headers: authHeaders() });
+      if (!res.ok) throw new Error("Failed to load float");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+  });
+
   const list = requests ?? [];
   const total = list.reduce((s, r) => s + Number(r.amount), 0);
+  const floatBalance = Number(float?.wallet?.balance ?? 0);
+  const short = floatBalance < total;
 
   return (
     <Card>
@@ -75,14 +89,30 @@ export function UnitRequests() {
             Writers who have paid for e-token units by mobile money. Credit the units to issue them.
           </CardDescription>
         </div>
-        {list.length > 0 && (
-          <div className="text-right shrink-0">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Awaiting</div>
-            <div className="text-lg font-bold tabular-nums">{fmtGHS(total)}</div>
+        <div className="flex items-center gap-4 shrink-0">
+          <div className="text-right">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold flex items-center gap-1 justify-end">
+              <Wallet className="h-3 w-3" /> My Float
+            </div>
+            <div className={`text-lg font-bold tabular-nums ${short ? "text-destructive" : ""}`}>
+              {fmtGHS(floatBalance)}
+            </div>
           </div>
-        )}
+          {list.length > 0 && (
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Awaiting</div>
+              <div className="text-lg font-bold tabular-nums">{fmtGHS(total)}</div>
+            </div>
+          )}
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        {short && list.length > 0 && (
+          <p className="text-xs rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-amber-900 dark:text-amber-200">
+            Your float does not cover everything queued. Ask an administrator to
+            recharge you — units are disbursed from your float, not created here.
+          </p>
+        )}
         <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
