@@ -34,6 +34,13 @@ export const writersTable = pgTable("writers", {
   approvalStatus: varchar("approval_status", { length: 20 }).notNull().default("approved"),
   approvedBy: uuid("approved_by").references(() => usersTable.id),
   isActive: boolean("is_active").notNull().default(true),
+  // Risk watch. A red-flagged writer is one whose sales are large enough that
+  // their book moves the company's exposure on its own, so Risk Management
+  // keeps their tickets visible at all times rather than only in aggregate.
+  isRedFlagged: boolean("is_red_flagged").notNull().default(false),
+  redFlagReason: text("red_flag_reason"),
+  redFlaggedBy: uuid("red_flagged_by").references(() => usersTable.id),
+  redFlaggedAt: timestamp("red_flagged_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

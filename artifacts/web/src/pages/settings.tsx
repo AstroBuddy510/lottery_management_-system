@@ -39,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { LayoutGrid, List } from "lucide-react";
 import { AdminBetTypes } from "@/pages/admin-bet-types";
+import { AdminHedgeSettings } from "@/pages/admin-hedge-settings";
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -432,6 +433,7 @@ export function Settings() {
           <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
           <TabsTrigger value="templates">Game Templates</TabsTrigger>
           <TabsTrigger value="bet-types">Bet Types</TabsTrigger>
+          <TabsTrigger value="hedge">Hedge Thresholds</TabsTrigger>
         </TabsList>
 
         {/* ── Commission Rates ── */}
@@ -779,6 +781,10 @@ export function Settings() {
         {/* ── Bet Types ── */}
         <TabsContent value="bet-types">
           <AdminBetTypes />
+        </TabsContent>
+
+        <TabsContent value="hedge">
+          <AdminHedgeSettings />
         </TabsContent>
 
       </Tabs>
