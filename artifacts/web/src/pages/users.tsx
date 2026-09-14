@@ -26,6 +26,7 @@ import { AdminWriterApprovals } from "@/pages/admin-writer-approvals";
 import { useQuery } from "@tanstack/react-query";
 import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS } from "@/components/live-sales";
 import { IssuePinDialog, type IssuePinTarget } from "@/components/issue-pin-dialog";
+import { RedFlagDialog, RedFlagButton, useRedFlags, type RedFlagTarget } from "@/components/red-flag-dialog";
 import { fmtGHS } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
@@ -122,6 +123,8 @@ function WritersSection({ agentId }: { agentId: string }) {
 
   // Live per-writer figures for the selected game, polled on the shared cadence.
   const [pinWriter, setPinWriter] = useState<IssuePinTarget | null>(null);
+  const [flagWriter, setFlagWriter] = useState<RedFlagTarget | null>(null);
+  const redFlags = useRedFlags(agentId);
   const [selectedGameId, setSelectedGameId] = useLiveGameSelection();
   const { games } = useLiveGames(selectedGameId, setSelectedGameId);
 
@@ -188,6 +191,7 @@ function WritersSection({ agentId }: { agentId: string }) {
         </div>
       </div>
       <IssuePinDialog writer={pinWriter} onClose={() => setPinWriter(null)} />
+      <RedFlagDialog writer={flagWriter} onClose={() => setFlagWriter(null)} />
 
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading writers...</p>
@@ -202,6 +206,7 @@ function WritersSection({ agentId }: { agentId: string }) {
               <th className="text-left pb-2 font-bold">Phone</th>
               <th className="text-left pb-2 font-bold">Model</th>
               <th className="text-left pb-2 font-bold">Sign-in</th>
+              <th className="text-left pb-2 font-bold">Watch</th>
               <th className="text-left pb-2 font-bold">Status</th>
               <th className="text-right pb-2 font-bold">Tickets</th>
               <th className="text-right pb-2 font-bold">Stakes</th>
@@ -230,12 +235,26 @@ function WritersSection({ agentId }: { agentId: string }) {
                         fullCode: w.fullCode,
                         phone: stats[w.id]?.phone ?? null,
                         hasPin: false,
+                        isRedFlagged: !!redFlags[w.id]?.isRedFlagged,
+                        redFlagReason: redFlags[w.id]?.redFlagReason ?? null,
                       })}
                       className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-300/50 hover:bg-amber-500/20 transition-colors"
                     >
                       ISSUE PIN
                     </button>
                   )}
+                </td>
+                <td className="py-2">
+                  <RedFlagButton
+                    flagged={!!redFlags[w.id]?.isRedFlagged}
+                    onClick={() => setFlagWriter({
+                      id: w.id,
+                      fullName: w.fullName,
+                      fullCode: w.fullCode,
+                      isRedFlagged: !!redFlags[w.id]?.isRedFlagged,
+                      reason: redFlags[w.id]?.redFlagReason ?? null,
+                    })}
+                  />
                 </td>
                 <td className="py-2">
                   <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0.1 rounded-full border ${
@@ -258,6 +277,8 @@ function WritersSection({ agentId }: { agentId: string }) {
                       fullCode: w.fullCode,
                       phone: stats[w.id]?.phone ?? null,
                       hasPin: true,
+                      isRedFlagged: !!redFlags[w.id]?.isRedFlagged,
+                      redFlagReason: redFlags[w.id]?.redFlagReason ?? null,
                     })}>Reset PIN</Button>
                   )}
                 </td>

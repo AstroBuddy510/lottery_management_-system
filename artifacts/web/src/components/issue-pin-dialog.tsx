@@ -3,8 +3,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, KeyRound, AlertTriangle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, KeyRound, AlertTriangle, Flag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSetRedFlag } from "@/components/red-flag-dialog";
+import { cn } from "@/lib/utils";
 
 /**
  * Give an existing writer a working sign-in credential.
@@ -22,6 +25,8 @@ export interface IssuePinTarget {
   fullCode: string;
   phone?: string | null;
   hasPin?: boolean;
+  isRedFlagged?: boolean;
+  redFlagReason?: string | null;
 }
 
 interface IssuedPin {
@@ -43,11 +48,18 @@ export function IssuePinDialog({
   const qc = useQueryClient();
   const [phone, setPhone] = useState("");
   const [issued, setIssued] = useState<IssuedPin | null>(null);
+  // Writers who move large volume are tagged here, at the moment the admin is
+  // already looking at them, rather than in a separate pass later.
+  const [redFlag, setRedFlag] = useState(false);
+  const [redFlagReason, setRedFlagReason] = useState("");
+  const setFlag = useSetRedFlag();
 
   useEffect(() => {
     if (writer) {
       setPhone(writer.phone ?? "");
       setIssued(null);
+      setRedFlag(writer.isRedFlagged ?? false);
+      setRedFlagReason(writer.redFlagReason ?? "");
     }
   }, [writer]);
 
@@ -65,8 +77,26 @@ export function IssuePinDialog({
       if (!res.ok) throw new Error(body.error || "Could not issue a PIN");
       return body as IssuedPin;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setIssued(data);
+      // The PIN is already issued; a failed flag must not read as a failed
+      // issue, so it is reported on its own and the PIN still shows.
+      const wasFlagged = writer?.isRedFlagged ?? false;
+      if (redFlag !== wasFlagged || (redFlag && redFlagReason !== (writer?.redFlagReason ?? ""))) {
+        try {
+          await setFlag.mutateAsync({
+            writerId: writer!.id,
+            isRedFlagged: redFlag,
+            reason: redFlagReason,
+          });
+        } catch (e) {
+          toast({
+            title: "PIN issued, flag not saved",
+            description: (e as Error).message,
+            variant: "destructive",
+          });
+        }
+      }
       qc.invalidateQueries();
     },
     onError: (e: Error) => toast({ title: "Not issued", description: e.message, variant: "destructive" }),
@@ -143,6 +173,44 @@ export function IssuePinDialog({
                 <p className="text-[11px] text-muted-foreground">
                   Writers sign in with their phone number and PIN.
                 </p>
+              </div>
+
+              <div
+                className={cn(
+                  "rounded-xl border p-3 transition-colors",
+                  redFlag
+                    ? "border-red-300/60 bg-red-500/[0.06] dark:border-red-500/30"
+                    : "border-border/60",
+                )}
+              >
+                <label className="flex cursor-pointer items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={redFlag}
+                    onChange={(e) => setRedFlag(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-red-600"
+                  />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 text-xs font-semibold">
+                      <Flag className={cn("h-3 w-3 text-red-500", redFlag && "fill-current")} />
+                      Red-flag writer
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                      Known for heavy sales. Their bets stay on Risk Management every game so
+                      big lines can be laid off at the NLA before the draw.
+                    </span>
+                  </span>
+                </label>
+
+                {redFlag && (
+                  <Textarea
+                    rows={2}
+                    placeholder="Reason — e.g. highest seller at Ashaiman, single lines above GH₵ 2,000"
+                    value={redFlagReason}
+                    onChange={(e) => setRedFlagReason(e.target.value)}
+                    className="mt-2.5 text-xs"
+                  />
+                )}
               </div>
 
               {writer?.hasPin && (
