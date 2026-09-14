@@ -308,3 +308,41 @@ export function parseNumberList(raw: string): number[] {
     .map((part) => parseInt(part.trim(), 10))
     .filter((n) => Number.isFinite(n));
 }
+
+export interface WinningPicks {
+  /** Picked numbers that carried a winning line. */
+  numbers: number[];
+  /** The banker, when it is what made the ticket pay. */
+  banker: number | null;
+}
+
+/**
+ * Which of the player's own picks actually won, for marking up a settled
+ * ticket.
+ *
+ * This is not a set intersection with the draw. A Direct One only pays on the
+ * first ball, so its number is a winner in position and nowhere else; a Two
+ * Direct with one of its pair drawn has matched a number but won nothing. A
+ * pick is returned here only when the ticket paid AND that pick is part of
+ * why - so a losing ticket always comes back empty, whatever it matched.
+ */
+export function winningPicks(selection: BetSelection, drawnNumbers: number[]): WinningPicks {
+  const outcome = settleSelection(selection, drawnNumbers);
+  if (outcome.winningLines <= 0) return { numbers: [], banker: null };
+
+  switch (selection.mechanic) {
+    case "direct_one":
+      // It won, so the first pick is the first ball drawn.
+      return { numbers: selection.numbers.slice(0, 1), banker: null };
+    case "direct_two":
+    case "direct_three":
+    case "perm_two":
+    case "perm_three":
+      return { numbers: outcome.matchedNumbers, banker: null };
+    case "banker_all":
+      // The partners are the rest of the draw, not picks of the player's.
+      return { numbers: [], banker: selection.bankerNumber ?? null };
+    case "banker_against":
+      return { numbers: outcome.matchedNumbers, banker: selection.bankerNumber ?? null };
+  }
+}

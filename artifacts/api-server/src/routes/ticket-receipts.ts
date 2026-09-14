@@ -6,6 +6,7 @@ import {
   agentsTable,
   gamesTable,
   betTypesTable,
+  gameResultsTable,
 } from "@workspace/db";
 import { eq, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
@@ -14,10 +15,12 @@ import {
   buildReceiptText,
   buildSmsText,
   buildQrPayload,
+  buildNumbersBlock,
   expiryDate,
   TICKET_VALIDITY_DAYS,
   type ReceiptData,
 } from "../lib/receipt";
+import { winningPicks, parseNumberList, type Mechanic } from "../lib/bet-engine";
 
 const router = Router();
 
@@ -42,12 +45,15 @@ async function loadTicket(q: string) {
       agent: agentsTable,
       game: gamesTable,
       betType: betTypesTable,
+      // The declared draw. Left-joined because an open game has none yet.
+      result: gameResultsTable,
     })
     .from(ticketsTable)
     .innerJoin(writersTable, eq(ticketsTable.writerId, writersTable.id))
     .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
     .innerJoin(gamesTable, eq(ticketsTable.gameId, gamesTable.id))
     .innerJoin(betTypesTable, eq(ticketsTable.betTypeId, betTypesTable.id))
+    .leftJoin(gameResultsTable, eq(gameResultsTable.gameId, ticketsTable.gameId))
     .where(
       isUuid
         ? or(eq(ticketsTable.id, q), eq(ticketsTable.ticketNumber, q))
@@ -79,6 +85,7 @@ function toReceiptData(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>)
     saleDate: ticket.createdAt,
     betTypeName: betType.name,
     numbers: ticket.numbers,
+    bankerNumber: ticket.bankerNumber,
     lines,
     unitPrice: (Number(ticket.stakeAmount) / lines).toFixed(2),
     totalStake: ticket.stakeAmount,
@@ -107,8 +114,48 @@ async function mayView(
   return false;
 }
 
+/**
+ * The numbers this ticket was settled against.
+ *
+ * The result row is preferred over the game row because it is what settlement
+ * actually read - the two posting routes do not both write the game row, and
+ * a slip must never ring numbers the payout was not calculated from.
+ */
+function drawnFor(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>): string | null {
+  return row.result?.winningNumbers ?? row.game.winningNumbers ?? null;
+}
+
+/**
+ * Which of this ticket's own numbers earned the win, so the screen can ring
+ * them in green.
+ *
+ * Settled here rather than on the client for one reason: the rules that decide
+ * a winner live in the bet engine, and a cashier paying out must be looking at
+ * the same verdict the money was calculated from. A ticket that did not win
+ * comes back empty and is left unmarked.
+ */
+function winnersOn(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>) {
+  const { ticket, betType } = row;
+  const draw = drawnFor(row);
+  if (!ticket.isWinner || !draw) return { numbers: [], banker: null };
+
+  return winningPicks(
+    {
+      mechanic: (betType.mechanic as Mechanic) ?? "direct_two",
+      numbers: parseNumberList(ticket.numbers),
+      bankerNumber: ticket.bankerNumber ?? null,
+      // Neither figure changes which picks won - only how much they pay - but
+      // the engine wants a whole selection, so give it the ticket's own.
+      stakePerLine: parseFloat(ticket.stakePerLine ?? "") || parseFloat(ticket.stakeAmount) || 0,
+      multiplier: parseFloat(betType.payoutMultiplier) || 0,
+    },
+    parseNumberList(draw),
+  );
+}
+
 function receiptResponse(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>) {
   const data = toReceiptData(row);
+  const won = winnersOn(row);
   return {
     ticket: {
       id: data.ticketId,
@@ -117,18 +164,31 @@ function receiptResponse(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>
       isWinner: row.ticket.isWinner,
       winAmount: row.ticket.winAmount,
       numbers: data.numbers,
+      bankerNumber: row.ticket.bankerNumber,
+      /** Picks to ring on the slip. Empty on anything that did not win. */
+      winningNumbers: won.numbers,
+      winningBanker: won.banker,
       stakeAmount: data.totalStake,
       potentialPayout: data.potentialPayout,
       saleDate: data.saleDate,
       validUntil: expiryDate(data.drawDate, data.validityDays),
     },
-    game: { name: data.drawName, eventNumber: data.drawNumber, drawDate: data.drawDate },
+    game: {
+      name: data.drawName,
+      eventNumber: data.drawNumber,
+      drawDate: data.drawDate,
+      /** The declared draw, or null while the game is still open. */
+      winningNumbers: drawnFor(row),
+    },
     betType: { name: data.betTypeName },
     writer: { code: data.writerCode, name: data.writerName },
     agent: { code: data.agentCode, name: row.agent.agencyName },
     receipt: data,
     qrPayload: buildQrPayload(data),
     receiptText: buildReceiptText(data),
+    // The exact slice of receiptText holding the played numbers, so the screen
+    // can find it without parsing the slip.
+    numbersBlock: buildNumbersBlock(data),
     smsText: buildSmsText(data),
   };
 }
