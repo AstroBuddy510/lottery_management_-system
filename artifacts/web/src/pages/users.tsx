@@ -1888,15 +1888,27 @@ export function Users() {
   const { user } = useAuth();
   const role = user?.role ?? "";
   const isAdmin = role === "administrator";
+  /**
+   * Who may settle a writer's request to sell on credit. The API already
+   * allows these three; the screen has to as well, or a cashier is told they
+   * can decide and then has nowhere to do it.
+   */
+  const canDecideCredit = isAdmin || role === "director" || role === "cashier";
 
   // Admins default to "users" tab, Director/Cashier default to "company-staff"
   const defaultTab = isAdmin ? "users" : "company-staff";
 
   // Dynamic header based on role
-  const heading = isAdmin ? "Users & Agents" : "Company Staff";
+  const heading = isAdmin
+    ? "Users & Agents"
+    : canDecideCredit
+      ? "Staff & Requests"
+      : "Company Staff";
   const subHeading = isAdmin
     ? "Manage system users, agent accounts, agency staff and company employees."
-    : "View and manage internal company staff members.";
+    : canDecideCredit
+      ? "Company staff, and writer requests to sell on credit."
+      : "View and manage internal company staff members.";
 
   return (
     <div className="p-6 relative space-y-6">
@@ -1938,6 +1950,15 @@ export function Users() {
             </TabsTrigger>
           )}
 
+          {canDecideCredit && (
+            <TabsTrigger
+              value="credit-requests"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent"
+            >
+              Credit Requests
+            </TabsTrigger>
+          )}
+
           {isAdmin && (
             <TabsTrigger
               value="agency-staff"
@@ -1967,9 +1988,15 @@ export function Users() {
         )}
 
         {isAdmin && (
-          <TabsContent value="writer-approvals" className="space-y-4">
+          <TabsContent value="writer-approvals">
             <AdminWriterApprovals />
-            {/* Staff can settle these when an agent is unreachable. */}
+          </TabsContent>
+        )}
+
+        {canDecideCredit && (
+          <TabsContent value="credit-requests">
+            {/* Agents decide their own writers on My Writers. Staff see every
+                agent's, so an unreachable agent cannot strand a writer. */}
             <ModelRequestsPanel showAgent />
           </TabsContent>
         )}
