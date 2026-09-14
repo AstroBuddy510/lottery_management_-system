@@ -6,6 +6,7 @@ import {
   betTypesTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { recordTicketEvent } from "./ticket-audit";
 
 /**
  * Ticket settlement for a drawn game.
@@ -106,6 +107,16 @@ export async function settleGameTickets(
         .set({ status: "won", isWinner: true, winAmount: ticket.potentialPayout })
         .where(eq(ticketsTable.id, ticket.id));
 
+      await recordTicketEvent(tx, {
+        ticketId: ticket.id,
+        eventType: "settled_won",
+        fromStatus: "active",
+        toStatus: "won",
+        actorUserId: processedBy,
+        source: "settlement",
+        note: `Draw ${winningNumbers}`,
+      });
+
       const agentId = agentByWriter.get(ticket.writerId);
       if (!agentId) {
         throw new Error(`Writer ${ticket.writerId} not found for ticket ${ticket.id}`);
@@ -120,6 +131,15 @@ export async function settleGameTickets(
       });
     } else {
       await tx.update(ticketsTable).set({ status: "lost" }).where(eq(ticketsTable.id, ticket.id));
+      await recordTicketEvent(tx, {
+        ticketId: ticket.id,
+        eventType: "settled_lost",
+        fromStatus: "active",
+        toStatus: "lost",
+        actorUserId: processedBy,
+        source: "settlement",
+        note: `Draw ${winningNumbers}`,
+      });
     }
   }
 

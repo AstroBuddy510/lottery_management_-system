@@ -3,6 +3,7 @@ import { db, ticketsTable, gamesTable, betTypesTable, writersTable, writerTokenW
 import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { recordTicketEvent } from "../lib/ticket-audit";
 
 const router = Router();
 
@@ -132,6 +133,17 @@ router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => 
         status: "active",
         tokenTransactionId: transactionId,
       }).returning();
+
+      // The audit row carries the ticket's own creation time, so the two can
+      // never drift and make a false "before sale" anomaly.
+      await recordTicketEvent(tx, {
+        ticketId: ticket.id,
+        eventType: "sold",
+        toStatus: "active",
+        actorRole: "writer",
+        source: "portal",
+        occurredAt: ticket.createdAt,
+      });
 
       return ticket;
     });

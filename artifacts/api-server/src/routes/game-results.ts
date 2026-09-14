@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { SmsAdapter } from "../lib/sms-gateway";
+import { recordTicketEvent } from "../lib/ticket-audit";
 
 const router = Router();
 const smsAdapter = new SmsAdapter();
@@ -166,6 +167,15 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
     }
 
     await db.update(payoutRequestsTable).set({ status: "paid", paidAt: new Date() }).where(eq(payoutRequestsTable.id, payout.id));
+
+    await recordTicketEvent(db, {
+      ticketId: payout.ticketId,
+      eventType: "paid",
+      actorUserId: req.user!.userId,
+      actorRole: req.user!.role,
+      source: "admin",
+      note: `Paid ${payout.payoutAmount}`,
+    });
 
     // Send SMS
     if (writer.phone) {
