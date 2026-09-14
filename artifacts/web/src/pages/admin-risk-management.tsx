@@ -36,6 +36,9 @@ interface Combination {
   netIfDrawn: number;
   hedgeStake: number;
   severity: Severity;
+  ceiling: number;
+  overCeiling: boolean;
+  mustHedge: boolean;
 }
 
 interface WatchRow {
@@ -63,6 +66,13 @@ interface ExposureResponse {
   peakCoverage: number;
   hedgeToCover: number;
   atRiskCount: number;
+  mustHedgeCount: number;
+  mustHedgeLiability: number;
+  policy: {
+    hugeWinThreshold: number;
+    hedgeCoveragePct: number;
+    criticalCoveragePct: number;
+  };
   combinations: Combination[];
   numberHeat: NumberExposure[];
   watchList: WatchRow[];
@@ -124,7 +134,7 @@ export function AdminRiskManagement() {
   }, [exposure, focusNumber]);
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       {/* ---- Header ------------------------------------------------------ */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
@@ -183,6 +193,12 @@ export function AdminRiskManagement() {
                     <Badge variant="outline" className="text-[10px] font-bold">
                       {peak.betTypeName}
                     </Badge>
+                    {peak.mustHedge && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                        <Landmark className="h-2.5 w-2.5" />
+                        Hedge this
+                      </span>
+                    )}
                   </div>
                   <div className="mt-3">
                     <NumberChips numbers={peak.numbers} size="lg" highlight={focusNumber} />
@@ -244,15 +260,15 @@ export function AdminRiskManagement() {
               tone="danger"
             />
             <Tile
-              label="Lines at risk"
-              value={String(exposure.atRiskCount)}
-              hint="High or critical"
-              tone={exposure.atRiskCount > 0 ? "warning" : "good"}
+              label="Lines to hedge"
+              value={String(exposure.mustHedgeCount)}
+              hint={`Over ${fmtGHS(exposure.policy.hugeWinThreshold)} or a large share of the pool`}
+              tone={exposure.mustHedgeCount > 0 ? "warning" : "good"}
             />
             <Tile
               label="Hedge to cover"
               value={fmtGHS(exposure.hedgeToCover)}
-              hint="Stake at NLA on every at-risk line"
+              hint={`Stake at NLA to cover ${(exposure.policy.hedgeCoveragePct * 100).toFixed(0)}% of ${fmtGHS(exposure.mustHedgeLiability)}`}
             />
             <Tile
               label="Watch-list book"
@@ -334,8 +350,17 @@ export function AdminRiskManagement() {
                             <TableCell>
                               <CoverageBar coverage={c.coverage} severity={c.severity} />
                             </TableCell>
-                            <TableCell className="text-right text-xs font-semibold tabular-nums">
-                              {fmtGHS(c.hedgeStake)}
+                            <TableCell className="text-right">
+                              <div className="text-xs font-semibold tabular-nums">{fmtGHS(c.hedgeStake)}</div>
+                              {c.mustHedge && (
+                                <span className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-red-300/60 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300">
+                                  <Landmark className="h-2.5 w-2.5" />
+                                  Hedge
+                                </span>
+                              )}
+                              {!c.mustHedge && c.overCeiling && (
+                                <div className="mt-0.5 text-[9px] text-muted-foreground">under min hedge</div>
+                              )}
                             </TableCell>
                             <TableCell>
                               <SeverityBadge severity={c.severity} />
@@ -350,6 +375,8 @@ export function AdminRiskManagement() {
                   <Landmark className="mt-px h-3 w-3 shrink-0" />
                   Hedge is what to stake at the NLA on the same numbers for their payout to
                   match ours, at the odds we pay. Where the NLA pays different odds, scale it.
+                  Lines are marked for hedging above {fmtGHS(exposure.policy.hugeWinThreshold)} — change that
+                  under Settings → Hedge Thresholds.
                 </p>
               </CardContent>
             </Card>

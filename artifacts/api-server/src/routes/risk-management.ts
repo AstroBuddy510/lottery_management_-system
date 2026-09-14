@@ -17,6 +17,7 @@ import {
   parseNumbers,
   type ExposureTicket,
 } from "../lib/exposure";
+import { loadHedgePolicy } from "../lib/hedge-policy";
 
 const router = Router();
 
@@ -91,7 +92,8 @@ router.get("/risk/exposure", ...adminOnly, async (req, res) => {
     .where(eq(writersTable.isRedFlagged, true));
 
   const flaggedIds = new Set(flaggedWriters.map((w) => w.id));
-  const report = buildExposureReport(tickets as ExposureTicket[], betTypes, flaggedIds);
+  const policy = await loadHedgePolicy();
+  const report = buildExposureReport(tickets as ExposureTicket[], betTypes, flaggedIds, policy);
 
   // Per-writer book for the watch list, from the same tickets - a flagged
   // writer's own biggest combination is what the desk wants to see first.
