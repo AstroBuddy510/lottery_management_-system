@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
-import { Plus, Loader2, Info } from "lucide-react";
+import { Plus, Loader2, Info, Banknote, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 
@@ -23,27 +23,50 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
-/** Buy e-token units with mobile money via Paystack. */
+/**
+ * Buy e-token units, by mobile money or by paying the cashier in cash.
+ *
+ * The two differ only in how the money arrives. Mobile money goes through
+ * Paystack and is confirmed by its webhook; cash is handed over in person and
+ * the cashier confirming receipt IS the confirmation. Either way a cashier
+ * issues the units from their float, so the audit trail is the same.
+ */
 function BuyUnitDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<"momo" | "cash">("momo");
 
   const buy = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/writer-tokens/purchase/initialize", {
+      const path =
+        method === "cash"
+          ? "/api/writer-tokens/purchase/request-cash"
+          : "/api/writer-tokens/purchase/initialize";
+      const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ amount: Number(amount) }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Could not start payment");
-      return res.json() as Promise<{ authorization_url: string }>;
+      return res.json() as Promise<{ authorization_url?: string; message?: string }>;
     },
     onSuccess: (d) => {
+      if (method === "cash") {
+        toast({
+          title: "Request sent to your cashier",
+          description: d.message ?? `Pay GHS ${Number(amount).toFixed(2)} to your cashier to get your units.`,
+        });
+        qc.invalidateQueries();
+        setAmount("");
+        onClose();
+        return;
+      }
       // Paystack's own hosted page handles the mobile money prompt; we never
       // see or hold the writer's payment details.
-      window.location.href = d.authorization_url;
+      if (d.authorization_url) window.location.href = d.authorization_url;
     },
-    onError: (e: Error) => toast({ title: "Payment failed", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Request failed", description: e.message, variant: "destructive" }),
   });
 
   const valid = Number(amount) > 0;
@@ -54,11 +77,40 @@ function BuyUnitDialog({ open, onClose }: { open: boolean; onClose: () => void }
         <DialogHeader>
           <DialogTitle>Buy Units</DialogTitle>
           <DialogDescription className="text-xs">
-            Pay by MTN Mobile Money. Units are credited by a cashier once your payment is confirmed.
+            Units are issued by a cashier once your payment is confirmed.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold">How are you paying?</label>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { key: "momo", label: "Mobile Money", hint: "Pay now on your phone" },
+                { key: "cash", label: "Cash", hint: "Pay your cashier" },
+              ] as const).map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setMethod(m.key)}
+                  className={`rounded-xl border p-3 text-left transition-colors ${
+                    method === m.key
+                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                      : "border-border hover:bg-muted/50"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 text-xs font-bold">
+                    {m.key === "cash" ? <Banknote className="h-3.5 w-3.5" /> : <Smartphone className="h-3.5 w-3.5" />}
+                    {m.label}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
+                    {m.hint}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <label className="text-xs font-semibold">Amount (GHS)</label>
             <Input
@@ -83,7 +135,9 @@ function BuyUnitDialog({ open, onClose }: { open: boolean; onClose: () => void }
 
           <p className="text-[11px] text-muted-foreground flex gap-1.5">
             <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
-            You will be taken to Paystack to authorise the payment.
+            {method === "cash"
+              ? "Your cashier sees this request straight away. Hand them the cash and they will add your units."
+              : "You will be taken to Paystack to authorise the payment."}
           </p>
         </div>
 
@@ -97,7 +151,7 @@ function BuyUnitDialog({ open, onClose }: { open: boolean; onClose: () => void }
             onClick={() => buy.mutate()}
           >
             {buy.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            Continue
+            {method === "cash" ? "Send request" : "Continue"}
           </Button>
         </DialogFooter>
       </DialogContent>

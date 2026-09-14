@@ -1,4 +1,4 @@
-import { pgTable, uuid, decimal, timestamp, pgEnum, text } from "drizzle-orm/pg-core";
+import { varchar, pgTable, uuid, decimal, timestamp, pgEnum, text } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -70,6 +70,13 @@ export const writerTokenPurchasesTable = pgTable("writer_token_purchases", {
   id: uuid("id").primaryKey().defaultRandom(),
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  /**
+   * How the writer is paying: "momo" goes through Paystack and is confirmed
+   * by its webhook, "cash" is handed to the cashier in person. The money
+   * arrives by a different route, but the units are issued by the same
+   * cashier action either way.
+   */
+  paymentMethod: varchar("payment_method", { length: 10 }).notNull().default("momo"),
   status: tokenPurchaseStatusEnum("status").notNull().default("pending"),
   // Paystack's transaction reference, unique so a webhook replay cannot
   // create or credit the same purchase twice.

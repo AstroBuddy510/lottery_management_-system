@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
-import { Loader2, Check, Coins } from "lucide-react";
+import { Loader2, Check, Coins, Banknote, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 import { Wallet } from "lucide-react";
@@ -19,6 +19,7 @@ interface PurchaseRequest {
   id: string;
   amount: string;
   status: string;
+  paymentMethod: string;
   paystackReference: string | null;
   paidAt: string | null;
   creditedAt: string | null;
@@ -86,7 +87,8 @@ export function UnitRequests() {
             <Coins className="h-4 w-4 text-amber-500" /> Unit Requests
           </CardTitle>
           <CardDescription>
-            Writers who have paid for e-token units by mobile money. Credit the units to issue them.
+            Writers buying e-token units. Mobile money arrives already paid; a cash request is
+            waiting for the writer to hand you the money. Crediting issues the units from your float.
           </CardDescription>
         </div>
         <div className="flex items-center gap-4 shrink-0">
@@ -128,7 +130,7 @@ export function UnitRequests() {
               {isLoading ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="h-4 w-4 animate-spin inline" /></TableCell></TableRow>
               ) : list.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No paid requests awaiting credit.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No requests awaiting credit.</TableCell></TableRow>
               ) : (
                 list.map((r) => (
                   <TableRow key={r.id}>
@@ -139,12 +141,33 @@ export function UnitRequests() {
                       </span>
                     </TableCell>
                     <TableCell className="text-xs whitespace-nowrap">
-                      {r.paidAt ? format(new Date(r.paidAt), "d MMM · h:mm a") : "—"}
+                      {r.paidAt
+                        ? format(new Date(r.paidAt), "d MMM · h:mm a")
+                        : format(new Date(r.createdAt), "d MMM · h:mm a")}
+                      {!r.paidAt && (
+                        <span className="block text-[10px] text-muted-foreground">requested</span>
+                      )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="font-mono text-[10px]">
-                        {r.paystackReference ?? "—"}
-                      </Badge>
+                      {r.paymentMethod === "cash" ? (
+                        <>
+                          <Badge className="bg-amber-500/15 text-amber-700 border border-amber-300/60 text-[10px] font-bold dark:text-amber-300">
+                            <Banknote className="mr-1 h-3 w-3" /> CASH
+                          </Badge>
+                          <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                            Collect {fmtGHS(r.amount)} first
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Badge className="bg-emerald-500/15 text-emerald-700 border border-emerald-300/60 text-[10px] font-bold dark:text-emerald-300">
+                            <Smartphone className="mr-1 h-3 w-3" /> MoMo
+                          </Badge>
+                          <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
+                            {r.paystackReference ?? "—"}
+                          </span>
+                        </>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-bold tabular-nums">{fmtGHS(r.amount)}</TableCell>
                     <TableCell className="text-right">
@@ -152,14 +175,24 @@ export function UnitRequests() {
                         size="sm"
                         className="h-8 text-xs"
                         disabled={credit.isPending}
-                        onClick={() => credit.mutate(r.id)}
+                        onClick={() => {
+                          if (
+                            r.paymentMethod === "cash" &&
+                            !confirm(
+                              `Have you received ${fmtGHS(r.amount)} in cash from ${r.writerName}?\n\nCrediting issues the units from your float and cannot be undone.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          credit.mutate(r.id);
+                        }}
                       >
                         {credit.isPending && credit.variables === r.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <Check className="h-3.5 w-3.5" />
                         )}
-                        <span className="ml-1.5">Credit Units</span>
+                        <span className="ml-1.5">{r.paymentMethod === "cash" ? "Cash received · Credit" : "Credit Units"}</span>
                       </Button>
                     </TableCell>
                   </TableRow>
