@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { postJson } from "@/lib/writer-api";
 
 export function WriterLogin() {
   const [phone, setPhone] = useState("");
@@ -24,16 +25,11 @@ export function WriterLogin() {
 
     setIsLoading(true);
     try {
-      const response = await fetch("/api/writer-auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, pin }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
-      }
+      const data = await postJson<{
+        accessToken: string;
+        refreshToken: string;
+        user: unknown;
+      }>("/api/writer-auth/login", { phone, pin });
 
       setTokens(data.accessToken, data.refreshToken, data.user);
       setLocation("/writer/dashboard");
