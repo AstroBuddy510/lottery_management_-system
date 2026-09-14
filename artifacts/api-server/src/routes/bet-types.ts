@@ -15,6 +15,8 @@ const betTypeSchema = z.object({
   minNumbers: z.number().int().min(0).max(40).optional(),
   maxNumbers: z.number().int().min(0).max(40).optional(),
   payoutMultiplier: z.number().min(1),
+  minStake: z.number().min(0).max(1_000_000).optional(),
+  maxStake: z.number().min(0).max(1_000_000).optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -83,6 +85,8 @@ router.post("/bet-types", requireAuth, requireRole("director", "administrator"),
       ...data,
       ...normalise(data),
       payoutMultiplier: data.payoutMultiplier.toString(),
+      minStake: (data.minStake ?? 0).toString(),
+      maxStake: (data.maxStake ?? 0).toString(),
       updatedBy: req.user!.userId,
     })
     .returning();
@@ -108,6 +112,17 @@ router.put("/bet-types/:id", requireAuth, requireRole("director", "administrator
   const updates: Record<string, any> = { ...data };
   if (data.payoutMultiplier !== undefined) {
     updates.payoutMultiplier = data.payoutMultiplier.toString();
+  }
+  if (data.minStake !== undefined) updates.minStake = data.minStake.toString();
+  if (data.maxStake !== undefined) updates.maxStake = data.maxStake.toString();
+  // A ceiling below the floor would reject every bet, so swap rather than store it.
+  if (
+    updates.minStake !== undefined &&
+    updates.maxStake !== undefined &&
+    Number(updates.maxStake) > 0 &&
+    Number(updates.minStake) > Number(updates.maxStake)
+  ) {
+    [updates.minStake, updates.maxStake] = [updates.maxStake, updates.minStake];
   }
   // A partial edit - the active toggle, say - must not silently re-derive the
   // number range from a mechanic that was not sent.

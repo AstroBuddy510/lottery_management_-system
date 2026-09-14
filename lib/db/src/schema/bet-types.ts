@@ -20,6 +20,12 @@ export const betTypesTable = pgTable("bet_types", {
   /** Numbers the player picks, not counting a banker. */
   minNumbers: integer("min_numbers").notNull().default(2),
   maxNumbers: integer("max_numbers").notNull().default(2),
+  /**
+   * Stake bounds for ONE line. A zero maximum means no ceiling - which is how
+   * the screen shows "0 / 0" for a type nobody has priced yet.
+   */
+  minStake: decimal("min_stake", { precision: 12, scale: 2 }).notNull().default("0"),
+  maxStake: decimal("max_stake", { precision: 12, scale: 2 }).notNull().default("0"),
   isActive: boolean("is_active").notNull().default(true),
   updatedBy: uuid("updated_by").references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

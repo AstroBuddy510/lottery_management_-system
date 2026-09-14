@@ -85,6 +85,8 @@ router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => 
     bankerNumber: bankerNumber ?? null,
     stakePerLine,
     multiplier: parseFloat(betType.payoutMultiplier),
+    minStake: parseFloat(betType.minStake) || 0,
+    maxStake: parseFloat(betType.maxStake) || 0,
   };
 
   const invalid = validateSelection(selection);
@@ -234,6 +236,8 @@ router.post("/tickets/quote", requireAuth, requireRole("writer"), async (req, re
     bankerNumber: parse.data.bankerNumber ?? null,
     stakePerLine: parse.data.stakeAmount,
     multiplier: parseFloat(betType.payoutMultiplier),
+    minStake: parseFloat(betType.minStake) || 0,
+    maxStake: parseFloat(betType.maxStake) || 0,
   };
 
   const invalid = validateSelection(selection);

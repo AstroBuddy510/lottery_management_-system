@@ -115,6 +115,9 @@ export interface BetSelection {
   bankerNumber?: number | null;
   stakePerLine: number;
   multiplier: number;
+  /** Per-line stake bounds from the bet type. A zero max means no ceiling. */
+  minStake?: number;
+  maxStake?: number;
 }
 
 export interface BetQuote {
@@ -183,6 +186,14 @@ export function validateSelection(selection: BetSelection): string | null {
   }
 
   if (!(selection.stakePerLine > 0)) return "Stake per line must be more than zero";
+  const min = selection.minStake ?? 0;
+  const max = selection.maxStake ?? 0;
+  if (min > 0 && selection.stakePerLine < min) {
+    return `Stake per line must be at least ${min.toFixed(2)}`;
+  }
+  if (max > 0 && selection.stakePerLine > max) {
+    return `Stake per line cannot be more than ${max.toFixed(2)}`;
+  }
   if (!(selection.multiplier > 0)) return "This bet type has no payout multiplier set";
 
   return null;
