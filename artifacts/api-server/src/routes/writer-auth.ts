@@ -1,8 +1,8 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { db, usersTable, writersTable, agentsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, usersTable, writersTable, agentsTable, writerModelRequestsTable } from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { composeWriterFullCode } from "../lib/writer-onboarding";
@@ -227,10 +227,44 @@ router.post("/writer-auth/operation-model", requireAuth, requireRole("writer"), 
   }
 
   if (target === "postpaid") {
-    res.status(403).json({
-      error:
-        "Switching to postpaid needs approval from your agent, because it means selling on credit. Ask them to change it for you.",
+    // Record the request rather than just refusing. Telling a writer to "ask
+    // your agent" and creating nothing meant the request reached no one.
+    const [pending] = await db
+      .select()
+      .from(writerModelRequestsTable)
+      .where(
+        and(
+          eq(writerModelRequestsTable.writerId, writer.id),
+          eq(writerModelRequestsTable.status, "pending"),
+        ),
+      )
+      .limit(1);
+
+    if (pending) {
+      res.status(409).json({
+        error: "You already have a postpaid request waiting for a decision.",
+        requiresApproval: true,
+        request: pending,
+      });
+      return;
+    }
+
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 500) : null;
+    const [created] = await db
+      .insert(writerModelRequestsTable)
+      .values({
+        writerId: writer.id,
+        requestedModel: "postpaid",
+        currentModel: writer.operationModel,
+        reason: reason || null,
+      })
+      .returning();
+
+    res.status(202).json({
       requiresApproval: true,
+      request: created,
+      message:
+        "Your request to sell on credit has been sent. Your agent, or an administrator, will decide it.",
     });
     return;
   }
@@ -243,5 +277,21 @@ router.post("/writer-auth/operation-model", requireAuth, requireRole("writer"), 
 
   res.json({ operationModel: updated.operationModel, changed: true });
 });
+
+/** The writer's own model requests, so the portal can show where one stands. */
+router.get(
+  "/writer-auth/model-requests",
+  requireAuth,
+  requireRole("writer"),
+  async (req, res) => {
+    const rows = await db
+      .select()
+      .from(writerModelRequestsTable)
+      .where(eq(writerModelRequestsTable.writerId, req.user!.userId))
+      .orderBy(desc(writerModelRequestsTable.createdAt))
+      .limit(10);
+    res.json(rows);
+  },
+);
 
 export default router;

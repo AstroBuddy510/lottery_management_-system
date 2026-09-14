@@ -186,7 +186,11 @@ export function WriterWallet() {
     enabled: view === "postpaid",
   });
 
-  /** Switching to prepaid is immediate; postpaid needs an agent's approval. */
+  /**
+   * Switching to prepaid is immediate. Postpaid is a request: it means selling
+   * on credit, so an agent - or an administrator, if the agent is unreachable -
+   * decides it. The request is recorded and reaches them.
+   */
   const switchMode = useMutation({
     mutationFn: async (mode: Mode) => {
       const res = await fetch("/api/writer-auth/operation-model", {
@@ -196,14 +200,35 @@ export function WriterWallet() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || "Could not switch mode");
-      return body;
+      return body as { requiresApproval?: boolean; message?: string };
     },
-    onSuccess: () => {
-      toast({ title: "Account mode updated" });
+    onSuccess: (body) => {
+      if (body.requiresApproval) {
+        toast({
+          title: "Request sent",
+          description: body.message ?? "Your agent or an administrator will decide it.",
+        });
+        // The switch has not happened, so put the view back where it was.
+        setView(accountMode);
+      } else {
+        toast({ title: "Account mode updated" });
+      }
       qc.invalidateQueries();
     },
-    onError: (e: Error) => toast({ title: "Not switched", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => {
+      toast({ title: "Not switched", description: e.message, variant: "destructive" });
+      setView(accountMode);
+    },
   });
+
+  // Where a request already stands, so the writer is not left guessing.
+  const { data: modelRequests } = useQuery<
+    Array<{ id: string; status: string; requestedModel: string; createdAt: string }>
+  >({
+    queryKey: ["/api/writer-auth/model-requests"],
+    queryFn: () => getJson("/api/writer-auth/model-requests"),
+  });
+  const pendingRequest = (modelRequests ?? []).find((r) => r.status === "pending");
 
   const selectView = (mode: Mode) => {
     setView(mode);
@@ -212,6 +237,18 @@ export function WriterWallet() {
 
   return (
     <div className="space-y-5">
+      {pendingRequest && (
+        <div className="rounded-xl border border-amber-300/60 bg-amber-500/[0.07] px-4 py-3 text-xs dark:border-amber-500/30">
+          <span className="font-semibold">
+            Your request to switch to {pendingRequest.requestedModel} is waiting for a decision.
+          </span>
+          <span className="mt-0.5 block text-muted-foreground">
+            Sent {format(new Date(pendingRequest.createdAt), "d MMM 'at' HH:mm")}. Your agent or an
+            administrator will decide it.
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-xl font-bold tracking-tight">Wallet &amp; Ledger</h1>
         {view === "prepaid" && (
