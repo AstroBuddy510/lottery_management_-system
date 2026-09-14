@@ -78,6 +78,8 @@ export interface ReceiptData {
   saleDate: Date;
   betTypeName: string;
   numbers: string;
+  /** Set only on banker bets. Stored apart from `numbers`, printed with them. */
+  bankerNumber?: number | null;
   lines: number;
   unitPrice: string;
   totalStake: string;
@@ -101,6 +103,22 @@ export function expiryDate(drawDate: Date, validityDays: number): Date {
   const d = new Date(drawDate);
   d.setDate(d.getDate() + validityDays);
   return d;
+}
+
+/**
+ * The played numbers, exactly as they appear on the slip.
+ *
+ * Kept as its own function - and sent to the client alongside the receipt -
+ * so the screen can find this block inside the finished text and mark up the
+ * winners without having to guess which lines are numbers.
+ *
+ * The banker rides with them rather than in the rows above: it is part of the
+ * bet, and a slip that leaves it off does not state what was staked.
+ */
+export function buildNumbersBlock(d: ReceiptData): string {
+  const lines = wrap(d.numbers).map((line) => `  ${line}`);
+  if (d.bankerNumber != null) lines.push(`  BANKER ${d.bankerNumber}`);
+  return lines.join("\n");
 }
 
 /**
@@ -128,7 +146,7 @@ export function buildReceiptText(d: ReceiptData): string {
   out.push(rule());
 
   out.push(d.betTypeName.toUpperCase());
-  for (const line of wrap(d.numbers)) out.push(`  ${line}`);
+  out.push(buildNumbersBlock(d));
   out.push("");
 
   out.push(row("No Of Line(s)", String(d.lines)));
@@ -158,7 +176,7 @@ export function buildSmsText(d: ReceiptData): string {
     `${d.companyName.toUpperCase()} - ${d.drawName}`,
     `Ticket: ${d.ticketNumber}`,
     `Draw ${d.drawNumber} on ${dateOnly(d.drawDate)}`,
-    `${d.betTypeName}: ${d.numbers}`,
+    `${d.betTypeName}: ${d.numbers}${d.bankerNumber != null ? ` (banker ${d.bankerNumber})` : ""}`,
     `Lines: ${d.lines} @ GHS ${money(d.unitPrice)}`,
     `Stake: GHS ${money(d.totalStake)}`,
     `Potential win: GHS ${money(d.potentialPayout)}`,

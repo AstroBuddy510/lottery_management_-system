@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -26,18 +26,122 @@ export interface TicketReceipt {
     isWinner: boolean;
     winAmount: string;
     numbers: string;
+    bankerNumber?: number | null;
+    /**
+     * The picks that actually earned the win, decided by the bet engine and
+     * sent down settled - never worked out here. Empty on anything that did
+     * not win, which is what keeps a losing slip unmarked.
+     */
+    winningNumbers?: number[];
+    winningBanker?: number | null;
     stakeAmount: string;
     potentialPayout: string;
     saleDate: string;
     validUntil: string;
   };
-  game: { name: string; eventNumber: string; drawDate: string };
+  game: {
+    name: string;
+    eventNumber: string;
+    drawDate: string;
+    winningNumbers?: string | null;
+  };
   betType: { name: string };
   writer: { code: string; name: string };
   agent: { code: string; name: string | null };
   qrPayload: string;
   receiptText: string;
+  /** The exact slice of receiptText holding the played numbers. */
+  numbersBlock?: string;
   smsText: string;
+}
+
+/** Ink for the winning ring. Dark enough to survive a screenshot or a print. */
+const WIN_GREEN = "#059669";
+const WIN_TEXT = "#047857";
+
+/**
+ * The picks to ring, as a set the slip can test each printed number against.
+ * A ticket that did not win yields an empty set and is therefore left alone.
+ */
+function winningSet(data: TicketReceipt): Set<number> {
+  if (!data.ticket.isWinner) return new Set();
+  const picks = data.ticket.winningNumbers ?? [];
+  const banker = data.ticket.winningBanker;
+  return new Set(banker != null ? [...picks, banker] : picks);
+}
+
+/**
+ * Where the played numbers sit inside the receipt body.
+ *
+ * The slip is one preformatted block built on the server, so rather than
+ * guessing which lines hold numbers we find the exact substring the server
+ * says it put there. No match - an older cached receipt, say - means no
+ * markup rather than a mangled slip.
+ */
+function locateNumbers(data: TicketReceipt): { before: string; numbers: string; after: string } | null {
+  const block = data.numbersBlock;
+  if (!block) return null;
+
+  // Only a match that starts its own line is the numbers block; anything
+  // found mid-line is a coincidence in some other row.
+  let at = data.receiptText.indexOf(block);
+  while (at > 0 && data.receiptText[at - 1] !== "\n") {
+    at = data.receiptText.indexOf(block, at + 1);
+  }
+  if (at < 0) return null;
+
+  return {
+    before: data.receiptText.slice(0, at),
+    numbers: block,
+    after: data.receiptText.slice(at + block.length),
+  };
+}
+
+/**
+ * A number with a green ring drawn round it.
+ *
+ * The ring is an overlay rather than a border or padding on the number
+ * itself: the slip is monospaced to a 32-column grid, and anything that
+ * changes a character's width would shunt the columns out of line.
+ */
+function WinnerRing({ children }: { children: ReactNode }) {
+  return (
+    <span style={{ position: "relative", display: "inline-block", color: WIN_TEXT, fontWeight: 700 }}>
+      {children}
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: "-2px",
+          right: "-3px",
+          bottom: "-2px",
+          left: "-3px",
+          border: `1.5px solid ${WIN_GREEN}`,
+          borderRadius: "50%",
+          pointerEvents: "none",
+        }}
+      />
+    </span>
+  );
+}
+
+/** The numbers block, with every winning pick ringed. */
+function MarkedNumbers({ text, winners }: { text: string; winners: Set<number> }) {
+  const nodes: ReactNode[] = [];
+  const re = /\d+/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  // Whole runs of digits, so 5 is never found inside 65.
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    nodes.push(
+      winners.has(parseInt(m[0], 10)) ? <WinnerRing key={key++}>{m[0]}</WinnerRing> : m[0],
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return <>{nodes}</>;
 }
 
 const COMPANY_LOGO = "/company-logo-v3.png";
@@ -65,6 +169,11 @@ function statusTone(status: string, isWinner: boolean): string {
 
 /** The slip itself, at true 58mm width. Also what gets printed. */
 export function ReceiptSlip({ data, printRef }: { data: TicketReceipt; printRef?: string }) {
+  // Rings are drawn only when this ticket won something. Everything else -
+  // active, lost, void - renders as the plain slip it has always been.
+  const winners = useMemo(() => winningSet(data), [data]);
+  const split = useMemo(() => (winners.size > 0 ? locateNumbers(data) : null), [data, winners]);
+
   return (
     <div
       id={printRef}
@@ -88,7 +197,15 @@ export function ReceiptSlip({ data, printRef }: { data: TicketReceipt; printRef?
           wordBreak: "break-word",
         }}
       >
-        {data.receiptText}
+        {split ? (
+          <>
+            {split.before}
+            <MarkedNumbers text={split.numbers} winners={winners} />
+            {split.after}
+          </>
+        ) : (
+          data.receiptText
+        )}
       </pre>
       <div style={{ textAlign: "center", marginTop: "2mm" }}>
         <QRCodeSVG value={data.qrPayload} size={110} level="M" includeMargin />
@@ -98,6 +215,29 @@ export function ReceiptSlip({ data, printRef }: { data: TicketReceipt; printRef?
       </div>
     </div>
   );
+}
+
+const escapeHtml = (text: string) =>
+  text.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[c] as string);
+
+/**
+ * The receipt body as HTML for the print window, winners ringed.
+ *
+ * A thermal printer renders this monochrome and the ring simply comes out
+ * black, which is still the mark a cashier needs; on an office printer it
+ * comes out green like the screen.
+ */
+function receiptHtml(data: TicketReceipt): string {
+  const winners = winningSet(data);
+  const split = winners.size > 0 ? locateNumbers(data) : null;
+  if (!split) return escapeHtml(data.receiptText);
+
+  const ringed = escapeHtml(split.numbers).replace(/\d+/g, (digits) =>
+    winners.has(parseInt(digits, 10))
+      ? `<span class="w">${digits}<i></i></span>`
+      : digits,
+  );
+  return escapeHtml(split.before) + ringed + escapeHtml(split.after);
 }
 
 function printSlip(data: TicketReceipt) {
@@ -115,10 +255,16 @@ function printSlip(data: TicketReceipt) {
       .c { text-align: center; }
       img { width: 22mm; margin-bottom: 1mm; }
       svg { width: 28mm; height: 28mm; }
+      /* Ringed winning numbers. The ring is an overlay so the 32-column
+         grid keeps its alignment. */
+      .w { position: relative; display: inline-block; color: ${WIN_TEXT}; font-weight: 700; }
+      .w i { position: absolute; top: -2px; right: -3px; bottom: -2px; left: -3px;
+             border: 1.5px solid ${WIN_GREEN}; border-radius: 50%; }
+      @media print { .w, .w i { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     </style></head>
     <body>
       <div class="c"><img src="${COMPANY_LOGO}" alt=""></div>
-      <pre>${data.receiptText.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string))}</pre>
+      <pre>${receiptHtml(data)}</pre>
       <div class="c" style="margin-top:2mm">${qrSvg}<div style="font-size:7pt">Scan to verify</div></div>
     </body></html>
   `);
