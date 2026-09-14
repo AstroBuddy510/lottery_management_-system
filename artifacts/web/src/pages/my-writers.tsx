@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { IssuePinDialog, type IssuePinTarget } from "@/components/issue-pin-dialog";
+import { ModelRequestsPanel } from "@/components/model-requests-panel";
 
 const AVATAR_COLORS = [
   "bg-blue-600","bg-emerald-600","bg-violet-600","bg-orange-500",
@@ -161,6 +162,9 @@ export function MyWriters() {
             <div className="text-2xl font-bold">{activeCount}</div>
           </div>
         </div>
+
+        {/* Credit requests reach the agent here - previously they reached nobody. */}
+        <ModelRequestsPanel />
 
         {/* Writer cards */}
         {writersLoading ? (

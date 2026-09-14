@@ -10,7 +10,7 @@ import {
   cashierTokenTransactionsTable,
   usersTable,
 } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { dispatchSystemNotification } from "../lib/notify";
@@ -65,7 +65,12 @@ router.post(
 
     const [purchase] = await db
       .insert(writerTokenPurchasesTable)
-      .values({ writerId: writer.id, amount: amount.toFixed(2), status: "pending" })
+      .values({
+        writerId: writer.id,
+        amount: amount.toFixed(2),
+        status: "pending",
+        paymentMethod: "momo",
+      })
       .returning();
 
     // Paystack requires an email; writers have phones, so derive a stable one.
@@ -210,6 +215,57 @@ router.post("/writer-tokens/purchase/webhook", async (req, res) => {
 });
 
 /** A writer's own purchase history. */
+/**
+ * Ask to buy units with cash.
+ *
+ * Nothing is charged here: the writer hands the money to the cashier, who
+ * confirms receipt and issues the units in one action. So the request is
+ * created "pending" and stays there until a cashier has the cash in hand -
+ * which is why, unlike the MoMo path, this needs no payment provider and
+ * works when Paystack is not configured at all.
+ */
+router.post(
+  "/writer-tokens/purchase/request-cash",
+  requireAuth,
+  requireRole("writer"),
+  async (req, res) => {
+    const parse = buySchema.safeParse({ amount: Number(req.body?.amount) });
+    if (!parse.success) {
+      res.status(400).json({ error: "Enter a valid amount" });
+      return;
+    }
+
+    const [writer] = await db
+      .select()
+      .from(writersTable)
+      .where(eq(writersTable.id, req.user!.userId))
+      .limit(1);
+    if (!writer || !writer.isActive) {
+      res.status(403).json({ error: "Account inactive" });
+      return;
+    }
+    if (writer.operationModel !== "prepaid") {
+      res.status(400).json({ error: "Only prepaid accounts buy units" });
+      return;
+    }
+
+    const [purchase] = await db
+      .insert(writerTokenPurchasesTable)
+      .values({
+        writerId: writer.id,
+        amount: parse.data.amount.toFixed(2),
+        status: "pending",
+        paymentMethod: "cash",
+      })
+      .returning();
+
+    res.status(201).json({
+      purchase,
+      message: `Pay GHS ${parse.data.amount.toFixed(2)} to your cashier. Your units are added once they confirm the cash.`,
+    });
+  },
+);
+
 router.get("/writer-tokens/purchases", requireAuth, requireRole("writer"), async (req, res) => {
   const rows = await db
     .select()
@@ -232,6 +288,7 @@ router.get(
         id: writerTokenPurchasesTable.id,
         amount: writerTokenPurchasesTable.amount,
         status: writerTokenPurchasesTable.status,
+        paymentMethod: writerTokenPurchasesTable.paymentMethod,
         paystackReference: writerTokenPurchasesTable.paystackReference,
         paidAt: writerTokenPurchasesTable.paidAt,
         creditedAt: writerTokenPurchasesTable.creditedAt,
@@ -243,8 +300,20 @@ router.get(
       })
       .from(writerTokenPurchasesTable)
       .innerJoin(writersTable, eq(writerTokenPurchasesTable.writerId, writersTable.id))
-      .where(eq(writerTokenPurchasesTable.status, status as "paid"))
-      .orderBy(desc(writerTokenPurchasesTable.paidAt))
+      // MoMo requests arrive already paid; cash ones sit pending until the
+      // cashier has the money, so both belong in the same queue.
+      .where(
+        status === "paid"
+          ? or(
+              eq(writerTokenPurchasesTable.status, "paid"),
+              and(
+                eq(writerTokenPurchasesTable.status, "pending"),
+                eq(writerTokenPurchasesTable.paymentMethod, "cash"),
+              ),
+            )
+          : eq(writerTokenPurchasesTable.status, status as "paid"),
+      )
+      .orderBy(desc(writerTokenPurchasesTable.createdAt))
       .limit(200);
     res.json(rows);
   },
@@ -261,13 +330,32 @@ router.post(
   async (req, res) => {
     const purchaseId = req.params["purchaseId"] as string;
 
+    // A MoMo request is claimed from "paid"; a cash one from "pending",
+    // because no provider ever confirmed it - the cashier taking the money IS
+    // the confirmation. Either way the status is re-checked inside the UPDATE
+    // so two cashiers cannot both claim it.
+    const now = new Date();
     const [claimed] = await db
       .update(writerTokenPurchasesTable)
-      .set({ status: "credited", creditedBy: req.user!.userId, creditedAt: new Date() })
+      .set({
+        status: "credited",
+        creditedBy: req.user!.userId,
+        creditedAt: now,
+        // Cash has no provider timestamp, so the moment the cashier takes it
+        // IS when it was paid. A MoMo request already has the real one from
+        // the webhook and must keep it.
+        paidAt: sql`coalesce(${writerTokenPurchasesTable.paidAt}, ${now.toISOString()}::timestamptz)`,
+      })
       .where(
         and(
           eq(writerTokenPurchasesTable.id, purchaseId),
-          eq(writerTokenPurchasesTable.status, "paid"),
+          or(
+            eq(writerTokenPurchasesTable.status, "paid"),
+            and(
+              eq(writerTokenPurchasesTable.status, "pending"),
+              eq(writerTokenPurchasesTable.paymentMethod, "cash"),
+            ),
+          ),
         ),
       )
       .returning();

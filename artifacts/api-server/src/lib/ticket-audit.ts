@@ -132,6 +132,24 @@ export const CLOCK_SKEW_MS = 2_000;
 /** Two identical bets this close together are one bet entered twice. */
 export const DUPLICATE_WINDOW_MS = 60_000;
 
+/**
+ * A gap a person can act on. "2133s" is arithmetic; "36 min" is the fact
+ * that a ticket was sold after the draw closed - and these strings are read
+ * on the payout screen at the moment money is authorised.
+ */
+export function humaniseGap(milliseconds: number): string {
+  const secs = Math.round(Math.abs(milliseconds) / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if (hours < 24) return rem ? `${hours} hr ${rem} min` : `${hours} hr`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours ? `${days} day${days === 1 ? "" : "s"} ${remHours} hr` : `${days} day${days === 1 ? "" : "s"}`;
+}
+
 const ms = (value: string | Date | null | undefined): number | null => {
   if (!value) return null;
   const t = value instanceof Date ? value.getTime() : Date.parse(value);
@@ -208,7 +226,7 @@ export function detectTicketAnomalies(tickets: AuditTicket[], events: AuditEvent
           severity: "high",
           ticketId: sorted[i].id,
           ticketNumber: sorted[i].ticketNumber,
-          detail: `Identical bet to ${sorted[i - 1].ticketNumber}, sold ${Math.round(gap / 1000)}s earlier by the same writer.`,
+          detail: `Identical bet to ${sorted[i - 1].ticketNumber}, sold ${humaniseGap(gap)} earlier by the same writer.`,
           at: iso(sorted[i].createdAt),
         });
       }
@@ -231,7 +249,7 @@ export function detectTicketAnomalies(tickets: AuditTicket[], events: AuditEvent
           severity: "critical",
           ticketId: t.id,
           ticketNumber: t.ticketNumber,
-          detail: `${e.eventType.replace(/_/g, " ")} recorded ${Math.round((sold - at) / 1000)}s before the ticket was sold.`,
+          detail: `${e.eventType.replace(/_/g, " ")} recorded ${humaniseGap(sold - at)} before the ticket was sold.`,
           at: iso(e.occurredAt),
         });
       }
@@ -245,7 +263,7 @@ export function detectTicketAnomalies(tickets: AuditTicket[], events: AuditEvent
         severity: "high",
         ticketId: t.id,
         ticketNumber: t.ticketNumber,
-        detail: `Sold ${Math.round((sold - closeAt) / 1000)}s after betting closed on this game.`,
+        detail: `Sold ${humaniseGap(sold - closeAt)} after betting closed on this game.`,
         at: iso(t.createdAt),
       });
     }
@@ -260,7 +278,7 @@ export function detectTicketAnomalies(tickets: AuditTicket[], events: AuditEvent
         severity: "critical",
         ticketId: t.id,
         ticketNumber: t.ticketNumber,
-        detail: `Paid ${Math.round((drawAt - paidAt) / 1000)}s before the draw was processed.`,
+        detail: `Paid ${humaniseGap(drawAt - paidAt)} before the draw was processed.`,
         at: iso(paid!.occurredAt),
       });
     }

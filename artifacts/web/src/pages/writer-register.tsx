@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, CheckCircle2 } from "lucide-react";
+import { postJson } from "@/lib/writer-api";
 
 export function WriterRegister() {
   const [formData, setFormData] = useState({
@@ -32,16 +33,10 @@ export function WriterRegister() {
 
     setIsLoading(true);
     try {
-      const response = await fetch("/api/writer-auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Registration failed");
-      }
+      const data = await postJson<{ fullCode?: string }>(
+        "/api/writer-auth/register",
+        formData,
+      );
 
       setIssuedCode(data.fullCode ?? null);
       setIsSuccess(true);

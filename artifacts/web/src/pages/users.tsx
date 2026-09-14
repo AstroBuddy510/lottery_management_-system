@@ -27,6 +27,7 @@ import { useQuery } from "@tanstack/react-query";
 import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS } from "@/components/live-sales";
 import { IssuePinDialog, type IssuePinTarget } from "@/components/issue-pin-dialog";
 import { RedFlagDialog, RedFlagButton, useRedFlags, type RedFlagTarget } from "@/components/red-flag-dialog";
+import { ModelRequestsPanel } from "@/components/model-requests-panel";
 import { fmtGHS } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
@@ -1966,8 +1967,10 @@ export function Users() {
         )}
 
         {isAdmin && (
-          <TabsContent value="writer-approvals">
+          <TabsContent value="writer-approvals" className="space-y-4">
             <AdminWriterApprovals />
+            {/* Staff can settle these when an agent is unreachable. */}
+            <ModelRequestsPanel showAgent />
           </TabsContent>
         )}
 
