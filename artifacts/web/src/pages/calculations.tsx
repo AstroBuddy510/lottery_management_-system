@@ -158,8 +158,17 @@ export function Calculations() {
       setWinningNumbers(["", "", "", "", ""]);
       setMachineNumbers(["", "", "", "", ""]);
       setSelectedRunGameId("_none");
-    } catch {
-      toast({ title: "Failed to run calculations", variant: "destructive" });
+    } catch (err) {
+      // The server says why; repeating "failed" hides it and leaves the
+      // operator with nothing to act on.
+      const detail =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        (err as Error)?.message;
+      toast({
+        title: "Failed to run calculations",
+        description: detail,
+        variant: "destructive",
+      });
     }
   };
 

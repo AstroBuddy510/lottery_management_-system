@@ -20,6 +20,7 @@ import { verifyLedgerAndEscalate } from "../lib/accountant";
 import { dispatchSystemNotification } from "../lib/notify";
 import { settleGameTickets } from "../lib/settle-tickets";
 import { getUnifiedWriterTotals } from "../lib/unified-sales";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -56,25 +57,39 @@ router.post(
         return;
       }
 
-      await db
-        .update(gamesTable)
-        .set({
-          winningNumbers,
-          machineNumbers,
-          status: "closed",
-          closedAt: new Date(),
-          closedBy: req.user!.userId,
-          closeType: "manual",
-          updatedAt: new Date(),
-        })
-        .where(eq(gamesTable.id, gameId));
+      // Closing the game and settling its tickets are one act. Done
+      // separately, a settlement failure leaves the game marked closed with
+      // its numbers posted and no wins behind it - which reads as a finished
+      // draw and is the hardest state to notice or unpick.
+      try {
+        settlement = await db.transaction(async (tx) => {
+          await tx
+            .update(gamesTable)
+            .set({
+              winningNumbers,
+              machineNumbers,
+              status: "closed",
+              closedAt: new Date(),
+              closedBy: req.user!.userId,
+              closeType: "manual",
+              updatedAt: new Date(),
+            })
+            .where(eq(gamesTable.id, gameId));
 
-      // Posting the declared numbers also settles the writer tickets for this
-      // draw, creating the payout requests the payout review screen works
-      // from. Idempotent - a game already settled is left alone.
-      settlement = await db.transaction((tx) =>
-        settleGameTickets(tx, gameId, winningNumbers, machineNumbers, req.user!.userId),
-      );
+          // Posting the declared numbers also settles the writer tickets for
+          // this draw, creating the payout requests the payout review screen
+          // works from. Idempotent - a game already settled is left alone.
+          return settleGameTickets(tx, gameId, winningNumbers, machineNumbers, req.user!.userId);
+        });
+      } catch (err) {
+        // Say what actually broke. A bare 500 here cost an evening once.
+        logger.error({ err, gameId, calcDate }, "Settlement failed");
+        res.status(500).json({
+          error: `Could not settle this draw: ${err instanceof Error ? err.message : String(err)}`,
+          stage: "settlement",
+        });
+        return;
+      }
     }
 
     const [settings] = await db
