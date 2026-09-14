@@ -27,6 +27,8 @@ export function WriterPlaceBet() {
   const [picked, setPicked] = useState<number[]>([]);
   const numbers = picked.join(",");
   const [stakeAmount, setStakeAmount] = useState("");
+  // Banker bets carry one number outside the selection.
+  const [banker, setBanker] = useState<number | null>(null);
 
   const { data: games, isLoading: loadingGames } = useQuery({
     queryKey: ["/api/games"],
@@ -114,11 +116,41 @@ export function WriterPlaceBet() {
     return m > 0 ? `${m}m ${sec}s left` : `${sec}s left`;
   };
   const selectedBetType = betTypes?.find((b: any) => b.code === betTypeCode);
+  const needsBanker = selectedBetType?.mechanic?.startsWith("banker");
 
-  const calculatePotentialPayout = () => {
-    if (!selectedBetType || !stakeAmount) return "0.00";
-    return (parseFloat(stakeAmount) * parseFloat(selectedBetType.payoutMultiplier)).toFixed(2);
-  };
+  // Choosing a different bet type invalidates the picks made for the old one.
+  useEffect(() => {
+    setPicked([]);
+    setBanker(null);
+  }, [betTypeCode]);
+
+  const { data: quote } = useQuery<{
+    valid: boolean;
+    reason: string | null;
+    lines: number;
+    totalStake: number;
+    maxPayout: number;
+  }>({
+    queryKey: ["/api/tickets/quote", betTypeCode, numbers, banker, stakeAmount],
+    queryFn: async () => {
+      const res = await fetch("/api/tickets/quote", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
+        },
+        body: JSON.stringify({
+          betTypeCode,
+          numbers,
+          stakeAmount: parseFloat(stakeAmount) || 0,
+          bankerNumber: banker ?? undefined,
+        }),
+      });
+      if (!res.ok) throw new Error("Could not price this bet");
+      return res.json();
+    },
+    enabled: !!betTypeCode && !!stakeAmount && (picked.length > 0 || !!banker),
+  });
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -132,7 +164,9 @@ export function WriterPlaceBet() {
       gameId,
       betTypeCode,
       numbers,
-      stakeAmount: parseFloat(stakeAmount)
+      // Per line. The server multiplies by the line count.
+      stakeAmount: parseFloat(stakeAmount),
+      bankerNumber: banker ?? undefined,
     });
   };
 
@@ -194,15 +228,40 @@ export function WriterPlaceBet() {
               </div>
             )}
 
-            {selectedBetType && (
+            {selectedBetType && needsBanker && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Banker</label>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={90}
+                  placeholder="The number that must drop"
+                  value={banker ?? ""}
+                  onChange={(e) => setBanker(e.target.value ? Number(e.target.value) : null)}
+                  className="h-12 text-lg font-mono"
+                />
+              </div>
+            )}
+
+            {selectedBetType && Number(selectedBetType.maxNumbers) > 0 && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  Numbers (Required: {selectedBetType.numbersRequired})
+                  {needsBanker ? "Against" : "Numbers"}
+                  {" "}
+                  <span className="text-muted-foreground font-normal">
+                    (
+                    {Number(selectedBetType.minNumbers) === Number(selectedBetType.maxNumbers)
+                      ? `pick ${selectedBetType.minNumbers}`
+                      : `pick ${selectedBetType.minNumbers} to ${selectedBetType.maxNumbers}`}
+                    )
+                  </span>
                 </label>
                 <NumberKeypad
                   selected={picked}
                   onChange={setPicked}
-                  required={Number(selectedBetType.numbersRequired)}
+                  min={Number(selectedBetType.minNumbers)}
+                  max={Number(selectedBetType.maxNumbers)}
                   submitting={placeBetMutation.isPending}
                   disabled={!gameId || !betTypeCode || bettingClosed}
                   onSubmit={!stakeAmount ? undefined : () => handleSubmit()}
@@ -211,8 +270,19 @@ export function WriterPlaceBet() {
               </div>
             )}
 
+            {selectedBetType && Number(selectedBetType.maxNumbers) === 0 && (
+              <Button
+                type="button"
+                className="w-full h-12"
+                disabled={!banker || !stakeAmount || bettingClosed || placeBetMutation.isPending}
+                onClick={() => handleSubmit()}
+              >
+                {placeBetMutation.isPending ? "Placing…" : "Place Bet"}
+              </Button>
+            )}
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Stake Amount (GHS)</label>
+              <label className="text-sm font-medium">Stake per line (GHS)</label>
               <Input 
                 type="number" 
                 step="0.01" 
@@ -223,10 +293,27 @@ export function WriterPlaceBet() {
               />
             </div>
 
-            {selectedBetType && stakeAmount && (
-              <div className="bg-muted p-4 rounded-lg flex justify-between items-center mt-4 border border-green-200 bg-green-50">
-                <span className="font-medium text-green-800">Potential Payout</span>
-                <span className="text-lg font-bold text-green-600">GHS {calculatePotentialPayout()}</span>
+            {selectedBetType && stakeAmount && quote && (
+              <div className="mt-4 space-y-2 rounded-xl border p-4">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Lines</span>
+                  <span className="font-semibold tabular-nums">{quote.lines}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Customer pays</span>
+                  <span className="text-lg font-bold tabular-nums">
+                    GHS {quote.totalStake.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t pt-2 text-sm">
+                  <span className="text-muted-foreground">Most it can pay</span>
+                  <span className="font-bold tabular-nums text-emerald-600">
+                    GHS {quote.maxPayout.toFixed(2)}
+                  </span>
+                </div>
+                {!quote.valid && quote.reason && (
+                  <p className="pt-1 text-xs text-amber-700 dark:text-amber-400">{quote.reason}</p>
+                )}
               </div>
             )}
 

@@ -11,6 +11,15 @@ export const betTypesTable = pgTable("bet_types", {
   numbersRequired: integer("numbers_required").notNull(),
   payoutMultiplier: decimal("payout_multiplier", { precision: 10, scale: 2 }).notNull(),
   isPermutation: boolean("is_permutation").notNull().default(false),
+  /**
+   * Which set of rules prices and settles this bet. The multiplier above says
+   * how much a line pays; the mechanic says what a line IS - a pair, a triple,
+   * a banker-and-partner - and therefore how many of them a selection buys.
+   */
+  mechanic: varchar("mechanic", { length: 30 }).notNull().default("direct_two"),
+  /** Numbers the player picks, not counting a banker. */
+  minNumbers: integer("min_numbers").notNull().default(2),
+  maxNumbers: integer("max_numbers").notNull().default(2),
   isActive: boolean("is_active").notNull().default(true),
   updatedBy: uuid("updated_by").references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

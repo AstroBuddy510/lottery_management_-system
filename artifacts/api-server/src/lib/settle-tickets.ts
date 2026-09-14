@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { recordTicketEvent } from "./ticket-audit";
+import { settleSelection, parseNumberList, type Mechanic } from "./bet-engine";
 
 /**
  * Ticket settlement for a drawn game.
@@ -17,16 +18,40 @@ import { recordTicketEvent } from "./ticket-audit";
  * settles tickets in the same step as the daily run.
  */
 
-export function checkWin(
-  ticketNumbersStr: string,
+/**
+ * What this ticket is owed on this draw.
+ *
+ * A win is no longer yes-or-no: a perm with three of its numbers drawn has
+ * three winning pairs and is paid three times over, so settlement asks the
+ * bet engine for an amount rather than a verdict.
+ */
+export function payoutFor(
+  ticket: {
+    numbers: string;
+    bankerNumber?: number | null;
+    stakePerLine?: string | null;
+    stakeAmount: string;
+    lineCount?: number | null;
+  },
   winningNumbersStr: string,
-  betType: { isPermutation: boolean },
-): boolean {
-  const ticketNums = ticketNumbersStr.split(",").map((n) => parseInt(n.trim(), 10));
-  const winNums = winningNumbersStr.split(",").map((n) => parseInt(n.trim(), 10));
-  // Both Direct and Permutation currently require every played number to
-  // appear in the winning set; position is not significant.
-  return ticketNums.every((num) => winNums.includes(num));
+  betType: { mechanic?: string | null; payoutMultiplier: string },
+): number {
+  // Tickets sold before line pricing existed carry only a total stake, and
+  // were all single-line bets - so the total IS the per-line stake.
+  const stakePerLine = parseFloat(ticket.stakePerLine ?? "") || parseFloat(ticket.stakeAmount) || 0;
+
+  const outcome = settleSelection(
+    {
+      mechanic: (betType.mechanic as Mechanic) ?? "direct_two",
+      numbers: parseNumberList(ticket.numbers),
+      bankerNumber: ticket.bankerNumber ?? null,
+      stakePerLine,
+      multiplier: parseFloat(betType.payoutMultiplier) || 0,
+    },
+    parseNumberList(winningNumbersStr),
+  );
+
+  return outcome.payout;
 }
 
 export interface SettlementSummary {
@@ -98,13 +123,16 @@ export async function settleGameTickets(
     const betType = betTypeMap.get(ticket.betTypeId);
     if (!betType) continue;
 
-    if (checkWin(ticket.numbers, winningNumbers, betType as { isPermutation: boolean })) {
+    const payout = payoutFor(ticket, winningNumbers, betType as { mechanic?: string; payoutMultiplier: string });
+
+    if (payout > 0) {
       totalWinners++;
-      totalPayouts += parseFloat(ticket.potentialPayout);
+      totalPayouts += payout;
+      const winAmount = payout.toFixed(2);
 
       await tx
         .update(ticketsTable)
-        .set({ status: "won", isWinner: true, winAmount: ticket.potentialPayout })
+        .set({ status: "won", isWinner: true, winAmount })
         .where(eq(ticketsTable.id, ticket.id));
 
       await recordTicketEvent(tx, {
@@ -127,7 +155,8 @@ export async function settleGameTickets(
         gameResultId: gameResult.id,
         writerId: ticket.writerId,
         agentId,
-        payoutAmount: ticket.potentialPayout,
+        // What the draw actually owes, which for a perm is rarely the ceiling.
+        payoutAmount: winAmount,
       });
     } else {
       await tx.update(ticketsTable).set({ status: "lost" }).where(eq(ticketsTable.id, ticket.id));
