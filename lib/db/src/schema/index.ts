@@ -18,6 +18,7 @@ export * from "./salary-payments";
 export * from "./salary-wallet";
 export * from "./inventory";
 export * from "./writer-tokens";
+export * from "./token-supply";
 export * from "./bet-types";
 export * from "./tickets";
 export * from "./game-results";

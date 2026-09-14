@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { AdminPostpaidSettlement } from "@/pages/admin-postpaid-settlement";
 import { UnitRequests } from "@/pages/unit-requests";
+import { TokenSupply } from "@/pages/token-supply";
 
 type ExpenseItem = { expenseCategoryId: string; name: string; amount: string };
 type CreatedPayment = {
@@ -513,6 +514,9 @@ export function Payments() {
           <TabsTrigger value="unit-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Unit Requests
           </TabsTrigger>
+          <TabsTrigger value="token-supply" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+            E-Token Supply
+          </TabsTrigger>
           <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Transaction History
           </TabsTrigger>
@@ -758,6 +762,11 @@ export function Payments() {
         {/* ── Writer unit purchases ── */}
         <TabsContent value="unit-requests" className="space-y-4 outline-none">
           <UnitRequests />
+        </TabsContent>
+
+        {/* ── E-token supply chain ── */}
+        <TabsContent value="token-supply" className="space-y-4 outline-none">
+          <TokenSupply />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4 outline-none">
