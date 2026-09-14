@@ -4,8 +4,14 @@ import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Printer, Copy, MessageSquare, MessageCircle, Check } from "lucide-react";
+import { Loader2, Printer, Copy, MessageSquare, MessageCircle, Check, ImageDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  captureTicketPng,
+  downloadBlob,
+  shareImage,
+  TICKET_SLIP_ID,
+} from "@/lib/ticket-image";
 
 /**
  * 58mm thermal receipt. The body text is built server-side so the printed
@@ -125,6 +131,7 @@ function printSlip(data: TicketReceipt) {
 export function TicketReceiptView({ data }: { data: TicketReceipt }) {
   const { toast } = useToast();
   const [copied, setCopied] = useState<"sms" | "full" | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const smsHref = useMemo(() => `sms:?body=${encodeURIComponent(data.smsText)}`, [data.smsText]);
   /**
@@ -136,6 +143,45 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
     () => `https://wa.me/?text=${encodeURIComponent(data.smsText)}`,
     [data.smsText],
   );
+
+  /**
+   * Save the slip as a picture, then offer the share sheet.
+   *
+   * Download first, share second, and deliberately in that order: the file is
+   * on the device whatever the browser makes of sharing, so a phone that
+   * cannot share files still leaves the writer with something to send.
+   */
+  const saveImage = async () => {
+    setSaving(true);
+    try {
+      const blob = await captureTicketPng(TICKET_SLIP_ID);
+      const filename = `${data.ticket.ticketNumber}.png`;
+      downloadBlob(blob, filename);
+
+      const outcome = await shareImage(blob, filename, data.smsText);
+      if (outcome === "unsupported") {
+        toast({
+          title: "Image saved",
+          description: "Sharing straight from here isn't supported on this device — send it from your gallery.",
+        });
+      } else if (outcome === "failed") {
+        toast({
+          title: "Image saved",
+          description: "The share sheet wouldn't open. The picture is in your downloads.",
+        });
+      } else if (outcome === "cancelled") {
+        toast({ title: "Image saved", description: "Sharing cancelled. The picture is in your downloads." });
+      }
+    } catch (e) {
+      toast({
+        title: "Couldn't make the image",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const copy = async (text: string, which: "sms" | "full") => {
     try {
@@ -156,9 +202,10 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
       </div>
 
       <div className="border rounded-lg overflow-x-auto py-3 bg-muted/30">
-        <div id="ticket-receipt-slip">
-          <ReceiptSlip data={data} />
-        </div>
+        {/* The id sits on the slip itself, not this wrapper: capturing the
+            wrapper would take its full width and bake the page background in
+            as white margin either side of a 58mm slip. */}
+        <ReceiptSlip data={data} printRef={TICKET_SLIP_ID} />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -173,6 +220,19 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
           <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
             <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
           </a>
+        </Button>
+        <Button
+          variant="outline"
+          className="col-span-2"
+          disabled={saving}
+          onClick={saveImage}
+        >
+          {saving ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <ImageDown className="h-4 w-4 mr-2" />
+          )}
+          {saving ? "Preparing image…" : "Download Image"}
         </Button>
         <Button variant="outline" asChild className="col-span-2">
           <a href={smsHref}>
