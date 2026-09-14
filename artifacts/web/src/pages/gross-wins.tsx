@@ -168,7 +168,7 @@ function GrossTab() {
                     <span className="font-mono">{writer?.fullCode ?? entry.writerId.slice(0, 8) + "…"}</span>
                     {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.grossAmount).toFixed(2)}</TableCell>
+                  <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.grossAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                   <TableCell className="text-sm tabular-nums pl-8">
                     {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>
@@ -397,7 +397,7 @@ function WinsTab() {
                     <span className="font-mono">{writer?.fullCode ?? entry.writerId.slice(0, 8) + "…"}</span>
                     {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.winsAmount).toFixed(2)}</TableCell>
+                  <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                   <TableCell className="text-sm tabular-nums pl-8">
                     {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>
@@ -546,7 +546,7 @@ function SummaryTab() {
 
   const isLoading = loadingGross || loadingWins;
 
-  const fmt = (n: number) => `GH₵ ${n.toFixed(2)}`;
+  const fmt = (n: number) => `GH₵ ${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="space-y-4 pt-4">
@@ -555,7 +555,7 @@ function SummaryTab() {
           <div>
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filter Summary</span>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Rates in use: writer commission {(writerCommissionPct * 100).toFixed(2)}% · reserve {(reservePct * 100).toFixed(2)}%
+              Rates in use: writer commission {(writerCommissionPct * 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}% · reserve {(reservePct * 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
             </p>
           </div>
           <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setSummaryFrom(""); setSummaryTo(""); setSummaryAgentId(""); }}>Clear filters</Button>

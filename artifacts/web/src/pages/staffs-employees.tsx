@@ -385,7 +385,7 @@ export function StaffsEmployees() {
                                       <div className="border-t border-border/40 my-2"></div>
                                       <div className="flex justify-between font-extrabold text-sm pt-1">
                                         <span>Gross Payable:</span> 
-                                        <span className="font-mono text-indigo-600 dark:text-indigo-400">GH₵ {(parseFloat(p.baseSalary) + parseFloat(p.allowances) + parseFloat(p.bonuses)).toFixed(2)}</span>
+                                        <span className="font-mono text-indigo-600 dark:text-indigo-400">GH₵ {(parseFloat(p.baseSalary) + parseFloat(p.allowances) + parseFloat(p.bonuses)).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                       </div>
                                     </div>
                                     

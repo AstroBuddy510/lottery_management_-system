@@ -1120,7 +1120,7 @@ function AgentsTab() {
                       </Badge>
                     </TableCell>
                     <TableCell className={`text-xs font-mono font-bold tracking-tight ${debt > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/60"}`}>
-                      {debt > 0 ? `GHS ${debt.toFixed(2)}` : "—"}
+                      {debt > 0 ? `GHS ${debt.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
                     </TableCell>
                     <TableCell onClick={e => e.stopPropagation()}>
                       <div className="flex justify-end pr-2">
@@ -1540,10 +1540,10 @@ function AgencyStaffTab() {
                 return (
                   <TableRow key={s.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="font-extrabold text-sm text-foreground">{s.name}</TableCell>
-                    <TableCell className="text-right font-mono text-xs font-medium text-foreground">{parseFloat(s.salary).toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">{parseFloat(s.allowances).toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">{parseFloat(s.bonuses).toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono text-sm font-bold text-primary">{total.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-xs font-medium text-foreground">{parseFloat(s.salary).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">{parseFloat(s.allowances).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">{parseFloat(s.bonuses).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right font-mono text-sm font-bold text-primary">{total.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                     <TableCell>
                       <div className="flex gap-1.5 justify-end pr-2">
                         <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-border/40 hover:bg-muted/50 transition-colors" onClick={() => openEdit(s)}>Edit</Button>
@@ -1761,20 +1761,20 @@ function CompanyStaffTab() {
                   <div className="grid grid-cols-3 gap-2 bg-muted/20 border border-border/30 rounded-xl p-2.5 text-center">
                     <div>
                       <p className="text-[9px] uppercase text-muted-foreground/80 font-bold tracking-wider">Salary</p>
-                      <p className="text-xs font-mono font-bold text-foreground mt-0.5">{parseFloat(s.salary).toFixed(2)}</p>
+                      <p className="text-xs font-mono font-bold text-foreground mt-0.5">{parseFloat(s.salary).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
                     <div className="border-l border-r border-border/30">
                       <p className="text-[9px] uppercase text-muted-foreground/80 font-bold tracking-wider">Allowance</p>
-                      <p className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 mt-0.5">{parseFloat(s.allowances).toFixed(2)}</p>
+                      <p className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 mt-0.5">{parseFloat(s.allowances).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
                     <div>
                       <p className="text-[9px] uppercase text-muted-foreground/80 font-bold tracking-wider">Bonus</p>
-                      <p className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{parseFloat(s.bonuses).toFixed(2)}</p>
+                      <p className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{parseFloat(s.bonuses).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     </div>
                   </div>
 
                   <div className="border-t border-border/40 pt-3 flex items-center justify-between">
-                    <span className="text-xs font-bold text-primary tracking-tight">Total: <span className="font-mono text-sm font-black">{total.toFixed(2)}</span> GHS</span>
+                    <span className="text-xs font-bold text-primary tracking-tight">Total: <span className="font-mono text-sm font-black">{total.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> GHS</span>
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold text-muted-foreground hover:text-foreground transition-colors" onClick={() => openEdit(s)}>Edit</Button>
                       <Button size="sm" variant="ghost" className={`h-6 text-[10px] px-2 font-bold transition-colors ${isSuspended ? "text-emerald-600 hover:text-emerald-700" : "text-amber-600 hover:text-amber-700"}`} onClick={() => handleToggleStatus(s)}>{isSuspended ? "Activate" : "Suspend"}</Button>

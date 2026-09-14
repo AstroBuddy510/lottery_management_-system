@@ -151,7 +151,7 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
     <div className="space-y-4">
       <div className="flex items-center justify-center gap-2">
         <Badge variant="outline" className={statusTone(data.ticket.status, data.ticket.isWinner)}>
-          {data.ticket.isWinner ? `WON · GHS ${Number(data.ticket.winAmount).toFixed(2)}` : data.ticket.status.toUpperCase()}
+          {data.ticket.isWinner ? `WON · GHS ${Number(data.ticket.winAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : data.ticket.status.toUpperCase()}
         </Badge>
       </div>
 
