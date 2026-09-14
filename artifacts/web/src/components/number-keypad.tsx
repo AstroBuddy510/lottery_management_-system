@@ -14,6 +14,9 @@ export interface NumberKeypadProps {
   onChange: (next: number[]) => void;
   /** How many numbers this bet type needs; drives the counter and submit state. */
   required?: number;
+  /** Lower and upper bound when the count is a range rather than fixed. */
+  min?: number;
+  max?: number;
   onSubmit?: () => void;
   submitLabel?: string;
   submitting?: boolean;
@@ -26,12 +29,16 @@ export function NumberKeypad({
   selected,
   onChange,
   required,
+  min,
+  max,
   onSubmit,
   submitLabel = "Place Bet",
   submitting = false,
   disabled = false,
 }: NumberKeypadProps) {
-  const atLimit = required !== undefined && selected.length >= required;
+  const lower = min ?? required;
+  const upper = max ?? required;
+  const atLimit = upper !== undefined && selected.length >= upper;
 
   const toggle = (n: number) => {
     if (disabled) return;
@@ -58,7 +65,10 @@ export function NumberKeypad({
     onChange([]);
   };
 
-  const complete = required === undefined ? selected.length > 0 : selected.length === required;
+  const complete =
+    lower === undefined
+      ? selected.length > 0
+      : selected.length >= lower && (upper === undefined || selected.length <= upper);
 
   return (
     <div className="space-y-3">
@@ -69,7 +79,13 @@ export function NumberKeypad({
             Selections
           </span>
           <span className="text-[11px] font-bold tabular-nums text-muted-foreground">
-            {selected.length}{required !== undefined ? ` / ${required}` : ""} selected
+            {selected.length}
+            {lower !== undefined
+              ? lower === upper
+                ? ` / ${lower}`
+                : ` of ${lower}\u2013${upper ?? "\u221e"}`
+              : ""}{" "}
+            selected
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5 min-h-[2.25rem] items-center">

@@ -4,6 +4,12 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { recordTicketEvent } from "../lib/ticket-audit";
+import {
+  quote,
+  validateSelection,
+  parseNumberList,
+  type Mechanic,
+} from "../lib/bet-engine";
 
 const router = Router();
 
@@ -11,7 +17,13 @@ const placeBetSchema = z.object({
   gameId: z.string().uuid(),
   betTypeCode: z.string(),
   numbers: z.string(), // e.g. "23,45"
-  stakeAmount: z.number().min(1),
+  /**
+   * The stake PER LINE. A perm buys many lines from one selection, so the
+   * money taken is this times the line count - computed server-side, never
+   * accepted from the client.
+   */
+  stakeAmount: z.number().min(0.01),
+  bankerNumber: z.number().int().min(1).max(90).optional(),
 });
 
 // Format: TKT-YYYYMMDD-XXXX
@@ -27,7 +39,8 @@ router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => 
     res.status(400).json({ error: "Invalid data", details: parse.error.issues });
     return;
   }
-  const { gameId, betTypeCode, numbers, stakeAmount } = parse.data;
+  const { gameId, betTypeCode, numbers, bankerNumber } = parse.data;
+  const stakePerLine = parse.data.stakeAmount;
   const writerId = req.user!.userId;
 
   // 1. Validate writer and model
@@ -63,14 +76,26 @@ router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => 
     return;
   }
 
-  // Check number format
-  const numArr = numbers.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 1 && n <= 90);
-  if (numArr.length !== betType.numbersRequired) {
-    res.status(400).json({ error: `Requires exactly ${betType.numbersRequired} numbers between 1-90` });
+  // The engine owns what a selection costs and what it can pay. The client
+  // sends numbers and a per-line stake; everything else is derived here.
+  const numArr = parseNumberList(numbers);
+  const selection = {
+    mechanic: betType.mechanic as Mechanic,
+    numbers: numArr,
+    bankerNumber: bankerNumber ?? null,
+    stakePerLine,
+    multiplier: parseFloat(betType.payoutMultiplier),
+  };
+
+  const invalid = validateSelection(selection);
+  if (invalid) {
+    res.status(400).json({ error: invalid });
     return;
   }
 
-  const potentialPayout = stakeAmount * parseFloat(betType.payoutMultiplier);
+  const priced = quote(selection);
+  const stakeAmount = priced.totalStake;
+  const potentialPayout = priced.maxPayout;
   const ticketNumber = await generateTicketNumber();
 
   try {
@@ -128,6 +153,9 @@ router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => 
         gameId,
         betTypeId: betType.id,
         numbers: numArr.join(","),
+        bankerNumber: bankerNumber ?? null,
+        stakePerLine: stakePerLine.toString(),
+        lineCount: priced.lines,
         stakeAmount: stakeAmount.toString(),
         potentialPayout: potentialPayout.toString(),
         status: "active",
@@ -165,6 +193,58 @@ router.get("/tickets", requireAuth, async (req, res) => {
   if (writerId) query.where(eq(ticketsTable.writerId, writerId));
   const tickets = await query.orderBy(desc(ticketsTable.createdAt)).limit(100);
   res.json(tickets);
+});
+
+/**
+ * Price a selection without placing it.
+ *
+ * The writer portal shows lines, cost and best case as the numbers go in. It
+ * asks here rather than working it out in the browser, so the figure a writer
+ * quotes a customer is the same arithmetic that will take their money.
+ */
+router.post("/tickets/quote", requireAuth, requireRole("writer"), async (req, res) => {
+  const parse = z
+    .object({
+      betTypeCode: z.string(),
+      numbers: z.string().default(""),
+      stakeAmount: z.number().min(0),
+      bankerNumber: z.number().int().min(1).max(90).optional(),
+    })
+    .safeParse(req.body);
+
+  if (!parse.success) {
+    res.status(400).json({ error: "Invalid quote request" });
+    return;
+  }
+
+  const [betType] = await db
+    .select()
+    .from(betTypesTable)
+    .where(eq(betTypesTable.code, parse.data.betTypeCode))
+    .limit(1);
+
+  if (!betType || !betType.isActive) {
+    res.status(400).json({ error: "Invalid bet type" });
+    return;
+  }
+
+  const selection = {
+    mechanic: betType.mechanic as Mechanic,
+    numbers: parseNumberList(parse.data.numbers),
+    bankerNumber: parse.data.bankerNumber ?? null,
+    stakePerLine: parse.data.stakeAmount,
+    multiplier: parseFloat(betType.payoutMultiplier),
+  };
+
+  const invalid = validateSelection(selection);
+  if (invalid) {
+    // Not an error: the writer is mid-selection. Say what is missing and
+    // price what can be priced.
+    res.json({ valid: false, reason: invalid, ...quote(selection) });
+    return;
+  }
+
+  res.json({ valid: true, reason: null, ...quote(selection) });
 });
 
 export default router;

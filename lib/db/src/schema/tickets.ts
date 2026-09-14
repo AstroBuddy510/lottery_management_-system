@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, decimal, boolean, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, decimal, boolean, timestamp, pgEnum, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -20,7 +20,17 @@ export const ticketsTable = pgTable("tickets", {
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
   gameId: uuid("game_id").notNull().references(() => gamesTable.id),
   betTypeId: uuid("bet_type_id").notNull().references(() => betTypesTable.id),
-  numbers: varchar("numbers", { length: 30 }).notNull(),
+  numbers: varchar("numbers", { length: 200 }).notNull(),
+  /**
+   * What the player pays for ONE line. The stake they hand over is this times
+   * lineCount, which is what `stakeAmount` holds - so every sales figure in
+   * the system keeps meaning "money taken" without needing to know about
+   * lines at all.
+   */
+  stakePerLine: decimal("stake_per_line", { precision: 12, scale: 2 }).notNull().default("0"),
+  lineCount: integer("line_count").notNull().default(1),
+  /** Set only on banker bets. */
+  bankerNumber: integer("banker_number"),
   stakeAmount: decimal("stake_amount", { precision: 12, scale: 2 }).notNull(),
   potentialPayout: decimal("potential_payout", { precision: 12, scale: 2 }).notNull(),
   status: ticketStatusEnum("status").notNull().default("active"),

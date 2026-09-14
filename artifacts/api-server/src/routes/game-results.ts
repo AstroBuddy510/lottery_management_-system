@@ -5,6 +5,7 @@ import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { SmsAdapter } from "../lib/sms-gateway";
 import { recordTicketEvent } from "../lib/ticket-audit";
+import { payoutFor } from "../lib/settle-tickets";
 
 const router = Router();
 const smsAdapter = new SmsAdapter();
@@ -14,21 +15,6 @@ const gameResultSchema = z.object({
   winningNumbers: z.string(), // "23,45,67,89,12"
   machineNumbers: z.string(), // "11,22,33,44,55"
 });
-
-function checkWin(ticketNumbersStr: string, winningNumbersStr: string, betType: any): boolean {
-  const ticketNums = ticketNumbersStr.split(",").map(n => parseInt(n, 10));
-  const winNums = winningNumbersStr.split(",").map(n => parseInt(n, 10));
-  
-  if (betType.isPermutation) {
-    // All numbers in ticket must exist in winning numbers (any order)
-    return ticketNums.every(num => winNums.includes(num));
-  } else {
-    // Must match exactly for Direct (we assume position doesn't strictly matter for Direct 1/2/3 
-    // unless 'exact order' is a rule. For standard NLA, Direct means the numbers must appear in the winning set.
-    // If strict order is required, you'd match the array slices. Let's assume standard set inclusion here.)
-    return ticketNums.every(num => winNums.includes(num));
-  }
-}
 
 router.post("/game-results", requireAuth, requireRole("director", "administrator"), async (req, res) => {
   const parse = gameResultSchema.safeParse(req.body);
@@ -65,14 +51,17 @@ router.post("/game-results", requireAuth, requireRole("director", "administrator
       const betType = betTypeMap.get(ticket.betTypeId);
       if (!betType) continue;
 
-      const isWinner = checkWin(ticket.numbers, winningNumbers, betType);
-      
-      if (isWinner) {
+      // Same engine as the calculation run. These two paths must never
+      // disagree about what a ticket is owed.
+      const payout = payoutFor(ticket, winningNumbers, betType);
+      const winAmount = payout.toFixed(2);
+
+      if (payout > 0) {
         totalWinners++;
-        totalPayouts += parseFloat(ticket.potentialPayout);
-        
+        totalPayouts += payout;
+
         await tx.update(ticketsTable)
-          .set({ status: "won", isWinner: true, winAmount: ticket.potentialPayout })
+          .set({ status: "won", isWinner: true, winAmount })
           .where(eq(ticketsTable.id, ticket.id));
           
         const [ticketWriter] = await tx
@@ -89,7 +78,7 @@ router.post("/game-results", requireAuth, requireRole("director", "administrator
           gameResultId: gameResult.id,
           writerId: ticket.writerId,
           agentId: ticketWriter.agentId,
-          payoutAmount: ticket.potentialPayout,
+          payoutAmount: winAmount,
         });
       } else {
         await tx.update(ticketsTable)
