@@ -426,7 +426,7 @@ export function Settings() {
       </div>
 
       <Tabs defaultValue="rates">
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="rates">Commission Rates</TabsTrigger>
           <TabsTrigger value="folders">Folder Settings</TabsTrigger>
           <TabsTrigger value="hours">Cashier Hours</TabsTrigger>

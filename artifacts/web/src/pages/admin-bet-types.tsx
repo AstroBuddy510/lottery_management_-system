@@ -72,6 +72,9 @@ export function AdminBetTypes() {
   const [form, setForm] = useState({ ...EMPTY });
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState("25");
+  // Deactivated setups are history, not choices. Kept one click away rather
+  // than interleaved, where near-identical names read as duplicates.
+  const [showInactive, setShowInactive] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
 
   const { data: betTypes, isLoading } = useQuery<BetType[]>({
@@ -211,6 +214,7 @@ export function AdminBetTypes() {
 
   const rows = useMemo(() => {
     let list = betTypes ?? [];
+    if (!showInactive) list = list.filter((b) => b.isActive);
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -236,7 +240,9 @@ export function AdminBetTypes() {
     });
     return pageSize === "all" ? sorted : sorted.slice(0, Number(pageSize));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [betTypes, search, sort, pageSize, mechanics]);
+  }, [betTypes, search, sort, pageSize, mechanics, showInactive]);
+
+  const inactiveCount = (betTypes ?? []).filter((b) => !b.isActive).length;
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
@@ -269,7 +275,21 @@ export function AdminBetTypes() {
         </Button>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={(e) => setShowInactive(e.target.checked)}
+            className="h-3.5 w-3.5 accent-primary"
+          />
+          Show retired setups
+          {inactiveCount > 0 && (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold tabular-nums">
+              {inactiveCount}
+            </span>
+          )}
+        </label>
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -305,7 +325,11 @@ export function AdminBetTypes() {
                 ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-12 text-center text-xs text-muted-foreground">
-                      {search ? `Nothing matching "${search}".` : "No bet setups yet. Writers cannot sell anything until one is active."}
+                      {search
+                        ? `Nothing matching "${search}".`
+                        : showInactive
+                          ? "No bet setups yet. Writers cannot sell anything until one is active."
+                          : "No active bet setups. Writers cannot sell anything until one is active."}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -321,8 +345,17 @@ export function AdminBetTypes() {
                           <div className="text-sm font-medium">{b.name}</div>
                           <div className="text-[10px] text-muted-foreground">
                             <span className="font-mono uppercase">{b.code}</span>
-                            {s ? ` · ${s.label}` : ""}
-                            {s?.needsBanker ? " · banker" : ""}
+                            {/* A retired setup's mechanic is whatever it was
+                                left on, which is not what it was sold as - so
+                                do not state it as if it were current. */}
+                            {b.isActive ? (
+                              <>
+                                {s ? ` · ${s.label}` : ""}
+                                {s?.needsBanker ? " · banker" : ""}
+                              </>
+                            ) : (
+                              <> · retired{b.ticketCount > 0 ? ` · ${b.ticketCount} ticket${b.ticketCount === 1 ? "" : "s"}` : ""}</>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-sm font-semibold tabular-nums">
