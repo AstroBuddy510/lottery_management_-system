@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, betTypesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, betTypesTable, ticketsTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { MECHANICS, MECHANIC_SPECS, type Mechanic } from "../lib/bet-engine";
@@ -51,9 +51,16 @@ router.get("/bet-types/mechanics", requireAuth, async (_req, res) => {
   );
 });
 
-router.get("/bet-types", requireAuth, async (req, res) => {
+router.get("/bet-types", requireAuth, async (_req, res) => {
   const betTypes = await db.select().from(betTypesTable).orderBy(betTypesTable.createdAt);
-  res.json(betTypes);
+
+  const counts = await db
+    .select({ betTypeId: ticketsTable.betTypeId, count: sql<number>`count(*)::int` })
+    .from(ticketsTable)
+    .groupBy(ticketsTable.betTypeId);
+  const byId = new Map(counts.map((c) => [c.betTypeId, c.count]));
+
+  res.json(betTypes.map((b) => ({ ...b, ticketCount: byId.get(b.id) ?? 0 })));
 });
 
 router.post("/bet-types", requireAuth, requireRole("director", "administrator"), async (req, res) => {
@@ -122,10 +129,41 @@ router.put("/bet-types/:id", requireAuth, requireRole("director", "administrator
   res.json(updated);
 });
 
+/**
+ * Remove a bet type outright.
+ *
+ * Only possible while nothing has been sold on it. A ticket resolves its
+ * name, odds and settlement rules through this row, so deleting one that has
+ * tickets behind it would leave those tickets unreadable and unsettleable -
+ * and the rows the accounts are built from would start pointing at nothing.
+ * Where that is the case the caller is told to deactivate instead, which
+ * takes it off the writer portal and changes no history.
+ */
 router.delete("/bet-types/:id", requireAuth, requireRole("director", "administrator"), async (req, res) => {
   const id = req.params["id"] as string;
-  await db.update(betTypesTable).set({ isActive: false }).where(eq(betTypesTable.id, id));
-  res.status(204).send();
+
+  const [existing] = await db.select().from(betTypesTable).where(eq(betTypesTable.id, id)).limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Bet type not found" });
+    return;
+  }
+
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(ticketsTable)
+    .where(eq(ticketsTable.betTypeId, id));
+
+  if (count > 0) {
+    res.status(409).json({
+      error: `${existing.code} has ${count} ticket${count === 1 ? "" : "s"} sold on it, so it cannot be deleted. Deactivate it instead — writers stop seeing it and the tickets stay readable.`,
+      ticketCount: count,
+      canDeactivate: existing.isActive,
+    });
+    return;
+  }
+
+  await db.delete(betTypesTable).where(eq(betTypesTable.id, id));
+  res.json({ deleted: true, code: existing.code });
 });
 
 export default router;

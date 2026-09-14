@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Pencil } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
 import { cn, fmtGHS } from "@/lib/utils";
 
 /**
@@ -44,6 +44,8 @@ interface BetType {
   maxNumbers: number;
   payoutMultiplier: string;
   isActive: boolean;
+  /** How many tickets have been sold on it. Non-zero means it cannot be deleted. */
+  ticketCount: number;
 }
 
 function authHeaders(): Record<string, string> {
@@ -133,6 +135,41 @@ export function AdminBetTypes() {
     onError: (e: Error) => toast({ title: "Not saved", description: e.message, variant: "destructive" }),
   });
 
+  const remove = useMutation({
+    mutationFn: async (b: BetType) => {
+      const res = await fetch(`/api/bet-types/${b.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not delete");
+      return data;
+    },
+    onSuccess: (d) => {
+      toast({ title: `${d.code} deleted` });
+      setOpen(false);
+      setEditing(null);
+      qc.invalidateQueries({ queryKey: ["/api/bet-types"] });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Not deleted", description: e.message, variant: "destructive" }),
+  });
+
+  const confirmDelete = (b: BetType) => {
+    if (b.ticketCount > 0) {
+      toast({
+        title: `${b.code} has tickets sold on it`,
+        description: "Deactivate it instead — writers stop seeing it and the tickets stay readable.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!confirm(`Delete ${b.code} — ${b.name}?\n\nNothing has been sold on it, so this removes it completely. You can add it again afterwards.`)) {
+      return;
+    }
+    remove.mutate(b);
+  };
+
   const openNew = () => {
     setEditing(null);
     setForm({ ...EMPTY });
@@ -200,7 +237,7 @@ export function AdminBetTypes() {
                   <TableHead>Numbers</TableHead>
                   <TableHead className="text-right">Pays per line</TableHead>
                   <TableHead>Active</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-20 text-right">Edit · Delete</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -248,8 +285,24 @@ export function AdminBetTypes() {
                             onCheckedChange={(v) => toggle.mutate({ id: b.id, isActive: v })}
                           />
                         </TableCell>
-                        <TableCell>
-                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive disabled:opacity-30"
+                              disabled={b.ticketCount > 0 || remove.isPending}
+                              title={
+                                b.ticketCount > 0
+                                  ? `${b.ticketCount} ticket${b.ticketCount === 1 ? "" : "s"} sold on this — deactivate it instead`
+                                  : "Delete"
+                              }
+                              onClick={() => confirmDelete(b)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -364,7 +417,26 @@ export function AdminBetTypes() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 sm:justify-between">
+            {editing ? (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                disabled={editing.ticketCount > 0 || remove.isPending}
+                title={
+                  editing.ticketCount > 0
+                    ? `${editing.ticketCount} ticket${editing.ticketCount === 1 ? "" : "s"} sold on this — deactivate it instead`
+                    : "Delete this bet type"
+                }
+                onClick={() => confirmDelete(editing)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
@@ -375,6 +447,7 @@ export function AdminBetTypes() {
               {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {editing ? "Save changes" : "Add bet type"}
             </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
