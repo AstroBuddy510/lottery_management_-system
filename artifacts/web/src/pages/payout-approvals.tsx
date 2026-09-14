@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ChevronRight, ChevronDown, Loader2, Check, Trophy } from "lucide-react";
+import { ChevronRight, ChevronDown, Loader2, Check, Trophy, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 import { TicketReceiptView, useTicketReceipt } from "@/components/ticket-receipt";
@@ -65,6 +65,8 @@ interface TicketRow {
   gameName: string;
   eventNumber: string;
   winningNumbers: string | null;
+  /** What the fraud rules object to about this exact ticket. */
+  anomalies?: Array<{ code: string; severity: "medium" | "high" | "critical"; detail: string }>;
 }
 
 function authHeaders(): Record<string, string> {
@@ -133,8 +135,27 @@ function WriterTickets({ writerId, gameId }: { writerId: string; gameId: string 
         </TableHeader>
         <TableBody>
           {tickets.map((t) => (
-            <TableRow key={t.payoutId} className="cursor-pointer" onClick={() => setOpenTicket(t.ticketId)}>
-              <TableCell className="font-mono text-xs">{t.ticketNumber}</TableCell>
+            <TableRow
+              key={t.payoutId}
+              className={`cursor-pointer${t.anomalies?.length ? " bg-red-500/[0.05]" : ""}`}
+              onClick={() => setOpenTicket(t.ticketId)}
+            >
+              <TableCell className="font-mono text-xs">
+                {t.ticketNumber}
+                {!!t.anomalies?.length && (
+                  <div className="mt-1 space-y-0.5">
+                    {t.anomalies.map((a, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-1 text-[10px] font-semibold text-red-600 dark:text-red-400"
+                      >
+                        <ShieldAlert className="mt-px h-2.5 w-2.5 shrink-0" />
+                        <span className="font-sans">{a.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </TableCell>
               <TableCell className="text-xs">{t.betTypeName}</TableCell>
               <TableCell className="font-mono text-xs">{t.numbers}</TableCell>
               <TableCell className="text-xs text-right tabular-nums">{fmtGHS(t.stakeAmount)}</TableCell>
@@ -147,7 +168,20 @@ function WriterTickets({ writerId, gameId }: { writerId: string; gameId: string 
                     variant="outline"
                     className="h-7 text-xs"
                     disabled={approve.isPending}
-                    onClick={(e) => { e.stopPropagation(); approve.mutate(t.payoutId); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (t.anomalies?.length) {
+                        const reasons = t.anomalies.map((a) => `\u2022 ${a.detail}`).join("\n");
+                        if (
+                          !confirm(
+                            `${t.ticketNumber} is flagged:\n\n${reasons}\n\nApprove ${fmtGHS(t.payoutAmount)} anyway?`,
+                          )
+                        ) {
+                          return;
+                        }
+                      }
+                      approve.mutate(t.payoutId);
+                    }}
                   >
                     <Check className="h-3 w-3 mr-1" /> Approve
                   </Button>

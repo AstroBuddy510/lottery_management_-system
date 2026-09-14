@@ -9,10 +9,16 @@ import {
   gamesTable,
   betTypesTable,
   gameResultsTable,
+  ticketEventsTable,
 } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { recordTicketEvent } from "../lib/ticket-audit";
+import {
+  recordTicketEvent,
+  detectTicketAnomalies,
+  type AuditTicket,
+  type AuditEvent,
+} from "../lib/ticket-audit";
 
 const router = Router();
 
@@ -130,6 +136,12 @@ router.get(
         stakeAmount: ticketsTable.stakeAmount,
         winAmount: ticketsTable.winAmount,
         soldAt: ticketsTable.createdAt,
+        writerId: ticketsTable.writerId,
+        gameId: ticketsTable.gameId,
+        betTypeId: ticketsTable.betTypeId,
+        gameCloseAt: gamesTable.closeAt,
+        drawProcessedAt: gameResultsTable.processedAt,
+        ticketStatus: ticketsTable.status,
         betTypeName: betTypesTable.name,
         gameName: gamesTable.name,
         eventNumber: gamesTable.eventNumber,
@@ -143,9 +155,68 @@ router.get(
       .where(and(...(conditions as never[])))
       .orderBy(desc(payoutRequestsTable.createdAt));
 
-    res.json(rows);
+    // The approver is about to authorise money against these exact tickets,
+    // so anything the fraud rules object to belongs HERE, not only on a
+    // screen they might never open. A ticket sold after betting closed is
+    // the case this was built for.
+    const anomalies = await anomaliesForTickets(rows);
+    const byTicket = new Map<string, typeof anomalies>();
+    for (const a of anomalies) {
+      const list = byTicket.get(a.ticketId);
+      if (list) list.push(a);
+      else byTicket.set(a.ticketId, [a]);
+    }
+
+    res.json(rows.map((r) => ({ ...r, anomalies: byTicket.get(r.ticketId) ?? [] })));
   },
 );
+
+interface TicketLike {
+  ticketId: string;
+  ticketNumber: string;
+  writerId: string;
+  gameId: string;
+  betTypeId: string;
+  numbers: string;
+  stakeAmount: string;
+  ticketStatus: string;
+  soldAt: Date | string;
+  gameCloseAt: Date | string | null;
+  drawProcessedAt: Date | string | null;
+}
+
+/** Run the same rules the fraud screen runs, over just these tickets. */
+async function anomaliesForTickets(rows: TicketLike[]) {
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.ticketId);
+
+  const events = await db
+    .select({
+      ticketId: ticketEventsTable.ticketId,
+      eventType: ticketEventsTable.eventType,
+      occurredAt: ticketEventsTable.occurredAt,
+      actorRole: ticketEventsTable.actorRole,
+      source: ticketEventsTable.source,
+    })
+    .from(ticketEventsTable)
+    .where(inArray(ticketEventsTable.ticketId, ids));
+
+  const tickets: AuditTicket[] = rows.map((r) => ({
+    id: r.ticketId,
+    ticketNumber: r.ticketNumber,
+    writerId: r.writerId,
+    gameId: r.gameId,
+    betTypeId: r.betTypeId,
+    numbers: r.numbers,
+    stakeAmount: r.stakeAmount,
+    status: r.ticketStatus,
+    createdAt: r.soldAt,
+    gameCloseAt: r.gameCloseAt,
+    drawProcessedAt: r.drawProcessedAt,
+  }));
+
+  return detectTicketAnomalies(tickets, events as AuditEvent[]);
+}
 
 /** Draws that have settled tickets, for the game selector. */
 router.get("/payouts/games", requireAuth, requireRole(...REVIEW_ROLES), async (_req, res) => {
