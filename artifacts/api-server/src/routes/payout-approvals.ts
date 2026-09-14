@@ -12,6 +12,7 @@ import {
 } from "@workspace/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { recordTicketEvent } from "../lib/ticket-audit";
 
 const router = Router();
 
@@ -202,6 +203,16 @@ router.patch(
       res.status(409).json({ error: "Payout was reviewed by someone else" });
       return;
     }
+
+    await recordTicketEvent(db, {
+      ticketId: updated.ticketId,
+      eventType: "claim_approved",
+      actorUserId: req.user!.userId,
+      actorRole: req.user!.role,
+      source: "admin",
+      note: `Payout ${updated.payoutAmount} approved`,
+    });
+
     res.json(updated);
   },
 );
@@ -244,6 +255,17 @@ router.patch(
           : and(eq(payoutRequestsTable.writerId, writerId), eq(payoutRequestsTable.status, "pending")),
       )
       .returning();
+
+    for (const row of updated) {
+      await recordTicketEvent(db, {
+        ticketId: row.ticketId,
+        eventType: "claim_approved",
+        actorUserId: req.user!.userId,
+        actorRole: req.user!.role,
+        source: "admin",
+        note: `Approved in bulk for writer`,
+      });
+    }
 
     res.json({ approved: updated.length });
   },

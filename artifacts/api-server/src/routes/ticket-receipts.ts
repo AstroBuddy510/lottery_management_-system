@@ -9,6 +9,7 @@ import {
 } from "@workspace/db";
 import { eq, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { recordTicketEventSafe } from "../lib/ticket-audit";
 import {
   buildReceiptText,
   buildSmsText,
@@ -158,6 +159,18 @@ router.get(
       res.status(404).json({ error: "No ticket found for that reference" });
       return;
     }
+
+    // A lookup IS the validation: it is what a cashier does before paying.
+    // Logged best-effort - a ticket check must not fail because its audit row
+    // did, and the order of the two is what the anomaly rules read.
+    await recordTicketEventSafe(db, {
+      ticketId: row.ticket.id,
+      eventType: "validated",
+      toStatus: row.ticket.status,
+      actorUserId: req.user!.userId,
+      actorRole: req.user!.role,
+      source: "admin",
+    });
 
     res.json(receiptResponse(row));
   },
