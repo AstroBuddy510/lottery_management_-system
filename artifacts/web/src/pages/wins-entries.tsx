@@ -795,7 +795,7 @@ function AdminWinsView() {
                     <span className="font-mono">{writer?.fullCode ?? entry.writerId.slice(0, 8) + "…"}</span>
                     {writer && <span className="text-muted-foreground ml-1.5 text-xs">{writer.fullName}</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.winsAmount).toFixed(2)}</TableCell>
+                  <TableCell className="text-sm text-right font-mono">GH₵ {Number(entry.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                   <TableCell className="text-sm tabular-nums pl-8">
                     {ts ? ts.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—"}
                   </TableCell>

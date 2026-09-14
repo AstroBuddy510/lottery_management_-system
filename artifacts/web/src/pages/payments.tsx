@@ -290,7 +290,7 @@ export function Payments() {
   };
 
   const handleApprove = async (id: string, amount: string) => {
-    if (!confirm(`Confirm collection of cash for GH₵ ${Number(amount).toFixed(2)}?`)) return;
+    if (!confirm(`Confirm collection of cash for GH₵ ${Number(amount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}?`)) return;
     try {
       const result = await approveMutation.mutateAsync({ id });
       toast({ title: `Payment request approved — ${result.receiptNumber ?? ""}` });
@@ -387,9 +387,9 @@ export function Payments() {
       <div class="row"><span class="label">Agent</span><span>${agentName}</span></div>
       <div class="row"><span class="label">Type</span><span>${receiptPayment.transactionType === "pay_in" ? "Pay-In" : "Pay-Out"}</span></div>
       <div class="row"><span class="label">Date</span><span>${receiptPayment.paymentDate}</span></div>
-      ${receiptPayment.grossAmount ? `<div class="row"><span class="label">Gross</span><span>GH₵ ${Number(receiptPayment.grossAmount).toFixed(2)}</span></div>` : ""}
-      ${(receiptPayment.expenseItems ?? []).map(e => `<div class="row"><span class="label">— ${e.name}</span><span>−GH₵ ${Number(e.amount).toFixed(2)}</span></div>`).join("")}
-      <div class="row" style="font-weight:bold"><span>NET AMOUNT</span><span>GH₵ ${Number(receiptPayment.amount).toFixed(2)}</span></div>
+      ${receiptPayment.grossAmount ? `<div class="row"><span class="label">Gross</span><span>GH₵ ${Number(receiptPayment.grossAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>` : ""}
+      ${(receiptPayment.expenseItems ?? []).map(e => `<div class="row"><span class="label">— ${e.name}</span><span>−GH₵ ${Number(e.amount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>`).join("")}
+      <div class="row" style="font-weight:bold"><span>NET AMOUNT</span><span>GH₵ ${Number(receiptPayment.amount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
       <div class="center" style="margin-top:16px; font-size:11px; color:#999">Printed ${new Date().toLocaleString()}</div>
       </body></html>
     `);
@@ -1047,19 +1047,19 @@ export function Payments() {
               <div className="rounded-2xl border border-border/40 bg-muted/20 p-4 space-y-2 text-xs font-semibold text-foreground">
                 <div className="flex justify-between text-muted-foreground">
                   <span>Gross amount</span>
-                  <span className="font-mono">GH₵ {gross.toFixed(2)}</span>
+                  <span className="font-mono">GH₵ {gross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
                 {expenseItems.map((item, idx) => (
                   <div key={idx} className="flex justify-between text-muted-foreground pl-3">
                     <span>— {item.name || "Expense"}</span>
-                    <span className="font-mono text-rose-600 dark:text-rose-400">−GH₵ {(Number(item.amount) || 0).toFixed(2)}</span>
+                    <span className="font-mono text-rose-600 dark:text-rose-400">−GH₵ {(Number(item.amount) || 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 ))}
                 {expenseItems.length > 0 && <div className="border-t border-border/40" />}
                 <div className="flex justify-between text-sm font-bold pt-1">
                   <span>Net {form.transactionType === "pay_in" ? "collected" : "paid out"}</span>
                   <span className={`font-mono text-base font-extrabold ${netAmount < 0 ? "text-rose-600 dark:text-rose-400" : form.transactionType === "pay_in" ? "text-emerald-600 dark:text-emerald-400" : "text-orange-600 dark:text-orange-400"}`}>
-                    GH₵ {netAmount.toFixed(2)}
+                    GH₵ {netAmount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>

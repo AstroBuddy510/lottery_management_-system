@@ -387,7 +387,7 @@ export function AgentDashboard() {
                       </span>
                       <span className="text-lg font-black font-mono text-white tracking-tight">
                         <span className="font-normal opacity-70 text-sm mr-1">GH₵</span>
-                        {absVal.toFixed(2)}
+                        {absVal.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <Link href="/online-payment">
@@ -442,7 +442,7 @@ export function AgentDashboard() {
               </div>
               <div className="text-base font-black text-gray-900 font-mono">
                 <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                {todayGross.toFixed(2)}
+                {todayGross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
 
@@ -459,7 +459,7 @@ export function AgentDashboard() {
               </div>
               <div className="text-base font-black text-gray-900 font-mono">
                 <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                {todayWins.toFixed(2)}
+                {todayWins.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
 
@@ -591,7 +591,7 @@ export function AgentDashboard() {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-sm font-black font-mono tabular-nums text-gray-800">
                         <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                        {Number(item.amount).toFixed(2)}
+                        {Number(item.amount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg" style={{ background: s.badge.bg, color: s.badge.color }}>
                         {s.label}

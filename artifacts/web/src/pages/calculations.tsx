@@ -25,7 +25,7 @@ function fmtGHS(v: number, bold = true) {
   return (
     <span className="font-mono whitespace-nowrap">
       <span className="text-muted-foreground/70 font-normal mr-0.5">GH₵</span>
-      <span className={bold ? "font-semibold" : "font-normal"}>{v.toFixed(2)}</span>
+      <span className={bold ? "font-semibold" : "font-normal"}>{v.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
     </span>
   );
 }

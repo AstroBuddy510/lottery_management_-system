@@ -1195,28 +1195,28 @@ export function Games() {
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                 <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Gross Sales</div>
-                  <div className="text-sm sm:text-base font-bold font-mono">GH₵ {Number(auditReport.totals.grossSales).toFixed(2)}</div>
+                  <div className="text-sm sm:text-base font-bold font-mono">GH₵ {Number(auditReport.totals.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Commission</div>
-                  <div className="text-sm sm:text-base font-bold font-mono text-amber-600 dark:text-amber-400">GH₵ {Number(auditReport.totals.commissionAmount).toFixed(2)}</div>
+                  <div className="text-sm sm:text-base font-bold font-mono text-amber-600 dark:text-amber-400">GH₵ {Number(auditReport.totals.commissionAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Net Gross</div>
-                  <div className="text-sm sm:text-base font-bold font-mono text-teal-600 dark:text-teal-400">GH₵ {Number(auditReport.totals.netGross).toFixed(2)}</div>
+                  <div className="text-sm sm:text-base font-bold font-mono text-teal-600 dark:text-teal-400">GH₵ {Number(auditReport.totals.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Wins Paid</div>
-                  <div className="text-sm sm:text-base font-bold font-mono text-rose-600 dark:text-rose-400">GH₵ {Number(auditReport.totals.winsAmount).toFixed(2)}</div>
+                  <div className="text-sm sm:text-base font-bold font-mono text-rose-600 dark:text-rose-400">GH₵ {Number(auditReport.totals.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Reserve Fund</div>
-                  <div className="text-sm sm:text-base font-bold font-mono text-indigo-600 dark:text-indigo-400">GH₵ {Number(auditReport.totals.reserveAmount).toFixed(2)}</div>
+                  <div className="text-sm sm:text-base font-bold font-mono text-indigo-600 dark:text-indigo-400">GH₵ {Number(auditReport.totals.reserveAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
                 <div className={`rounded-xl border p-3 space-y-1 ${Number(auditReport.totals.writerBalance) < 0 ? 'bg-rose-50/20 border-rose-100 dark:bg-rose-950/10' : 'bg-green-50/20 border-green-100 dark:bg-green-950/10'}`}>
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Net Balance</div>
                   <div className={`text-sm sm:text-base font-bold font-mono ${Number(auditReport.totals.writerBalance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
-                    GH₵ {Number(auditReport.totals.writerBalance).toFixed(2)}
+                    GH₵ {Number(auditReport.totals.writerBalance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
@@ -1250,13 +1250,13 @@ export function Games() {
                                 {a.agent.fullCode}
                                 <span className="text-muted-foreground block text-[10px] font-normal">{a.agent.agencyName || a.agent.ownerName}</span>
                               </TableCell>
-                              <TableCell className="font-mono text-xs">GH₵ {Number(a.totals.grossSales).toFixed(2)}</TableCell>
-                              <TableCell className="font-mono text-xs text-amber-600 dark:text-amber-400">GH₵ {Number(a.totals.commissionAmount).toFixed(2)}</TableCell>
-                              <TableCell className="font-mono text-xs text-teal-600 dark:text-teal-400">GH₵ {Number(a.totals.netGross).toFixed(2)}</TableCell>
-                              <TableCell className="font-mono text-xs text-rose-600 dark:text-rose-400">GH₵ {Number(a.totals.winsAmount).toFixed(2)}</TableCell>
-                              <TableCell className="font-mono text-xs text-indigo-600 dark:text-indigo-400">GH₵ {Number(a.totals.reserveAmount).toFixed(2)}</TableCell>
+                              <TableCell className="font-mono text-xs">GH₵ {Number(a.totals.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="font-mono text-xs text-amber-600 dark:text-amber-400">GH₵ {Number(a.totals.commissionAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="font-mono text-xs text-teal-600 dark:text-teal-400">GH₵ {Number(a.totals.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="font-mono text-xs text-rose-600 dark:text-rose-400">GH₵ {Number(a.totals.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="font-mono text-xs text-indigo-600 dark:text-indigo-400">GH₵ {Number(a.totals.reserveAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                               <TableCell className={`font-mono text-xs text-right font-bold ${Number(a.totals.writerBalance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
-                                GH₵ {Number(a.totals.writerBalance).toFixed(2)}
+                                GH₵ {Number(a.totals.writerBalance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </TableCell>
                             </TableRow>
                           ))
@@ -1291,12 +1291,12 @@ export function Games() {
                                 {w.writer.fullCode}
                                 <span className="text-muted-foreground block text-[10px] font-normal">{w.writer.fullName}</span>
                               </TableCell>
-                              <TableCell className="font-mono text-xs">GH₵ {Number(w.totals.grossSales).toFixed(2)}</TableCell>
-                              <TableCell className="font-mono text-xs text-amber-600 dark:text-amber-400">GH₵ {Number(w.totals.commissionAmount).toFixed(2)}</TableCell>
-                              <TableCell className="font-mono text-xs text-teal-600 dark:text-teal-400">GH₵ {Number(w.totals.netGross).toFixed(2)}</TableCell>
-                              <TableCell className="font-mono text-xs text-rose-600 dark:text-rose-400">GH₵ {Number(w.totals.winsAmount).toFixed(2)}</TableCell>
+                              <TableCell className="font-mono text-xs">GH₵ {Number(w.totals.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="font-mono text-xs text-amber-600 dark:text-amber-400">GH₵ {Number(w.totals.commissionAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="font-mono text-xs text-teal-600 dark:text-teal-400">GH₵ {Number(w.totals.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="font-mono text-xs text-rose-600 dark:text-rose-400">GH₵ {Number(w.totals.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                               <TableCell className={`font-mono text-xs text-right font-bold ${Number(w.totals.writerBalance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
-                                GH₵ {Number(w.totals.writerBalance).toFixed(2)}
+                                GH₵ {Number(w.totals.writerBalance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </TableCell>
                             </TableRow>
                           ))

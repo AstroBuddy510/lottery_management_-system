@@ -302,13 +302,13 @@ export function WriterPlaceBet() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Customer pays</span>
                   <span className="text-lg font-bold tabular-nums">
-                    GHS {quote.totalStake.toFixed(2)}
+                    GHS {quote.totalStake.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex items-center justify-between border-t pt-2 text-sm">
                   <span className="text-muted-foreground">Most it can pay</span>
                   <span className="font-bold tabular-nums text-emerald-600">
-                    GHS {quote.maxPayout.toFixed(2)}
+                    GHS {quote.maxPayout.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 {!quote.valid && quote.reason && (

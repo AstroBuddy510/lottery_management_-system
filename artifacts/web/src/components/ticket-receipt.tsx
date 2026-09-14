@@ -4,7 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Printer, Copy, MessageSquare, Check } from "lucide-react";
+import { Loader2, Printer, Copy, MessageSquare, MessageCircle, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -127,6 +127,15 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
   const [copied, setCopied] = useState<"sms" | "full" | null>(null);
 
   const smsHref = useMemo(() => `sms:?body=${encodeURIComponent(data.smsText)}`, [data.smsText]);
+  /**
+   * wa.me with no number opens WhatsApp on the writer's own contact picker,
+   * so they hand the slip to whoever staked it without having to type the
+   * number in first. Same text as the SMS and the printed slip.
+   */
+  const whatsappHref = useMemo(
+    () => `https://wa.me/?text=${encodeURIComponent(data.smsText)}`,
+    [data.smsText],
+  );
 
   const copy = async (text: string, which: "sms" | "full") => {
     try {
@@ -142,7 +151,7 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
     <div className="space-y-4">
       <div className="flex items-center justify-center gap-2">
         <Badge variant="outline" className={statusTone(data.ticket.status, data.ticket.isWinner)}>
-          {data.ticket.isWinner ? `WON · GHS ${Number(data.ticket.winAmount).toFixed(2)}` : data.ticket.status.toUpperCase()}
+          {data.ticket.isWinner ? `WON · GHS ${Number(data.ticket.winAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : data.ticket.status.toUpperCase()}
         </Badge>
       </div>
 
@@ -156,7 +165,16 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
         <Button variant="outline" onClick={() => printSlip(data)}>
           <Printer className="h-4 w-4 mr-2" /> Print
         </Button>
-        <Button variant="outline" asChild>
+        <Button
+          variant="outline"
+          asChild
+          className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+        >
+          <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
+            <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
+          </a>
+        </Button>
+        <Button variant="outline" asChild className="col-span-2">
           <a href={smsHref}>
             <MessageSquare className="h-4 w-4 mr-2" /> Send SMS
           </a>

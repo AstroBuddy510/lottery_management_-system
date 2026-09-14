@@ -1,10 +1,15 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-// Helper function to format currency as GHS
+// Currency for print. Grouped like the screen, and negatives in brackets as
+// the accounts are read.
 function fmt(v: string | number | undefined | null) {
   const n = Number(v ?? 0);
-  return n < 0 ? `(GHS ${Math.abs(n).toFixed(2)})` : `GHS ${n.toFixed(2)}`;
+  const grouped = Math.abs(n).toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return n < 0 ? `(GHS ${grouped})` : `GHS ${grouped}`;
 }
 
 // Helper to format date

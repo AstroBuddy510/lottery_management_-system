@@ -30,7 +30,7 @@ import { TokenReportView } from "@/components/token-report";
 
 function fmt(v: string | number | undefined | null) {
   const n = Number(v ?? 0);
-  return n < 0 ? `(GH₵ ${Math.abs(n).toFixed(2)})` : `GH₵ ${n.toFixed(2)}`;
+  return n < 0 ? `(GH₵ ${Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : `GH₵ ${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function fmtDate(s?: string | null) {
@@ -71,7 +71,7 @@ function AmtCell({ v, dim }: { v: string | number; dim?: boolean }) {
   const n = Number(v);
   return (
     <span className={`font-mono text-sm tabular-nums ${n < 0 ? "text-red-600 dark:text-red-400" : dim ? "text-muted-foreground" : ""}`}>
-      {n < 0 ? `(GH₵ ${Math.abs(n).toFixed(2)})` : `GH₵ ${n.toFixed(2)}`}
+      {n < 0 ? `(GH₵ ${Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : `GH₵ ${n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
     </span>
   );
 }
@@ -94,7 +94,7 @@ function TotalsGrid({ t, label }: { t: ReportTotals; label?: string }) {
           <div key={l} className={`rounded-lg px-3 py-2.5 ${accent ? (balance < 0 ? "bg-red-50 dark:bg-red-950/40" : "bg-emerald-50 dark:bg-emerald-950/40") : "bg-muted/40"}`}>
             <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{l}</div>
             <div className={`font-mono font-semibold tabular-nums text-sm ${accent ? (balance < 0 ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400") : dim ? "text-muted-foreground" : ""}`}>
-              {Number(v) < 0 ? `(GH₵ ${Math.abs(Number(v)).toFixed(2)})` : `GH₵ ${Number(v).toFixed(2)}`}
+              {Number(v) < 0 ? `(GH₵ ${Math.abs(Number(v)).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : `GH₵ ${Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
             </div>
           </div>
         ))}
@@ -337,7 +337,7 @@ function WriterReportView() {
                     Gross Entries ({r.pending.grossEntries.length})
                   </div>
                   <div className="font-mono font-semibold text-amber-800 dark:text-amber-300">
-                    GH₵ {Number(r.pending.totalGross).toFixed(2)}
+                    GH₵ {Number(r.pending.totalGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
                 <div>
@@ -345,7 +345,7 @@ function WriterReportView() {
                     Wins Entries ({r.pending.winsEntries.length})
                   </div>
                   <div className="font-mono font-semibold text-amber-800 dark:text-amber-300">
-                    GH₵ {Number(r.pending.totalWins).toFixed(2)}
+                    GH₵ {Number(r.pending.totalWins).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
                 </div>
               </div>
@@ -502,7 +502,7 @@ function AgentReportView() {
                   Payments Collected ({r.payments?.length ?? 0})
                 </div>
                 <div className="font-mono font-bold text-blue-700 dark:text-blue-400">
-                  GH₵ {Number(r.totalPaid).toFixed(2)}
+                  GH₵ {Number(r.totalPaid).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               {(r.payments?.length ?? 0) > 0 && (
@@ -862,12 +862,12 @@ function GameSalesView() {
           {/* Summary strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: "Total Gross Sales", value: `GH₵ ${grandTotals.gross.toFixed(2)}`, sub: "Revenue from game events" },
-              { label: "Total Wins Deduct", value: `GH₵ ${grandTotals.wins.toFixed(2)}`, sub: "Wins claimed by writers" },
-              { label: "Total Reserve", value: `GH₵ ${grandTotals.reserve.toFixed(2)}`, sub: "Allocations to reserve fund" },
+              { label: "Total Gross Sales", value: `GH₵ ${grandTotals.gross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: "Revenue from game events" },
+              { label: "Total Wins Deduct", value: `GH₵ ${grandTotals.wins.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: "Wins claimed by writers" },
+              { label: "Total Reserve", value: `GH₵ ${grandTotals.reserve.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: "Allocations to reserve fund" },
               {
                 label: "Consolidated Net Balance",
-                value: `GH₵ ${grandTotals.balance.toFixed(2)}`,
+                value: `GH₵ ${grandTotals.balance.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                 sub: "Combined writer balance yield",
               },
             ].map(({ label, value, sub }) => (
@@ -910,22 +910,22 @@ function GameSalesView() {
                             {item.gameName} #{item.eventNumber}
                           </TableCell>
                           <TableCell className="text-right font-mono">
-                            GH₵ {Number(item.grossSales).toFixed(2)}
+                            GH₵ {Number(item.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className="text-right font-mono text-amber-600 dark:text-amber-400">
-                            GH₵ {Number(item.commission).toFixed(2)}
+                            GH₵ {Number(item.commission).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className="text-right font-mono text-teal-600 dark:text-teal-400">
-                            GH₵ {Number(item.netGross).toFixed(2)}
+                            GH₵ {Number(item.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className="text-right font-mono text-rose-600 dark:text-rose-400">
-                            GH₵ {Number(item.wins).toFixed(2)}
+                            GH₵ {Number(item.wins).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className="text-right font-mono text-indigo-600 dark:text-indigo-400">
-                            GH₵ {Number(item.reserve).toFixed(2)}
+                            GH₵ {Number(item.reserve).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className={`text-right font-mono font-bold ${Number(item.balance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
-                            GH₵ {Number(item.balance).toFixed(2)}
+                            GH₵ {Number(item.balance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -945,14 +945,14 @@ function GameSalesView() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6">
                 {[
-                  { label: "Total Gross Sales", value: `GH₵ ${grandTotals.gross.toFixed(2)}`, valueClass: "text-foreground" },
-                  { label: "Total Commission", value: `GH₵ ${grandTotals.commission.toFixed(2)}`, valueClass: "text-amber-600 dark:text-amber-400" },
-                  { label: "Total Net Gross", value: `GH₵ ${grandTotals.netGross.toFixed(2)}`, valueClass: "text-teal-600 dark:text-teal-400" },
-                  { label: "Total Wins", value: `GH₵ ${grandTotals.wins.toFixed(2)}`, valueClass: "text-rose-600 dark:text-rose-400" },
-                  { label: "Total Reserve", value: `GH₵ ${grandTotals.reserve.toFixed(2)}`, valueClass: "text-indigo-600 dark:text-indigo-400" },
+                  { label: "Total Gross Sales", value: `GH₵ ${grandTotals.gross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-foreground" },
+                  { label: "Total Commission", value: `GH₵ ${grandTotals.commission.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-amber-600 dark:text-amber-400" },
+                  { label: "Total Net Gross", value: `GH₵ ${grandTotals.netGross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-teal-600 dark:text-teal-400" },
+                  { label: "Total Wins", value: `GH₵ ${grandTotals.wins.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-rose-600 dark:text-rose-400" },
+                  { label: "Total Reserve", value: `GH₵ ${grandTotals.reserve.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-indigo-600 dark:text-indigo-400" },
                   { 
                     label: "Grand Net Balance", 
-                    value: `GH₵ ${grandTotals.balance.toFixed(2)}`, 
+                    value: `GH₵ ${grandTotals.balance.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
                     valueClass: `font-extrabold ${grandTotals.balance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}` 
                   },
                 ].map(({ label, value, valueClass }) => (
@@ -998,7 +998,7 @@ function GameSalesView() {
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">{gt.ticketCount}</TableCell>
                       <TableCell className="text-right font-mono font-semibold text-sm">
-                        GH₵ {Number(gt.totalAmount).toFixed(2)}
+                        GH₵ {Number(gt.totalAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell className="text-right">
                         <Badge variant="outline" className="font-mono text-xs">{gt.pct.toFixed(1)}%</Badge>
@@ -1012,7 +1012,7 @@ function GameSalesView() {
                     <td />
                     <td className="px-4 py-2.5 text-right font-mono font-semibold">{r.summary.totalEntries}</td>
                     <td className="px-4 py-2.5 text-right font-mono font-semibold">
-                      GH₵ {Number(r.summary.totalAmount).toFixed(2)}
+                      GH₵ {Number(r.summary.totalAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-4 py-2.5 text-right font-mono font-semibold">100%</td>
                   </tr>
@@ -1066,7 +1066,7 @@ function GameSalesView() {
                           </TableCell>
                           <TableCell className="text-right font-mono text-sm">{ws.ticketCount}</TableCell>
                           <TableCell className="text-right font-mono font-semibold text-sm">
-                            GH₵ {Number(ws.totalAmount).toFixed(2)}
+                            GH₵ {Number(ws.totalAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className="text-right">
                             <Badge variant="outline" className="font-mono text-xs">{ws.pct.toFixed(1)}%</Badge>
@@ -1116,7 +1116,7 @@ function GameSalesView() {
                             </span>
                           </TableCell>
                           <TableCell className="text-right font-mono font-semibold text-sm">
-                            GH₵ {Number(e.ticketAmount).toFixed(2)}
+                            GH₵ {Number(e.ticketAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1125,7 +1125,7 @@ function GameSalesView() {
                       <tr className="border-t-2 bg-muted/30">
                         <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground" colSpan={3}>Total</td>
                         <td className="px-4 py-2.5 text-right font-mono font-semibold">
-                          GH₵ {Number(r.summary.totalAmount).toFixed(2)}
+                          GH₵ {Number(r.summary.totalAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     </tfoot>

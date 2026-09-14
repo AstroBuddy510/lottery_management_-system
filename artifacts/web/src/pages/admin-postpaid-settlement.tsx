@@ -80,7 +80,7 @@ export function AdminPostpaidSettlement() {
                         <TableCell className="text-right">GHS {row.ledger.totalStakes}</TableCell>
                         <TableCell className="text-right text-green-600">GHS {row.ledger.totalWinnings}</TableCell>
                         <TableCell className={`text-right font-bold ${net > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {net > 0 ? `Writer Owes: ${net.toFixed(2)}` : `Owe Writer: ${Math.abs(net).toFixed(2)}`}
+                          {net > 0 ? `Writer Owes: ${net.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `Owe Writer: ${Math.abs(net).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         </TableCell>
                         <TableCell>
                           <Select value={method[row.ledger.id] || "momo"} onValueChange={(val) => setMethod(p => ({ ...p, [row.ledger.id]: val }))}>
