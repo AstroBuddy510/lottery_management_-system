@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db, postpaidDailyLedgerTable, writersTable, gamesTable } from "@workspace/db";
+import { db, postpaidDailyLedgerTable, writersTable, gamesTable, usersTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
@@ -152,6 +152,99 @@ router.get("/postpaid/my-settlement", requireAuth, requireRole("writer"), async 
     settlements: rows,
   });
 });
+
+/**
+ * Postpaid payments already collected - the cashier's audit trail.
+ *
+ * A settled ledger drops off the outstanding list the moment it is confirmed,
+ * which left the money with nowhere to be seen. This is where it lands: who
+ * paid, for which draw, how much, by what method, and which cashier took it.
+ *
+ * Ledgers settled before commission existed were never quoted, so their
+ * amount_payable is zero while real money did change hands. For those the
+ * figure handed over is the old net_balance, and the row is marked `legacy`
+ * so the screen can say so rather than reporting a GHS 0.00 payment.
+ */
+router.get(
+  "/postpaid/settlements",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (req, res) => {
+    const writerId = typeof req.query["writerId"] === "string" ? req.query["writerId"] : undefined;
+    const from = typeof req.query["from"] === "string" ? req.query["from"] : undefined;
+    const to = typeof req.query["to"] === "string" ? req.query["to"] : undefined;
+
+    const conditions = [eq(postpaidDailyLedgerTable.settlementStatus, "settled")];
+    if (writerId) conditions.push(eq(postpaidDailyLedgerTable.writerId, writerId));
+    if (from) conditions.push(sql`${postpaidDailyLedgerTable.ledgerDate} >= ${from}`);
+    if (to) conditions.push(sql`${postpaidDailyLedgerTable.ledgerDate} <= ${to}`);
+
+    const rows = await db
+      .select({
+        ledgerId: postpaidDailyLedgerTable.id,
+        ledgerDate: postpaidDailyLedgerTable.ledgerDate,
+        writerId: postpaidDailyLedgerTable.writerId,
+        writerName: writersTable.fullName,
+        writerCode: writersTable.fullCode,
+        gameName: gamesTable.name,
+        eventNumber: gamesTable.eventNumber,
+        grossSales: postpaidDailyLedgerTable.totalStakes,
+        commissionPct: postpaidDailyLedgerTable.commissionPct,
+        commissionAmount: postpaidDailyLedgerTable.commissionAmount,
+        amountPayable: postpaidDailyLedgerTable.amountPayable,
+        netBalance: postpaidDailyLedgerTable.netBalance,
+        winsRecorded: postpaidDailyLedgerTable.totalWinnings,
+        settlementMethod: postpaidDailyLedgerTable.settlementMethod,
+        settlementReference: postpaidDailyLedgerTable.settlementReference,
+        declaredAt: postpaidDailyLedgerTable.paymentDeclaredAt,
+        settledAt: postpaidDailyLedgerTable.settledAt,
+        settledByName: usersTable.fullName,
+        wasUnsettledAtCalculation: postpaidDailyLedgerTable.unsettledAtCalculation,
+      })
+      .from(postpaidDailyLedgerTable)
+      .leftJoin(writersTable, eq(postpaidDailyLedgerTable.writerId, writersTable.id))
+      .leftJoin(gamesTable, eq(postpaidDailyLedgerTable.gameId, gamesTable.id))
+      .leftJoin(usersTable, eq(postpaidDailyLedgerTable.settledBy, usersTable.id))
+      .where(and(...(conditions as never[])))
+      .orderBy(desc(postpaidDailyLedgerTable.settledAt))
+      .limit(500);
+
+    const payments = rows.map((r) => {
+      const legacy = r.commissionPct === null;
+      return {
+        ...r,
+        legacy,
+        // What the writer actually handed over.
+        amountPaid: legacy ? r.netBalance : r.amountPayable,
+      };
+    });
+
+    const totals = payments.reduce(
+      (acc, p) => ({
+        collected: acc.collected + Number(p.amountPaid),
+        grossSales: acc.grossSales + Number(p.grossSales),
+        commission: acc.commission + Number(p.commissionAmount),
+        winsRecorded: acc.winsRecorded + Number(p.winsRecorded),
+        cash: acc.cash + (p.settlementMethod === "momo" ? 0 : Number(p.amountPaid)),
+        momo: acc.momo + (p.settlementMethod === "momo" ? Number(p.amountPaid) : 0),
+      }),
+      { collected: 0, grossSales: 0, commission: 0, winsRecorded: 0, cash: 0, momo: 0 },
+    );
+
+    res.json({
+      payments,
+      count: payments.length,
+      totals: {
+        collected: totals.collected.toFixed(2),
+        grossSales: totals.grossSales.toFixed(2),
+        commission: totals.commission.toFixed(2),
+        winsRecorded: totals.winsRecorded.toFixed(2),
+        cash: totals.cash.toFixed(2),
+        momo: totals.momo.toFixed(2),
+      },
+    });
+  },
+);
 
 const declareSchema = z.object({
   method: z.enum(["cash", "momo"]),

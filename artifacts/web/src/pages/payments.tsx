@@ -7,7 +7,7 @@ import {
   getListTimeWindowsQueryKey,
 } from "@workspace/api-client-react";
 import type { TimeWindow } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { useAuth } from "@/lib/auth";
 import { QRCodeSVG } from "qrcode.react";
@@ -183,6 +183,27 @@ export function Payments() {
   const { data: allPaymentsRaw } = useListPayments({});
   const { data: agents }         = useListAgents({});
   const { data: expenseCategories } = useListRecurringExpenses();
+
+  /**
+   * Postpaid writers who have said they are paying and are waiting on the
+   * cashier. Surfaced as a badge on the tab: a declared payment that nobody
+   * confirms leaves the writer marked unsettled through no fault of theirs.
+   */
+  const { data: postpaidOutstanding } = useQuery<{
+    ledgers?: Array<{ ledger: { paymentDeclaredAt: string | null } }>;
+  }>({
+    queryKey: ["/api/postpaid/outstanding"],
+    queryFn: async () => {
+      const res = await fetch("/api/postpaid/outstanding", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.ok) throw new Error("Failed to load postpaid ledgers");
+      return res.json();
+    },
+  });
+  const postpaidDeclared = (postpaidOutstanding?.ledgers ?? []).filter(
+    (r) => r.ledger.paymentDeclaredAt,
+  ).length;
   const { data: allCalcs }       = useListCalculations({}, { query: { queryKey: getListCalculationsQueryKey({}) } });
   const { data: timeWindows }    = useListTimeWindows({ query: { queryKey: getListTimeWindowsQueryKey() } });
   const { allWriters }           = useWriterLookup();
@@ -500,8 +521,13 @@ export function Payments() {
           <TabsTrigger value="settlement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Settlement Board
           </TabsTrigger>
-          <TabsTrigger value="postpaid" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+          <TabsTrigger value="postpaid" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
             Postpaid Settlement
+            {postpaidDeclared > 0 && (
+              <span className="ml-2 bg-amber-500 text-white rounded-full px-1.5 py-0.5 text-[8.5px] font-extrabold shadow-xs">
+                {postpaidDeclared}
+              </span>
+            )}
           </TabsTrigger>
           <TabsTrigger value="pending-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
             Pending Cash Requests
