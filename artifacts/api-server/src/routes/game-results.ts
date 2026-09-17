@@ -146,10 +146,14 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
         .where(and(eq(postpaidDailyLedgerTable.writerId, writer.id), eq(postpaidDailyLedgerTable.ledgerDate, today), eq(postpaidDailyLedgerTable.gameId, gameId))).limit(1);
       
       if (ledger) {
+        // Recorded against the writer's sales, and recorded ONLY. The company
+        // pays this winner through the agent, so it must not come off what the
+        // writer hands in - netting it off would let a writer who recorded a
+        // win keep the day's takings, which is the risk-free position the
+        // ledger exists to close.
         await db.update(postpaidDailyLedgerTable)
-          .set({ 
+          .set({
             totalWinnings: (parseFloat(ledger.totalWinnings) + parseFloat(payout.payoutAmount)).toString(),
-            netBalance: (parseFloat(ledger.netBalance) - parseFloat(payout.payoutAmount)).toString()
           })
           .where(eq(postpaidDailyLedgerTable.id, ledger.id));
       }

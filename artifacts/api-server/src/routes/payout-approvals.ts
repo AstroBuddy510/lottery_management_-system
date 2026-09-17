@@ -129,6 +129,13 @@ router.get(
         payoutAmount: payoutRequestsTable.payoutAmount,
         approvedBy: payoutRequestsTable.approvedBy,
         paidAt: payoutRequestsTable.paidAt,
+        /**
+         * What this writer still owed on their postpaid account when the draw
+         * was calculated. Set means they had not settled - policy is that the
+         * company does not carry wins on unsettled sales, so this sits next to
+         * the amount the reviewer is about to authorise.
+         */
+        writerUnsettledAmount: payoutRequestsTable.writerUnsettledAmount,
         createdAt: payoutRequestsTable.createdAt,
         ticketId: ticketsTable.id,
         ticketNumber: ticketsTable.ticketNumber,

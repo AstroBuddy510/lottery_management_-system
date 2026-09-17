@@ -38,6 +38,13 @@ export const payoutRequestsTable = pgTable("payout_requests", {
   status: payoutRequestStatusEnum("status").notNull().default("pending"),
   approvedBy: uuid("approved_by").references(() => usersTable.id),
   paidAt: timestamp("paid_at", { withTimezone: true }),
+  /**
+   * Stamped at calculation time when the writer who sold this ticket had not
+   * settled their postpaid account for the draw. Company policy does not carry
+   * wins on unsettled sales, so a reviewer decides this one rather than the
+   * system paying it quietly. Holds what they owed, for the reviewer to see.
+   */
+  writerUnsettledAmount: decimal("writer_unsettled_amount", { precision: 12, scale: 2 }),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

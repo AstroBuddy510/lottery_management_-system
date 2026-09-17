@@ -67,6 +67,30 @@ interface TicketRow {
   winningNumbers: string | null;
   /** What the fraud rules object to about this exact ticket. */
   anomalies?: Array<{ code: string; severity: "medium" | "high" | "critical"; detail: string }>;
+  /**
+   * What the selling writer still owed on their postpaid account when this
+   * draw was calculated. Set means they had not settled.
+   */
+  writerUnsettledAmount?: string | null;
+}
+
+/**
+ * Everything a reviewer must weigh before authorising this payout: the fraud
+ * rules, plus an unsettled postpaid account.
+ *
+ * Folded into one list on purpose. The unsettled stamp reaches the reviewer
+ * through the same red row and the same confirmation gate the fraud flags use,
+ * rather than as a second thing that is easy to miss.
+ */
+function flagsFor(t: TicketRow): Array<{ detail: string }> {
+  const flags: Array<{ detail: string }> = (t.anomalies ?? []).map((a) => ({ detail: a.detail }));
+  const owed = Number(t.writerUnsettledAmount ?? 0);
+  if (t.writerUnsettledAmount != null && owed > 0) {
+    flags.push({
+      detail: `Writer had not settled ${fmtGHS(owed)} of postpaid sales when this draw was calculated.`,
+    });
+  }
+  return flags;
 }
 
 function authHeaders(): Record<string, string> {
@@ -134,17 +158,19 @@ function WriterTickets({ writerId, gameId }: { writerId: string; gameId: string 
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tickets.map((t) => (
+          {tickets.map((t) => {
+            const flags = flagsFor(t);
+            return (
             <TableRow
               key={t.payoutId}
-              className={`cursor-pointer${t.anomalies?.length ? " bg-red-500/[0.05]" : ""}`}
+              className={`cursor-pointer${flags.length ? " bg-red-500/[0.05]" : ""}`}
               onClick={() => setOpenTicket(t.ticketId)}
             >
               <TableCell className="font-mono text-xs">
                 {t.ticketNumber}
-                {!!t.anomalies?.length && (
+                {!!flags.length && (
                   <div className="mt-1 space-y-0.5">
-                    {t.anomalies.map((a, i) => (
+                    {flags.map((a, i) => (
                       <div
                         key={i}
                         className="flex items-start gap-1 text-[10px] font-semibold text-red-600 dark:text-red-400"
@@ -170,8 +196,8 @@ function WriterTickets({ writerId, gameId }: { writerId: string; gameId: string 
                     disabled={approve.isPending}
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (t.anomalies?.length) {
-                        const reasons = t.anomalies.map((a) => `\u2022 ${a.detail}`).join("\n");
+                      if (flags.length) {
+                        const reasons = flags.map((a) => `\u2022 ${a.detail}`).join("\n");
                         if (
                           !confirm(
                             `${t.ticketNumber} is flagged:\n\n${reasons}\n\nApprove ${fmtGHS(t.payoutAmount)} anyway?`,
@@ -190,7 +216,8 @@ function WriterTickets({ writerId, gameId }: { writerId: string; gameId: string 
                 )}
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
 

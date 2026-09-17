@@ -20,6 +20,7 @@ import { verifyLedgerAndEscalate } from "../lib/accountant";
 import { dispatchSystemNotification } from "../lib/notify";
 import { settleGameTickets } from "../lib/settle-tickets";
 import { getUnifiedWriterTotals } from "../lib/unified-sales";
+import { quoteDueLedgers, stampUnsettledAtCalculation, type UnsettledWriter } from "../lib/postpaid";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -39,6 +40,9 @@ router.post(
     const winningNumbers = parse.data.winningNumbers;
     const machineNumbers = parse.data.machineNumbers;
     let settlement: Awaited<ReturnType<typeof settleGameTickets>> | null = null;
+    // Writers who had not handed in their postpaid money when this ran. Their
+    // wins are still calculated, but stamped for a reviewer to decide.
+    let unsettledWriters: UnsettledWriter[] = [];
 
     if (gameId && gameId !== "undefined" && gameId !== "null") {
       const [game] = await db
@@ -76,10 +80,21 @@ router.post(
             })
             .where(eq(gamesTable.id, gameId));
 
+          // Quote anything not yet quoted before we judge who is unsettled, so
+          // a writer is never marked delinquent on a figure nobody ever showed
+          // them.
+          await quoteDueLedgers(tx, { gameId });
+
           // Posting the declared numbers also settles the writer tickets for
           // this draw, creating the payout requests the payout review screen
           // works from. Idempotent - a game already settled is left alone.
-          return settleGameTickets(tx, gameId, winningNumbers, machineNumbers, req.user!.userId);
+          const result = await settleGameTickets(tx, gameId, winningNumbers, machineNumbers, req.user!.userId);
+
+          // This run is the settlement deadline. Stamp it after settlement, so
+          // the payout requests it marks already exist.
+          unsettledWriters = await stampUnsettledAtCalculation(tx, gameId);
+
+          return result;
         });
       } catch (err) {
         // Say what actually broke. A bare 500 here cost an evening once.
@@ -119,7 +134,7 @@ router.post(
     const allWriterIds = [...unified.keys()];
 
     if (allWriterIds.length === 0) {
-      res.json({ calculated: 0, calcDate, results: [], reserveAllocations: 0, settlement });
+      res.json({ calculated: 0, calcDate, results: [], reserveAllocations: 0, settlement, unsettledWriters });
       return;
     }
 
@@ -411,6 +426,8 @@ router.post(
       results,
       reserveAllocations: allocations.length,
       debtReductions: debtReductionSummary,
+      // Named so the run reports who closed the day owing money.
+      unsettledWriters,
     });
   },
 );
