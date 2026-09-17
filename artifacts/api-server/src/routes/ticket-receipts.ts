@@ -16,6 +16,10 @@ import {
   buildSmsText,
   buildQrPayload,
   buildNumbersBlock,
+  buildHeaderBlock,
+  buildSlipText,
+  buildSlipSmsText,
+  type SlipData,
   expiryDate,
   TICKET_VALIDITY_DAYS,
   type ReceiptData,
@@ -99,7 +103,8 @@ function toReceiptData(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>)
 async function mayView(
   role: string,
   userId: string,
-  row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>,
+  // Only the two ownership facts, so a slip row and a ticket row both fit.
+  row: { ticket: { writerId: string }; writer: { agentId: string } },
 ): Promise<boolean> {
   if (role === "director" || role === "administrator" || role === "cashier") return true;
   if (role === "writer") return row.ticket.writerId === userId;
@@ -189,9 +194,99 @@ function receiptResponse(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>
     // The exact slice of receiptText holding the played numbers, so the screen
     // can find it without parsing the slip.
     numbersBlock: buildNumbersBlock(data),
+    // The masthead, so the screen can set the name bold and the slogan light.
+    headerBlock: buildHeaderBlock(data),
     smsText: buildSmsText(data),
   };
 }
+
+/**
+ * One itemised slip for the bets bought together under this slip number.
+ *
+ * The bets stay separate tickets - each settles and pays on its own - so this
+ * assembles the printed document rather than reading a stored one. Every item
+ * carries its own ticket number, because when a customer comes to claim, only
+ * the winning bet is being claimed.
+ */
+router.get("/tickets/slip/:slipNumber/receipt", requireAuth, async (req, res) => {
+  const slipNumber = req.params["slipNumber"] as string;
+
+  const rows = await db
+    .select({
+      ticket: ticketsTable,
+      writer: writersTable,
+      agent: agentsTable,
+      game: gamesTable,
+      betType: betTypesTable,
+    })
+    .from(ticketsTable)
+    .innerJoin(writersTable, eq(ticketsTable.writerId, writersTable.id))
+    .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+    .innerJoin(gamesTable, eq(ticketsTable.gameId, gamesTable.id))
+    .innerJoin(betTypesTable, eq(ticketsTable.betTypeId, betTypesTable.id))
+    .where(eq(ticketsTable.slipNumber, slipNumber))
+    .orderBy(ticketsTable.createdAt);
+
+  if (rows.length === 0) {
+    res.status(404).json({ error: "Slip not found" });
+    return;
+  }
+
+  // Every bet on a slip belongs to the same writer, so one check covers it.
+  if (!(await mayView(req.user!.role, req.user!.userId, rows[0]!))) {
+    res.status(404).json({ error: "Slip not found" });
+    return;
+  }
+
+  const first = rows[0]!;
+  const totalStake = rows.reduce((sum, r) => sum + Number(r.ticket.stakeAmount), 0);
+  const totalPayout = rows.reduce((sum, r) => sum + Number(r.ticket.potentialPayout), 0);
+
+  const data: SlipData = {
+    companyName: COMPANY_NAME,
+    tagline: COMPANY_TAGLINE || undefined,
+    slipNumber,
+    terminalId: first.writer.fullCode,
+    agentCode: first.agent.fullCode,
+    writerCode: first.writer.fullCode,
+    drawNumber: first.game.eventNumber,
+    drawName: first.game.name,
+    drawDate: first.game.closeAt,
+    saleDate: first.ticket.createdAt,
+    items: rows.map((r) => ({
+      betTypeName: r.betType.name,
+      numbers: r.ticket.numbers,
+      bankerNumber: r.ticket.bankerNumber,
+      lines: r.ticket.lineCount ?? 1,
+      unitPrice: r.ticket.stakePerLine ?? r.ticket.stakeAmount,
+      amount: r.ticket.stakeAmount,
+      ticketNumber: r.ticket.ticketNumber,
+    })),
+    totalStake: totalStake.toFixed(2),
+    totalPotentialPayout: totalPayout.toFixed(2),
+    validityDays: TICKET_VALIDITY_DAYS,
+  };
+
+  res.json({
+    slip: {
+      slipNumber,
+      ticketCount: rows.length,
+      totalStake: data.totalStake,
+      totalPotentialPayout: data.totalPotentialPayout,
+      saleDate: data.saleDate,
+      validUntil: expiryDate(data.drawDate, data.validityDays),
+    },
+    game: { name: data.drawName, eventNumber: data.drawNumber, drawDate: data.drawDate },
+    writer: { code: data.writerCode, name: first.writer.fullName },
+    agent: { code: data.agentCode, name: first.agent.agencyName },
+    items: data.items,
+    // The QR carries the slip, so scanning it pulls up every bet on it.
+    qrPayload: JSON.stringify({ s: slipNumber, w: data.writerCode, ts: data.saleDate.toISOString() }),
+    receiptText: buildSlipText(data),
+    headerBlock: buildHeaderBlock({ companyName: COMPANY_NAME, tagline: COMPANY_TAGLINE || undefined } as never),
+    smsText: buildSlipSmsText(data),
+  });
+});
 
 /**
  * Lookup for review. Admins and cashiers may check any ticket; agents only

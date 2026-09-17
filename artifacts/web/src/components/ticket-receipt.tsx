@@ -52,6 +52,8 @@ export interface TicketReceipt {
   receiptText: string;
   /** The exact slice of receiptText holding the played numbers. */
   numbersBlock?: string;
+  /** The masthead, split so the name can be bold and the slogan light. */
+  headerBlock?: { name: string; tagline: string; full: string };
   smsText: string;
 }
 
@@ -78,22 +80,42 @@ function winningSet(data: TicketReceipt): Set<number> {
  * says it put there. No match - an older cached receipt, say - means no
  * markup rather than a mangled slip.
  */
-function locateNumbers(data: TicketReceipt): { before: string; numbers: string; after: string } | null {
-  const block = data.numbersBlock;
+function locateNumbers(
+  body: string,
+  block: string | undefined,
+): { before: string; numbers: string; after: string } | null {
   if (!block) return null;
 
   // Only a match that starts its own line is the numbers block; anything
   // found mid-line is a coincidence in some other row.
-  let at = data.receiptText.indexOf(block);
-  while (at > 0 && data.receiptText[at - 1] !== "\n") {
-    at = data.receiptText.indexOf(block, at + 1);
+  let at = body.indexOf(block);
+  while (at > 0 && body[at - 1] !== "\n") {
+    at = body.indexOf(block, at + 1);
   }
   if (at < 0) return null;
 
   return {
-    before: data.receiptText.slice(0, at),
+    before: body.slice(0, at),
     numbers: block,
-    after: data.receiptText.slice(at + block.length),
+    after: body.slice(at + block.length),
+  };
+}
+
+/**
+ * Split the masthead off the top of the receipt body.
+ *
+ * The name and slogan are the same centred monospace lines the printer gets;
+ * lifting them out lets the name carry weight without disturbing the 32-column
+ * grid underneath. No match means the body renders whole, unstyled.
+ */
+function locateHeader(data: TicketReceipt): { name: string; tagline: string; rest: string } | null {
+  const block = data.headerBlock;
+  if (!block?.full) return null;
+  if (!data.receiptText.startsWith(block.full)) return null;
+  return {
+    name: block.name,
+    tagline: block.tagline,
+    rest: data.receiptText.slice(block.full.length),
   };
 }
 
@@ -172,7 +194,12 @@ export function ReceiptSlip({ data, printRef }: { data: TicketReceipt; printRef?
   // Rings are drawn only when this ticket won something. Everything else -
   // active, lost, void - renders as the plain slip it has always been.
   const winners = useMemo(() => winningSet(data), [data]);
-  const split = useMemo(() => (winners.size > 0 ? locateNumbers(data) : null), [data, winners]);
+  const header = useMemo(() => locateHeader(data), [data]);
+  const body = header ? header.rest : data.receiptText;
+  const split = useMemo(
+    () => (winners.size > 0 ? locateNumbers(body, data.numbersBlock) : null),
+    [body, data.numbersBlock, winners],
+  );
 
   return (
     <div
@@ -187,6 +214,37 @@ export function ReceiptSlip({ data, printRef }: { data: TicketReceipt; printRef?
           style={{ width: "22mm", height: "auto", display: "inline-block", marginBottom: "1mm" }}
         />
       </div>
+      {/* The masthead. Registered name centred and bold, slogan centred and
+          light - the two carry different weight because they are different
+          things: one is who took the money, the other is why. */}
+      {header && (
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              fontFamily: "'Courier New', monospace",
+              fontSize: "9pt",
+              lineHeight: 1.2,
+              fontWeight: 700,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {header.name.trim()}
+          </div>
+          {header.tagline && (
+            <div
+              style={{
+                fontFamily: "'Courier New', monospace",
+                fontSize: "8pt",
+                lineHeight: 1.2,
+                fontWeight: 400,
+                whiteSpace: "pre-wrap",
+              }}
+            >
+              {header.tagline.trim()}
+            </div>
+          )}
+        </div>
+      )}
       <pre
         style={{
           fontFamily: "'Courier New', monospace",
@@ -204,7 +262,7 @@ export function ReceiptSlip({ data, printRef }: { data: TicketReceipt; printRef?
             {split.after}
           </>
         ) : (
-          data.receiptText
+          body
         )}
       </pre>
       <div style={{ textAlign: "center", marginTop: "2mm" }}>
@@ -228,16 +286,28 @@ const escapeHtml = (text: string) =>
  * comes out green like the screen.
  */
 function receiptHtml(data: TicketReceipt): string {
-  const winners = winningSet(data);
-  const split = winners.size > 0 ? locateNumbers(data) : null;
-  if (!split) return escapeHtml(data.receiptText);
+  const header = locateHeader(data);
+  const body = header ? header.rest : data.receiptText;
 
-  const ringed = escapeHtml(split.numbers).replace(/\d+/g, (digits) =>
-    winners.has(parseInt(digits, 10))
-      ? `<span class="w">${digits}<i></i></span>`
-      : digits,
-  );
-  return escapeHtml(split.before) + ringed + escapeHtml(split.after);
+  const winners = winningSet(data);
+  const split = winners.size > 0 ? locateNumbers(body, data.numbersBlock) : null;
+
+  const bodyHtml = split
+    ? escapeHtml(split.before) +
+      escapeHtml(split.numbers).replace(/\d+/g, (digits) =>
+        winners.has(parseInt(digits, 10)) ? `<span class="w">${digits}<i></i></span>` : digits,
+      ) +
+      escapeHtml(split.after)
+    : escapeHtml(body);
+
+  if (!header) return bodyHtml;
+
+  // Same weights as the screen, so what comes out of the printer matches what
+  // the writer just looked at.
+  const masthead =
+    `<div class="mast">${escapeHtml(header.name.trim())}</div>` +
+    (header.tagline ? `<div class="slogan">${escapeHtml(header.tagline.trim())}</div>` : "");
+  return masthead + bodyHtml;
 }
 
 function printSlip(data: TicketReceipt) {
@@ -255,6 +325,11 @@ function printSlip(data: TicketReceipt) {
       .c { text-align: center; }
       img { width: 22mm; margin-bottom: 1mm; }
       svg { width: 28mm; height: 28mm; }
+      /* Masthead: the registered name carries weight, the slogan does not. */
+      .mast { text-align: center; font-size: 9pt; line-height: 1.2; font-weight: 700;
+              white-space: pre-wrap; }
+      .slogan { text-align: center; font-size: 8pt; line-height: 1.2; font-weight: 400;
+                white-space: pre-wrap; }
       /* Ringed winning numbers. The ring is an overlay so the 32-column
          grid keeps its alignment. */
       .w { position: relative; display: inline-block; color: ${WIN_TEXT}; font-weight: 700; }

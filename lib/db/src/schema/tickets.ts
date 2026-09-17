@@ -17,6 +17,16 @@ export const ticketStatusEnum = pgEnum("ticket_status", [
 export const ticketsTable = pgTable("tickets", {
   id: uuid("id").primaryKey().defaultRandom(),
   ticketNumber: varchar("ticket_number", { length: 30 }).notNull().unique(),
+  /**
+   * Groups the bets a customer bought together and paid for once.
+   *
+   * Each bet stays its own ticket, because a bet is what settles and what
+   * pays - a perm winning three times and a direct losing are separate events
+   * whatever slip they were printed on. The slip number only says they were
+   * sold in one basket, so one itemised receipt can be produced. Null on a
+   * single bet sold on its own.
+   */
+  slipNumber: varchar("slip_number", { length: 30 }),
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
   gameId: uuid("game_id").notNull().references(() => gamesTable.id),
   betTypeId: uuid("bet_type_id").notNull().references(() => betTypesTable.id),

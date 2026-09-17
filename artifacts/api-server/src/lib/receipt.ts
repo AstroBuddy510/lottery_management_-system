@@ -106,6 +106,25 @@ export function expiryDate(drawDate: Date, validityDays: number): Date {
 }
 
 /**
+ * The centred masthead: registered name, then slogan.
+ *
+ * Sent to the client as its own slice of the receipt text so the screen and
+ * the print window can set the name in bold and leave the slogan light,
+ * without either of them having to guess which lines are the letterhead.
+ *
+ * Wrapped rather than clipped: the current slogan is exactly
+ * RECEIPT_COLUMNS characters, so any future rewording would otherwise be
+ * silently truncated mid-word.
+ */
+export function buildHeaderBlock(d: ReceiptData): { name: string; tagline: string; full: string } {
+  const nameLines = wrap(d.companyName.toUpperCase()).map((l) => centre(l));
+  const taglineLines = d.tagline ? wrap(d.tagline).map((l) => centre(l)) : [];
+  const name = nameLines.join("\n");
+  const tagline = taglineLines.join("\n");
+  return { name, tagline, full: [...nameLines, ...taglineLines].join("\n") };
+}
+
+/**
  * The played numbers, exactly as they appear on the slip.
  *
  * Kept as its own function - and sent to the client alongside the receipt -
@@ -128,11 +147,7 @@ export function buildNumbersBlock(d: ReceiptData): string {
 export function buildReceiptText(d: ReceiptData): string {
   const out: string[] = [];
 
-  // The registered name and slogan are centred, and wrapped rather than
-  // clipped: the current slogan is exactly RECEIPT_COLUMNS characters, so any
-  // future rewording would otherwise be silently truncated mid-word.
-  for (const line of wrap(d.companyName.toUpperCase())) out.push(centre(line));
-  if (d.tagline) for (const line of wrap(d.tagline)) out.push(centre(line));
+  out.push(buildHeaderBlock(d).full);
   out.push("");
   out.push(centre(d.drawName));
   out.push(rule("="));
@@ -168,6 +183,104 @@ export function buildReceiptText(d: ReceiptData): string {
   out.push(centre("It is required to claim."));
 
   return out.join("\n");
+}
+
+export interface SlipItem {
+  betTypeName: string;
+  numbers: string;
+  bankerNumber?: number | null;
+  lines: number;
+  unitPrice: string;
+  amount: string;
+  ticketNumber: string;
+}
+
+export interface SlipData {
+  companyName: string;
+  tagline?: string;
+  slipNumber: string;
+  terminalId: string;
+  agentCode: string;
+  writerCode: string;
+  drawNumber: string;
+  drawName: string;
+  drawDate: Date;
+  saleDate: Date;
+  items: SlipItem[];
+  totalStake: string;
+  totalPotentialPayout: string;
+  validityDays: number;
+}
+
+/**
+ * One itemised slip for several bets bought together.
+ *
+ * Each bet is printed as its own numbered item with its own lines and money,
+ * because each one settles and pays on its own - the slip records that they
+ * were paid for once, not that they win or lose together. Every item carries
+ * its own ticket number, which is what a cashier needs when only one of them
+ * comes in to be claimed.
+ */
+export function buildSlipText(d: SlipData): string {
+  const out: string[] = [];
+
+  out.push(buildHeaderBlock({ companyName: d.companyName, tagline: d.tagline } as ReceiptData).full);
+  out.push("");
+  out.push(centre(d.drawName));
+  out.push(rule("="));
+
+  out.push(row("Terminal", d.terminalId));
+  out.push(row("Agent", d.agentCode));
+  out.push(row("Writer", d.writerCode));
+  out.push(row("Draw No", d.drawNumber));
+  out.push(row("Draw Date", dateOnly(d.drawDate)));
+  out.push(row("Sale Date", stamp(d.saleDate)));
+  out.push(rule());
+  out.push(row(`${d.items.length} BET${d.items.length === 1 ? "" : "S"}`, "AMOUNT(GHS)"));
+  out.push(rule());
+
+  d.items.forEach((item, i) => {
+    out.push(`${i + 1}. ${item.betTypeName.toUpperCase()}`);
+    for (const line of wrap(item.numbers)) out.push(`   ${line}`);
+    if (item.bankerNumber != null) out.push(`   BANKER ${item.bankerNumber}`);
+    out.push(row(`   ${item.lines} x ${money(item.unitPrice)}`, money(item.amount)));
+    // The claim reference for this bet alone.
+    out.push(`   ${item.ticketNumber}`);
+    if (i < d.items.length - 1) out.push("");
+  });
+
+  out.push(rule());
+  out.push(row("TOTAL STAKE(GHS)", money(d.totalStake)));
+  out.push(row("Max Win(GHS)", money(d.totalPotentialPayout)));
+  out.push(rule("="));
+
+  out.push(row("Ticket Validity", `${d.validityDays} days`));
+  out.push(row("Valid Until", dateOnly(expiryDate(d.drawDate, d.validityDays))));
+  out.push("");
+  out.push(centre("SLIP NO"));
+  out.push(centre(d.slipNumber));
+  out.push("");
+  out.push(centre("Keep this slip safe."));
+  out.push(centre("It is required to claim."));
+
+  return out.join("\n");
+}
+
+/** Short SMS for a multi-bet slip. */
+export function buildSlipSmsText(d: SlipData): string {
+  return [
+    `${d.companyName.toUpperCase()} - ${d.drawName}`,
+    `Slip: ${d.slipNumber}`,
+    `Draw ${d.drawNumber} on ${dateOnly(d.drawDate)}`,
+    ...d.items.map(
+      (item, i) =>
+        `${i + 1}. ${item.betTypeName}: ${item.numbers}${item.bankerNumber != null ? ` (banker ${item.bankerNumber})` : ""} - GHS ${money(item.amount)} [${item.ticketNumber}]`,
+    ),
+    `Total stake: GHS ${money(d.totalStake)}`,
+    `Max win: GHS ${money(d.totalPotentialPayout)}`,
+    `Sold ${stamp(d.saleDate)} by ${d.writerCode}`,
+    `Valid ${d.validityDays} days (until ${dateOnly(expiryDate(d.drawDate, d.validityDays))})`,
+  ].join("\n");
 }
 
 /** Shorter variant for SMS - same facts, fewer characters to send. */
