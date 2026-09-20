@@ -122,27 +122,37 @@ function locateHeader(data: TicketReceipt): { name: string; tagline: string; res
 /**
  * A number with a green ring drawn round it.
  *
- * The ring is an overlay rather than a border or padding on the number
- * itself: the slip is monospaced to a 32-column grid, and anything that
- * changes a character's width would shunt the columns out of line.
+ * The ring is the number's OWN border, not a floating overlay on top of it.
+ *
+ * It began as an absolutely positioned overlay, which looked right on screen
+ * and drifted left in the downloaded picture. An absolute box has to be
+ * resolved against a containing block, and html2canvas rebuilds the page in
+ * its own frame before painting it - when it resolves `position: relative` on
+ * an inline-block inside a <pre> differently from the live browser, the ring
+ * lands against the wrong ancestor while the digits stay put. The screen and
+ * the file then disagree, and only on some devices.
+ *
+ * A border cannot come adrift from the thing it is drawn on, so the whole
+ * class of bug goes away. The reason for the overlay was to protect the
+ * 32-column grid, and that is kept instead by cancelling the padding and
+ * border with an exactly equal negative margin: 3px padding plus 1.5px border
+ * against 4.5px of negative margin, on each side. Measured at zero pixels of
+ * drift against the same slip set in plain text.
  */
 function WinnerRing({ children }: { children: ReactNode }) {
   return (
-    <span style={{ position: "relative", display: "inline-block", color: WIN_TEXT, fontWeight: 700 }}>
+    <span
+      style={{
+        display: "inline-block",
+        color: WIN_TEXT,
+        fontWeight: 700,
+        border: `1.5px solid ${WIN_GREEN}`,
+        borderRadius: "50%",
+        padding: "1px 3px",
+        margin: "-2.5px -4.5px",
+      }}
+    >
       {children}
-      <span
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          top: "-2px",
-          right: "-3px",
-          bottom: "-2px",
-          left: "-3px",
-          border: `1.5px solid ${WIN_GREEN}`,
-          borderRadius: "50%",
-          pointerEvents: "none",
-        }}
-      />
     </span>
   );
 }
@@ -295,7 +305,7 @@ function receiptHtml(data: TicketReceipt): string {
   const bodyHtml = split
     ? escapeHtml(split.before) +
       escapeHtml(split.numbers).replace(/\d+/g, (digits) =>
-        winners.has(parseInt(digits, 10)) ? `<span class="w">${digits}<i></i></span>` : digits,
+        winners.has(parseInt(digits, 10)) ? `<span class="w">${digits}</span>` : digits,
       ) +
       escapeHtml(split.after)
     : escapeHtml(body);
@@ -330,11 +340,12 @@ function printSlip(data: TicketReceipt) {
               white-space: pre-wrap; }
       .slogan { text-align: center; font-size: 8pt; line-height: 1.2; font-weight: 400;
                 white-space: pre-wrap; }
-      /* Ringed winning numbers. The ring is an overlay so the 32-column
-         grid keeps its alignment. */
-      .w { position: relative; display: inline-block; color: ${WIN_TEXT}; font-weight: 700; }
-      .w i { position: absolute; top: -2px; right: -3px; bottom: -2px; left: -3px;
-             border: 1.5px solid ${WIN_GREEN}; border-radius: 50%; }
+      /* Ringed winning numbers. The ring is the number's own border, and the
+         padding and border are cancelled by an equal negative margin so the
+         32-column grid does not move. */
+      .w { display: inline-block; color: ${WIN_TEXT}; font-weight: 700;
+           border: 1.5px solid ${WIN_GREEN}; border-radius: 50%;
+           padding: 1px 3px; margin: -2.5px -4.5px; }
       @media print { .w, .w i { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     </style></head>
     <body>

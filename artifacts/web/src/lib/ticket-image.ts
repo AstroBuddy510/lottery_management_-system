@@ -29,10 +29,16 @@ export async function captureTicketPng(
     backgroundColor: "#ffffff",
     useCORS: true,
     logging: false,
-    // Capture the element's own box only - no page margins, no scroll offset.
-    scrollX: 0,
-    scrollY: -window.scrollY,
-    windowWidth: document.documentElement.offsetWidth,
+    // No scroll or window overrides on purpose.
+    //
+    // `scrollY: -window.scrollY` is the idiom for capturing a whole PAGE, and
+    // this captures one ELEMENT. The slip sits inside a dialog that scrolls in
+    // its own right, so subtracting the window's scroll describes an offset
+    // the slip does not have, and everything positioned against a containing
+    // block can land somewhere the live page never put it. Passing
+    // `windowWidth` without `windowHeight` skews the cloned layout the same
+    // way. html2canvas measures the element itself correctly when simply left
+    // to do so - verified with both the page and the dialog scrolled.
   });
 
   const trimmed = trimWhitespace(canvas);
