@@ -70,9 +70,27 @@ async function loadTicket(q: string) {
 
 function toReceiptData(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>): ReceiptData {
   const { ticket, writer, agent, game, betType } = row;
-  // One bet per ticket today; unit price therefore equals the stake. Kept as
-  // separate fields so multi-line tickets need no receipt change.
-  const lines = 1;
+
+  /**
+   * Lines and unit price come off the TICKET, not a guess.
+   *
+   * This used to hardcode one line and divide the total stake by it, which
+   * printed every bet as a single line at the full stake - a GHS 10 Perm Two
+   * on five numbers came out as "1 line at GHS 100" instead of "10 lines at
+   * GHS 10". The line count is what the bet engine worked out when the bet was
+   * priced and is stored on the ticket; reading anything else invents a second
+   * answer to a question that already has one.
+   *
+   * Tickets sold before line pricing existed carry neither field, and were all
+   * genuinely single-line bets, so falling back to one line at the full stake
+   * is correct for exactly those.
+   */
+  const lines = ticket.lineCount && ticket.lineCount > 0 ? ticket.lineCount : 1;
+  const unitPrice =
+    ticket.stakePerLine && Number(ticket.stakePerLine) > 0
+      ? Number(ticket.stakePerLine).toFixed(2)
+      : (Number(ticket.stakeAmount) / lines).toFixed(2);
+
   return {
     companyName: COMPANY_NAME,
     tagline: COMPANY_TAGLINE || undefined,
@@ -91,7 +109,7 @@ function toReceiptData(row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>)
     numbers: ticket.numbers,
     bankerNumber: ticket.bankerNumber,
     lines,
-    unitPrice: (Number(ticket.stakeAmount) / lines).toFixed(2),
+    unitPrice,
     totalStake: ticket.stakeAmount,
     potentialPayout: ticket.potentialPayout,
     status: ticket.status,

@@ -169,7 +169,9 @@ export function buildReceiptText(d: ReceiptData): string {
   out.push(row("Amount(GHS)", money(d.totalStake)));
   out.push(rule());
   out.push(row("TOTAL STAKE(GHS)", money(d.totalStake)));
-  out.push(row("Potential Win(GHS)", money(d.potentialPayout)));
+  // No potential-win line. It was the ceiling - what the ticket pays if the
+  // draw is as kind as it can possibly be - and printing a best case next to
+  // the money taken reads to a customer as a figure they are owed.
   out.push(rule("="));
 
   out.push(row("Ticket Validity", `${d.validityDays} days`));
@@ -251,7 +253,6 @@ export function buildSlipText(d: SlipData): string {
 
   out.push(rule());
   out.push(row("TOTAL STAKE(GHS)", money(d.totalStake)));
-  out.push(row("Max Win(GHS)", money(d.totalPotentialPayout)));
   out.push(rule("="));
 
   out.push(row("Ticket Validity", `${d.validityDays} days`));
@@ -277,7 +278,6 @@ export function buildSlipSmsText(d: SlipData): string {
         `${i + 1}. ${item.betTypeName}: ${item.numbers}${item.bankerNumber != null ? ` (banker ${item.bankerNumber})` : ""} - GHS ${money(item.amount)} [${item.ticketNumber}]`,
     ),
     `Total stake: GHS ${money(d.totalStake)}`,
-    `Max win: GHS ${money(d.totalPotentialPayout)}`,
     `Sold ${stamp(d.saleDate)} by ${d.writerCode}`,
     `Valid ${d.validityDays} days (until ${dateOnly(expiryDate(d.drawDate, d.validityDays))})`,
   ].join("\n");
@@ -292,7 +292,6 @@ export function buildSmsText(d: ReceiptData): string {
     `${d.betTypeName}: ${d.numbers}${d.bankerNumber != null ? ` (banker ${d.bankerNumber})` : ""}`,
     `Lines: ${d.lines} @ GHS ${money(d.unitPrice)}`,
     `Stake: GHS ${money(d.totalStake)}`,
-    `Potential win: GHS ${money(d.potentialPayout)}`,
     `Sold ${stamp(d.saleDate)} by ${d.writerCode}`,
     `Valid ${d.validityDays} days (until ${dateOnly(expiryDate(d.drawDate, d.validityDays))})`,
   ].join("\n");
