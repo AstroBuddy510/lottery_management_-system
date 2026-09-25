@@ -58,8 +58,8 @@ export interface TicketReceipt {
 }
 
 /** Ink for the winning ring. Dark enough to survive a screenshot or a print. */
-const WIN_GREEN = "#059669";
-const WIN_TEXT = "#047857";
+export const WIN_GREEN = "#059669";
+export const WIN_TEXT = "#047857";
 
 /**
  * The picks to ring, as a set the slip can test each printed number against.
@@ -156,6 +156,9 @@ function locateHeader(data: TicketReceipt): { name: string; tagline: string; res
 function WinnerRing({ children }: { children: ReactNode }) {
   return (
     <span
+      // The exported picture finds its rings by this attribute and draws them
+      // itself. See drawWinnerRings in lib/ticket-image.
+      data-win-ring=""
       style={{
         display: "inline-block",
         color: WIN_TEXT,

@@ -1,4 +1,5 @@
 import html2canvas from "html2canvas";
+import { WIN_GREEN } from "@/components/ticket-receipt";
 
 /**
  * The ticket slip as a PNG.
@@ -16,12 +17,20 @@ export const TICKET_SLIP_ID = "ticket-receipt-slip";
 /** Crisp on a phone screen without producing a needlessly huge file. */
 const SCALE = 3;
 
+/** Ring geometry, in CSS pixels; multiplied by SCALE when drawn. */
+const RING_STROKE = 1.5;
+const RING_PAD_X = 3;
+const RING_PAD_Y = 2.5;
+
 export async function captureTicketPng(
   elementId: string = TICKET_SLIP_ID,
 ): Promise<Blob> {
   const node = document.getElementById(elementId);
   if (!node) throw new Error("The ticket is not on screen yet. Open it and try again.");
 
+  // Where the winning numbers are, horizontally, before anything is drawn.
+  // Across is faithful in the capture; down is not, which is the whole reason
+  // drawWinnerRings exists.
   const canvas = await html2canvas(node, {
     scale: SCALE,
     // The slip is printed on white paper; render it that way rather than
@@ -39,7 +48,18 @@ export async function captureTicketPng(
     // `windowWidth` without `windowHeight` skews the cloned layout the same
     // way. html2canvas measures the element itself correctly when simply left
     // to do so - verified with both the page and the dialog scrolled.
+    //
+    // The CSS rings are hidden for the capture and redrawn afterwards, for
+    // the reason set out above drawWinnerRings. Only the colour is changed,
+    // so the boxes still occupy exactly the space they did and no text moves.
+    onclone: (doc: Document) => {
+      doc.querySelectorAll<HTMLElement>("[data-win-ring]").forEach((el) => {
+        el.style.borderColor = "transparent";
+      });
+    },
   });
+
+  drawWinnerRings(canvas, node, SCALE);
 
   const trimmed = trimWhitespace(canvas);
 
@@ -49,6 +69,94 @@ export async function captureTicketPng(
       "image/png",
     );
   });
+}
+
+/**
+ * Ring the winning numbers, on the canvas, after html2canvas has painted it.
+ *
+ * The ring cannot be left to CSS here. html2canvas rebuilds the page in a
+ * frame of its own, and inside a <pre> it paints the TEXT of an inline-block
+ * about twelve pixels lower than it places that element's box - measured on a
+ * live slip, 36 pixels at a scale of 3. So the border comes out sitting above
+ * its own digits. Every CSS route was tried against the real renderer: with
+ * and without negative margins, display inline, and three vertical-align
+ * values. All four land the ring in the same wrong place, because none of
+ * them change where html2canvas decides the glyphs go.
+ *
+ * Positions taken from the DOM are wrong for the same reason. So the rings
+ * are fitted to the glyphs as ACTUALLY PAINTED: the horizontal window comes
+ * from the DOM, which the capture does honour, and within that window the
+ * winning digits are found by their colour - they are the only green text on
+ * the slip - and a ring is drawn around what is really there. Whatever
+ * html2canvas does with the baseline, the ring follows it.
+ *
+ * Nothing is drawn for a number that cannot be found. A missing ring is a
+ * blemish; a ring around the wrong number on a betting slip is not.
+ */
+function drawWinnerRings(canvas: HTMLCanvasElement, node: HTMLElement, scale: number): void {
+  const marks = Array.from(node.querySelectorAll<HTMLElement>("[data-win-ring]"));
+  if (marks.length === 0) return;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  // html2canvas leaves its own transform on the context - a scale plus a
+  // sizeable translate. Anything drawn without clearing it lands off-canvas
+  // entirely, silently.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  } catch {
+    // A tainted canvas cannot be read, so the glyphs cannot be found.
+    return;
+  }
+
+  const { width, height } = canvas;
+  // The winning digits are the only green ink on the slip. The search band
+  // keeps this well clear of the company logo, which has green in it.
+  const isWinnerInk = (i: number) =>
+    data[i + 1]! > 60 && data[i + 1]! - data[i]! > 25 && data[i + 1]! - data[i + 2]! > 15;
+
+  const base = node.getBoundingClientRect();
+  ctx.strokeStyle = WIN_GREEN;
+  ctx.lineWidth = Math.max(RING_STROKE * scale, 2);
+
+  for (const el of marks) {
+    const r = el.getBoundingClientRect();
+    const x0 = Math.max(0, Math.floor((r.left - base.left) * scale) - 4);
+    const x1 = Math.min(width, Math.ceil((r.right - base.left) * scale) + 4);
+    const yHint = (r.top - base.top) * scale;
+    const hHint = Math.max(r.height * scale, 1);
+    const yA = Math.max(0, Math.round(yHint - hHint * 2));
+    const yB = Math.min(height, Math.round(yHint + hHint * 3));
+
+    let minX = Infinity, maxX = -1, minY = Infinity, maxY = -1;
+    for (let y = yA; y < yB; y++) {
+      for (let x = x0; x < x1; x++) {
+        if (isWinnerInk((y * width + x) * 4)) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0 || maxY < 0) continue;
+
+    ctx.beginPath();
+    ctx.ellipse(
+      (minX + maxX) / 2,
+      (minY + maxY) / 2,
+      (maxX - minX) / 2 + RING_PAD_X * scale,
+      (maxY - minY) / 2 + RING_PAD_Y * scale,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.stroke();
+  }
 }
 
 /**
