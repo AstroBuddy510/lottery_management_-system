@@ -1,5 +1,4 @@
-import { Router } from "express";
-import crypto from "crypto";
+import { Router, type RequestHandler } from "express";
 import { db, postpaidDailyLedgerTable, writersTable, gamesTable, usersTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -7,10 +6,10 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { quoteDueLedgers, currentWriterCommissionPct } from "../lib/postpaid";
 import { dispatchSystemNotification } from "../lib/notify";
 import { logger } from "../lib/logger";
+import { paystackConfigured, paystackSecret, verifyWebhook, verifyCharge } from "../lib/paystack";
 
 const router = Router();
 
-const PAYSTACK_SECRET_KEY = process.env["PAYSTACK_SECRET_KEY"] || "";
 
 router.get("/postpaid/ledger", requireAuth, requireRole("director", "administrator", "cashier", "writer"), async (req, res) => {
   const writerId = req.user!.role === "writer" ? req.user!.userId : (req.query.writerId as string);
@@ -333,7 +332,7 @@ router.post("/postpaid/pay/:ledgerId", requireAuth, requireRole("writer"), async
     return;
   }
 
-  if (!PAYSTACK_SECRET_KEY) {
+  if (!paystackConfigured()) {
     res.status(503).json({ error: "Mobile money is not configured yet. Pay your cashier in cash." });
     return;
   }
@@ -347,7 +346,7 @@ router.post("/postpaid/pay/:ledgerId", requireAuth, requireRole("writer"), async
   const response = await fetch("https://api.paystack.co/transaction/initialize", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+      Authorization: `Bearer ${paystackSecret()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -399,18 +398,10 @@ router.post("/postpaid/pay/:ledgerId", requireAuth, requireRole("writer"), async
  * valid-looking body is not on its own proof that money moved. Only a ledger
  * that is still unsettled moves, so a replayed webhook is a no-op.
  */
-router.post("/postpaid/settlement-webhook", async (req, res) => {
-  const signature = req.headers["x-paystack-signature"] as string | undefined;
-  if (!signature || !PAYSTACK_SECRET_KEY) {
-    res.status(401).json({ error: "Unauthorised" });
-    return;
-  }
-  const hash = crypto
-    .createHmac("sha512", PAYSTACK_SECRET_KEY)
-    .update(JSON.stringify(req.body))
-    .digest("hex");
-  if (hash !== signature) {
-    res.status(401).json({ error: "Invalid signature" });
+export const handleSettlementWebhook: RequestHandler = async (req, res) => {
+  const check = verifyWebhook(req);
+  if (!check.ok) {
+    res.status(check.status).json({ error: check.reason });
     return;
   }
 
@@ -421,13 +412,9 @@ router.post("/postpaid/settlement-webhook", async (req, res) => {
   }
 
   const reference = String(data.reference);
-  const verifyRes = await fetch(
-    `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-    { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } },
-  );
-  const verify = (await verifyRes.json()) as { status?: boolean; data?: { status: string } };
-  if (!verifyRes.ok || !verify.status || verify.data?.status !== "success") {
-    res.status(400).json({ error: "Verification failed" });
+  const charge = await verifyCharge(reference);
+  if (!charge.ok) {
+    res.status(400).json({ error: "Verification failed", reason: charge.reason });
     return;
   }
 
@@ -447,7 +434,9 @@ router.post("/postpaid/settlement-webhook", async (req, res) => {
     .returning();
 
   res.status(200).json({ message: updated ? "Settled" : "Already processed" });
-});
+};
+
+router.post("/postpaid/settlement-webhook", handleSettlementWebhook);
 
 /**
  * The cashier confirms the money is in hand.

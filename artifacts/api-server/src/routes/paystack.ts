@@ -1,13 +1,14 @@
-import { Router } from "express";
-import crypto from "crypto";
+import { Router, type RequestHandler } from "express";
 import { db, paymentsTable, agentsTable, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { dispatchSystemNotification } from "../lib/notify";
+import { paystackConfigured, paystackSecret, verifyWebhook } from "../lib/paystack";
+import { handlePurchaseWebhook } from "./writer-token-purchases";
+import { handleSettlementWebhook } from "./postpaid-settlement";
 
 const router = Router();
 
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "sk_test_placeholder";
 
 async function generateReceiptNumber(): Promise<string> {
   const [result] = await db
@@ -28,6 +29,67 @@ async function generateReceiptNumber(): Promise<string> {
   return `REC-${String(next).padStart(6, "0")}`;
 }
 
+/**
+ * The one URL Paystack is told about.
+ *
+ * Paystack posts every event for the business to a SINGLE address set in its
+ * dashboard. This codebase grew three webhook paths - agent payments, writer
+ * e-token purchases and postpaid settlements - and only one of them could ever
+ * have been registered. The other two would simply never have fired, and the
+ * failure would have been silent: money taken by mobile money, nothing
+ * credited, and no error anywhere to explain it.
+ *
+ * So everything arrives here and is handed to the right handler by the
+ * `purpose` recorded in the charge's metadata when it was started. The three
+ * original paths still work, which keeps anything already pointed at them
+ * going, and each handler checks the signature itself - the check is cheap and
+ * a handler should not depend on having been called by a trusted caller.
+ */
+router.post("/paystack/webhook", async (req, res) => {
+  const check = verifyWebhook(req);
+  if (!check.ok) {
+    res.status(check.status).json({ error: check.reason });
+    return;
+  }
+
+  const purpose = (req.body as { data?: { metadata?: { purpose?: string } } })?.data?.metadata?.purpose;
+
+  if (purpose === "writer_token_purchase") {
+    await handlePurchaseWebhook(req, res, () => {});
+    return;
+  }
+  if (purpose === "postpaid_settlement") {
+    await handleSettlementWebhook(req, res, () => {});
+    return;
+  }
+  // Agent payments predate the purpose tag, so they are the default.
+  await handleAgentPaymentWebhook(req, res, () => {});
+});
+
+/**
+ * Is this deployment wired to Paystack?
+ *
+ * Reports only yes or no and the key's mode - never the key, or any part of
+ * it. It exists so an administrator can confirm the environment variable
+ * actually reached the running server, which is otherwise only discoverable
+ * by attempting a real payment.
+ */
+router.get(
+  "/payments/paystack/status",
+  requireAuth,
+  requireRole("director", "administrator"),
+  (_req, res) => {
+    const key = paystackSecret();
+    res.json({
+      configured: paystackConfigured(),
+      mode: key.startsWith("sk_live") ? "live" : key.startsWith("sk_test") ? "test" : "unset",
+      // The single address to register in the Paystack dashboard. Everything
+      // is dispatched from there by the purpose on the charge.
+      webhookUrl: "/api/paystack/webhook",
+    });
+  },
+);
+
 // 1. Initialize Paystack Transaction
 router.post(
   "/payments/paystack/initialize",
@@ -38,6 +100,12 @@ router.post(
       const { amount } = req.body;
       if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
         res.status(400).json({ error: "Invalid amount" });
+        return;
+      }
+      // Say so plainly rather than letting Paystack reject a placeholder key
+      // and surfacing its error as if the agent had done something wrong.
+      if (!paystackConfigured()) {
+        res.status(503).json({ error: "Online payments are not configured. Contact your administrator." });
         return;
       }
 
@@ -72,7 +140,7 @@ router.post(
       const response = await fetch("https://api.paystack.co/transaction/initialize", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+          Authorization: `Bearer ${paystackSecret()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -110,28 +178,23 @@ router.post(
 );
 
 // 2. Webhook for Paystack payment confirmation
-router.post("/payments/paystack/webhook", async (req, res) => {
+export const handleAgentPaymentWebhook: RequestHandler = async (req, res) => {
   try {
-    const signature = req.headers["x-paystack-signature"] as string;
-    if (!signature) {
-      res.status(401).json({ error: "Missing signature header" });
+    /**
+     * The signature decides, and there is no way past it.
+     *
+     * This used to wave a request through on a failed signature so long as it
+     * called itself a charge.success, on the reasoning that re-serialising the
+     * body could make a genuine signature fail. That reasoning was sound and
+     * the remedy was not: it meant an unsigned request that simply said
+     * "charge.success" got the same treatment as a signed one. The real cause
+     * is fixed properly now - the raw bytes Paystack signed are kept and
+     * checked against - so nothing needs to be let through on trust.
+     */
+    const check = verifyWebhook(req);
+    if (!check.ok) {
+      res.status(check.status).json({ error: check.reason });
       return;
-    }
-
-    // Verify signature using HMAC SHA512
-    const hash = crypto
-      .createHmac("sha512", PAYSTACK_SECRET_KEY)
-      .update(JSON.stringify(req.body))
-      .digest("hex");
-
-    if (hash !== signature) {
-      // If signature check is off (possibly due to stringify discrepancies), we fall back
-      // to double-verifying with the verification API for security if the event matches.
-      const bodyEvent = req.body?.event;
-      if (bodyEvent !== "charge.success") {
-        res.status(401).json({ error: "Invalid signature and unhandled event" });
-        return;
-      }
     }
 
     const { event, data } = req.body;
@@ -146,7 +209,7 @@ router.post("/payments/paystack/webhook", async (req, res) => {
     const verifyUrl = `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`;
     const verifyResponse = await fetch(verifyUrl, {
       headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        Authorization: `Bearer ${paystackSecret()}`,
       },
     });
 
@@ -254,6 +317,8 @@ router.post("/payments/paystack/webhook", async (req, res) => {
   } catch (error: any) {
     res.status(500).json({ error: "Internal server error", details: error.message });
   }
-});
+};
+
+router.post("/payments/paystack/webhook", handleAgentPaymentWebhook);
 
 export default router;

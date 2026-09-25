@@ -1,5 +1,4 @@
-import { Router } from "express";
-import crypto from "crypto";
+import { Router, type RequestHandler } from "express";
 import {
   db,
   writersTable,
@@ -14,10 +13,10 @@ import { eq, and, or, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { dispatchSystemNotification } from "../lib/notify";
+import { paystackConfigured, paystackSecret, verifyWebhook, verifyCharge } from "../lib/paystack";
 
 const router = Router();
 
-const PAYSTACK_SECRET_KEY = process.env["PAYSTACK_SECRET_KEY"] || "";
 
 /**
  * Writers buy e-token units with mobile money through Paystack.
@@ -58,7 +57,7 @@ router.post(
       res.status(400).json({ error: "Only prepaid accounts buy units" });
       return;
     }
-    if (!PAYSTACK_SECRET_KEY) {
+    if (!paystackConfigured()) {
       res.status(503).json({ error: "Payments are not configured. Contact your administrator." });
       return;
     }
@@ -79,7 +78,7 @@ router.post(
     const response = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+        Authorization: `Bearer ${paystackSecret()}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -129,19 +128,10 @@ router.post(
  * the charge is then re-verified against Paystack directly - a valid-looking
  * body is not on its own proof that money moved.
  */
-router.post("/writer-tokens/purchase/webhook", async (req, res) => {
-  const signature = req.headers["x-paystack-signature"] as string | undefined;
-  if (!signature || !PAYSTACK_SECRET_KEY) {
-    res.status(401).json({ error: "Unauthorised" });
-    return;
-  }
-
-  const hash = crypto
-    .createHmac("sha512", PAYSTACK_SECRET_KEY)
-    .update(JSON.stringify(req.body))
-    .digest("hex");
-  if (hash !== signature) {
-    res.status(401).json({ error: "Invalid signature" });
+export const handlePurchaseWebhook: RequestHandler = async (req, res) => {
+  const check = verifyWebhook(req);
+  if (!check.ok) {
+    res.status(check.status).json({ error: check.reason });
     return;
   }
 
@@ -153,13 +143,9 @@ router.post("/writer-tokens/purchase/webhook", async (req, res) => {
 
   const reference = String(data.reference);
 
-  const verifyRes = await fetch(
-    `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
-    { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } },
-  );
-  const verify = (await verifyRes.json()) as { status?: boolean; data?: { status: string; amount: number } };
-  if (!verifyRes.ok || !verify.status || verify.data?.status !== "success") {
-    res.status(400).json({ error: "Verification failed" });
+  const charge = await verifyCharge(reference);
+  if (!charge.ok) {
+    res.status(400).json({ error: "Verification failed", reason: charge.reason });
     return;
   }
 
@@ -212,7 +198,9 @@ router.post("/writer-tokens/purchase/webhook", async (req, res) => {
   }
 
   res.status(200).json({ message: "Recorded" });
-});
+};
+
+router.post("/writer-tokens/purchase/webhook", handlePurchaseWebhook);
 
 /** A writer's own purchase history. */
 /**
