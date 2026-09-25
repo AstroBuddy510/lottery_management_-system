@@ -133,11 +133,25 @@ function locateHeader(data: TicketReceipt): { name: string; tagline: string; res
  * the file then disagree, and only on some devices.
  *
  * A border cannot come adrift from the thing it is drawn on, so the whole
- * class of bug goes away. The reason for the overlay was to protect the
- * 32-column grid, and that is kept instead by cancelling the padding and
- * border with an exactly equal negative margin: 3px padding plus 1.5px border
- * against 4.5px of negative margin, on each side. Measured at zero pixels of
- * drift against the same slip set in plain text.
+ * class of bug goes away.
+ *
+ * The horizontal margin is only -1px, and that number is load-bearing. It
+ * started at -4.5px, exactly cancelling the padding and border so the
+ * character box could not change width at all. That was too clever: two
+ * ringed numbers separated by a single comma each pulled 4.5px into the gap,
+ * so their rings overlapped by 2px and swallowed the comma. On screen the
+ * slip is small enough to get away with it; blown up in a WhatsApp message it
+ * reads as rings sitting off to one side of their digits.
+ *
+ * The full cancellation was never needed. The 32-column grid is protected on
+ * the ROWS that are right-aligned - the stake and totals - and none of those
+ * carry a ring. The played numbers sit on a line of their own, where a few
+ * extra pixels cost nothing. Measured: rings now clear each other by ~4.8px
+ * with the money column unmoved.
+ *
+ * The vertical -2.5px still cancels exactly, because that one does matter:
+ * an inline-block's margin box sets the line height, and a taller line would
+ * push every row below it down.
  */
 function WinnerRing({ children }: { children: ReactNode }) {
   return (
@@ -148,8 +162,8 @@ function WinnerRing({ children }: { children: ReactNode }) {
         fontWeight: 700,
         border: `1.5px solid ${WIN_GREEN}`,
         borderRadius: "50%",
-        padding: "1px 3px",
-        margin: "-2.5px -4.5px",
+        padding: "1px 2px",
+        margin: "-2.5px -1px",
       }}
     >
       {children}
@@ -345,7 +359,7 @@ function printSlip(data: TicketReceipt) {
          32-column grid does not move. */
       .w { display: inline-block; color: ${WIN_TEXT}; font-weight: 700;
            border: 1.5px solid ${WIN_GREEN}; border-radius: 50%;
-           padding: 1px 3px; margin: -2.5px -4.5px; }
+           padding: 1px 2px; margin: -2.5px -1px; }
       @media print { .w, .w i { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     </style></head>
     <body>
