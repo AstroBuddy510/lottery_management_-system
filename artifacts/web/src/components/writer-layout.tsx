@@ -1,9 +1,12 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { LogOut, Home, Ticket, Wallet, User } from "lucide-react";
 import { ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ClosingAlerts } from "@/components/closing-alerts";
+import { useClosingAlerts } from "@/lib/use-closing-alerts";
 
 const NavLink = ({
   href,
@@ -38,7 +41,28 @@ const NavLink = ({
 
 export function WriterLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
-  
+
+  /**
+   * Shares its cache key with Place Bet, so sitting on the dashboard costs one
+   * poll a minute and visiting Place Bet costs nothing extra. The poll is for
+   * games created while the writer is signed in - a close time itself never
+   * moves, so the countdown does not depend on it.
+   */
+  const { data: games } = useQuery({
+    queryKey: ["/api/games"],
+    queryFn: async () => {
+      const res = await fetch("/api/games", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: user?.role === "writer",
+    refetchInterval: 60_000,
+  });
+
+  const { alerts, dismiss, now } = useClosingAlerts(games);
+
   if (!user || user.role !== "writer") {
     // If not writer, fallback or redirect handled by router, but render nothing here just in case
     return <>{children}</>;
@@ -120,6 +144,10 @@ export function WriterLayout({ children }: { children: ReactNode }) {
         </div>
         {children}
       </main>
+
+      {/* Closing warnings. Fixed and outside <main>, so they overlay rather
+          than reflow whatever the writer is in the middle of. */}
+      <ClosingAlerts alerts={alerts} now={now} onDismiss={dismiss} />
 
       {/* Mobile Bottom Navigation */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-background border-t flex items-center justify-around z-50 px-2 pb-safe">
