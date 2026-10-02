@@ -104,6 +104,27 @@ function dedupe(rows: TicketRow[]): TicketRow[] {
   return [...byId.values()];
 }
 
+/**
+ * The business day the operators actually mean. Tickets are stored as
+ * `timestamptz`, so a bare date comparison would silently use whatever zone
+ * the database session happens to be in; pinning it to Accra keeps "today" on
+ * the lookup screen the same day a cashier in Accra would name, wherever this
+ * runs. Half-open so a ticket sold at 23:59:59.9 belongs to one day only.
+ */
+const BUSINESS_TZ = "Africa/Accra";
+
+/** Guard against anything that isn't a plain calendar date. */
+function isCalendarDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+}
+
+function dayWindow(date: string) {
+  return and(
+    sql`${ticketsTable.createdAt} >= ((${date})::date)::timestamp AT TIME ZONE ${BUSINESS_TZ}`,
+    sql`${ticketsTable.createdAt} < (((${date})::date + 1)::timestamp AT TIME ZONE ${BUSINESS_TZ})`,
+  );
+}
+
 function categoryFilter(category: TicketCategory) {
   switch (category) {
     case "active":
@@ -141,11 +162,21 @@ router.get("/tickets/browse", ...staffOnly, async (req, res) => {
   const gameId = typeof req.query["gameId"] === "string" ? req.query["gameId"] : "";
   const limit = Math.min(Number(req.query["limit"]) || 100, 300);
 
+  // Absent means every day. The screen sends today's date by default, so the
+  // wide read only happens when someone deliberately clears the filter.
+  const rawDate = typeof req.query["date"] === "string" ? req.query["date"].trim() : "";
+  if (rawDate && !isCalendarDate(rawDate)) {
+    res.status(400).json({ error: "date must be a calendar date, as YYYY-MM-DD" });
+    return;
+  }
+  const date = rawDate || undefined;
+
   const scopedAgentId = await agentScopeId(req.user!.role, req.user!.userId);
 
   const conditions = [
     scopedAgentId ? eq(writersTable.agentId, scopedAgentId) : undefined,
     gameId ? eq(ticketsTable.gameId, gameId) : undefined,
+    date ? dayWindow(date) : undefined,
     q
       ? or(
           ilike(ticketsTable.ticketNumber, `%${q}%`),
@@ -166,16 +197,17 @@ router.get("/tickets/browse", ...staffOnly, async (req, res) => {
   );
 
   if (category !== "flagged") {
-    const counts = await categoryCounts(scopedAgentId, gameId);
-    res.json({ category, tickets: rows.slice(0, limit), counts });
+    const counts = await categoryCounts(scopedAgentId, gameId, date);
+    res.json({ category, date: date ?? null, tickets: rows.slice(0, limit), counts });
     return;
   }
 
   const anomalies = await anomaliesFor(rows);
   const flagged = new Set(anomalies.map((a) => a.ticketId));
-  const counts = await categoryCounts(scopedAgentId, gameId);
+  const counts = await categoryCounts(scopedAgentId, gameId, date);
   res.json({
     category,
+    date: date ?? null,
     tickets: rows.filter((r) => flagged.has(r.id)).slice(0, limit),
     anomalies,
     counts: { ...counts, flagged: flagged.size },
@@ -183,10 +215,15 @@ router.get("/tickets/browse", ...staffOnly, async (req, res) => {
 });
 
 /** Row counts per tab, so the navigation can carry them. */
-async function categoryCounts(scopedAgentId: string | null, gameId: string) {
+async function categoryCounts(
+  scopedAgentId: string | null,
+  gameId: string,
+  date: string | undefined,
+) {
   const scope = [
     scopedAgentId ? eq(writersTable.agentId, scopedAgentId) : undefined,
     gameId ? eq(ticketsTable.gameId, gameId) : undefined,
+    date ? dayWindow(date) : undefined,
   ].filter(Boolean);
 
   const rows = await db

@@ -5,7 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, ScanLine, ShieldAlert, History, Receipt } from "lucide-react";
+import {
+  Loader2,
+  Search,
+  ScanLine,
+  ShieldAlert,
+  History,
+  Receipt,
+  CalendarDays,
+} from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { cn, fmtGHS } from "@/lib/utils";
@@ -62,8 +70,50 @@ interface BrowseTicket {
 
 interface BrowseResponse {
   category: string;
+  date: string | null;
   tickets: BrowseTicket[];
   counts: Record<string, number>;
+}
+
+/**
+ * The trading day as the office means it. Pinned to Accra rather than read off
+ * the browser, so a laptop left on the wrong timezone - or an admin checking in
+ * from abroad - still sees the same "today" the writers are selling into.
+ */
+const BUSINESS_TZ = "Africa/Accra";
+
+function todayInAccra(): string {
+  // en-CA renders as YYYY-MM-DD, which is what <input type="date"> wants.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** The Accra calendar day an instant falls on. */
+function accraDayOf(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BUSINESS_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+function describeDay(date: string): string {
+  if (!date) return "all dates";
+  const today = todayInAccra();
+  if (date === today) return "today";
+  const d = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  const yesterday = new Date(`${today}T12:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  if (date === yesterday.toISOString().slice(0, 10)) return "yesterday";
+  return format(d, "d MMM yyyy");
 }
 
 interface FraudResponse {
@@ -107,12 +157,15 @@ export function TicketLookup() {
   const [filter, setFilter] = useState("");
   const [scanQuery, setScanQuery] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Opens on today's trading day; "" means the operator asked for every date.
+  const [date, setDate] = useState<string>(() => todayInAccra());
 
   const browse = useQuery<BrowseResponse>({
-    queryKey: ["/api/tickets/browse", category, filter],
+    queryKey: ["/api/tickets/browse", category, filter, date],
     queryFn: () =>
       getJson<BrowseResponse>(
-        `/api/tickets/browse?category=${category}&q=${encodeURIComponent(filter)}`,
+        `/api/tickets/browse?category=${category}&q=${encodeURIComponent(filter)}` +
+          (date ? `&date=${date}` : ""),
       ),
     enabled: category !== "flagged",
   });
@@ -132,8 +185,13 @@ export function TicketLookup() {
   });
 
   useEffect(() => {
-    if (scan.data) setSelectedId(scan.data.ticket.id);
-  }, [scan.data]);
+    if (!scan.data) return;
+    setSelectedId(scan.data.ticket.id);
+    // A cashier scanning a ticket from an earlier day should not be told there
+    // are no tickets - follow the ticket to its own day instead.
+    const soldOn = accraDayOf(scan.data.ticket.saleDate);
+    if (soldOn && date && soldOn !== date) setDate(soldOn);
+  }, [scan.data, date]);
 
   // Reading a row. Deliberately NOT logged.
   const receipt = useQuery<TicketReceipt>({
@@ -184,8 +242,9 @@ export function TicketLookup() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Ticket Lookup</h1>
         <p className="text-muted-foreground text-sm">
-          Scan or search a ticket to validate it, or browse by category. Every state change is
-          kept, so a ticket's full history is one click away.
+          Scan or search a ticket to validate it, or browse by category. Opens on today's sales —
+          pick another date to read that day's book. Every state change is kept, so a ticket's
+          full history is one click away.
         </p>
       </div>
 
@@ -211,36 +270,79 @@ export function TicketLookup() {
         )}
       </div>
 
-      {/* ---- Search -------------------------------------------------------- */}
-      <form onSubmit={submit} className="flex max-w-2xl gap-2">
-        <div className="relative flex-1">
-          <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            autoFocus
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Scan a QR, or type a ticket number, writer or numbers"
-            className="pl-9 font-mono"
-          />
-        </div>
-        <Button type="submit" disabled={!input.trim() || scan.isFetching}>
-          {scan.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-          <span className="ml-2 hidden sm:inline">Validate</span>
-        </Button>
-        {(filter || scanQuery) && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => {
-              setInput("");
-              setFilter("");
-              setScanQuery(null);
-            }}
-          >
-            Clear
+      {/* ---- Search and day ------------------------------------------------ */}
+      <div className="flex flex-wrap items-center gap-2">
+        <form onSubmit={submit} className="flex min-w-0 flex-1 basis-80 gap-2">
+          <div className="relative flex-1">
+            <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Scan a QR, or type a ticket number, writer or numbers"
+              className="pl-9 font-mono"
+            />
+          </div>
+          <Button type="submit" disabled={!input.trim() || scan.isFetching}>
+            {scan.isFetching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            <span className="ml-2 hidden sm:inline">Validate</span>
           </Button>
-        )}
-      </form>
+          {(filter || scanQuery) && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setInput("");
+                setFilter("");
+                setScanQuery(null);
+              }}
+            >
+              Clear
+            </Button>
+          )}
+        </form>
+
+        {/* The day being read. Opens on today; the tab counts follow it. Hidden on
+            Flagged, which is a rolling 30-day scan rather than a single day. */}
+        <div className={cn("flex items-center gap-1.5", category === "flagged" && "hidden")}>
+          <div className="relative">
+            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="date"
+              value={date}
+              max={todayInAccra()}
+              onChange={(e) => setDate(e.target.value)}
+              aria-label="Show tickets sold on"
+              className="w-[11.5rem] pl-9"
+            />
+          </div>
+          {date !== todayInAccra() && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setDate(todayInAccra())}
+            >
+              Today
+            </Button>
+          )}
+          {date !== "" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setDate("")}
+              title="Drop the date filter and read every day"
+            >
+              All dates
+            </Button>
+          )}
+        </div>
+      </div>
       {scan.isError && (
         <p className="-mt-3 text-sm text-destructive">{(scan.error as Error).message}</p>
       )}
@@ -265,7 +367,8 @@ export function TicketLookup() {
               <CardDescription className="text-xs">
                 {browse.isLoading
                   ? "Loading…"
-                  : `${tickets.length} shown${filter ? ` matching "${filter}"` : ""}. Newest first.`}
+                  : `${tickets.length} shown from ${describeDay(date)}` +
+                    `${filter ? ` matching "${filter}"` : ""}. Newest first.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -291,7 +394,7 @@ export function TicketLookup() {
                     ) : tickets.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="py-10 text-center text-xs text-muted-foreground">
-                          No tickets in this category.
+                          No tickets in this category {date ? `on ${describeDay(date)}` : "on any date"}.
                         </TableCell>
                       </TableRow>
                     ) : (
