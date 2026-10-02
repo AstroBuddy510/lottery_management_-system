@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches theme_color / background_color in the web manifest, so the
+         splash and the first painted frame are the same colour. -->
+    <color name="colorPrimary">#1E3A5F</color>
+    <color name="navigationColor">#000000</color>
+    <color name="backgroundColor">#1E3A5F</color>
+    <color name="iconBackground">#1E3A5F</color>
+</resources>

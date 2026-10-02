@@ -1,0 +1,63 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.vision2000.portal'
+    compileSdk 34
+
+    defaultConfig {
+        // Android 5.0 and up. Deliberately low: writers are on whatever
+        // handset they have, not whatever is current.
+        minSdk 21
+        targetSdk 34
+        versionCode project.hasProperty('buildVersionCode') ? buildVersionCode.toInteger() : 1
+        versionName project.hasProperty('buildVersionName') ? buildVersionName : '1.0'
+    }
+
+    // One codebase, two apps. The only differences are the name, the icon
+    // tint and which page the app opens on, so flavours beat two modules.
+    flavorDimensions += 'portal'
+    productFlavors {
+        writers {
+            dimension 'portal'
+            applicationId 'com.vision2000.writers'
+        }
+        agents {
+            dimension 'portal'
+            applicationId 'com.vision2000.agents'
+        }
+    }
+
+    signingConfigs {
+        release {
+            // Supplied by CI from secrets; absent locally, which is fine -
+            // a local build just produces an unsigned release APK.
+            def ks = System.getenv('VS2000_KEYSTORE_PATH')
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('VS2000_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('VS2000_KEY_ALIAS')
+                keyPassword System.getenv('VS2000_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig System.getenv('VS2000_KEYSTORE_PATH') ? signingConfigs.release : null
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // The Trusted Web Activity host. Runs the page in the user's Chrome, so
+    // downloads, printing, the camera and Web Share all behave exactly as
+    // they do in the browser today - none of which survives a plain WebView.
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+}

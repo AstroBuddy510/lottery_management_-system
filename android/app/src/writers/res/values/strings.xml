@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="appName">VS2000 Writers</string>
+    <string name="launchUrl">https://vs2000smartportal.com/writer/login</string>
+    <string name="hostName">vs2000smartportal.com</string>
+</resources>

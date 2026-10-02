@@ -1,0 +1,26 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.vision2000.writers",
+      "sha256_cert_fingerprints": [
+        "ED:8B:4E:1B:75:F8:88:EE:17:9D:4C:5C:FF:67:4B:A8:0F:51:5C:2C:9B:F1:D8:20:09:DF:E7:11:5B:13:F0:05"
+      ]
+    }
+  },
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.vision2000.agents",
+      "sha256_cert_fingerprints": [
+        "ED:8B:4E:1B:75:F8:88:EE:17:9D:4C:5C:FF:67:4B:A8:0F:51:5C:2C:9B:F1:D8:20:09:DF:E7:11:5B:13:F0:05"
+      ]
+    }
+  }
+]

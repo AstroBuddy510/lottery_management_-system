@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="appName">VS2000 Agents</string>
+    <!-- Agents sign in on the main portal login; role routing happens there. -->
+    <string name="launchUrl">https://vs2000smartportal.com/</string>
+    <string name="hostName">vs2000smartportal.com</string>
+</resources>
