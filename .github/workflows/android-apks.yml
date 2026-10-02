@@ -73,25 +73,48 @@ jobs:
              "dist/VS2000-Agents-${{ github.event.inputs.versionName || github.ref_name }}.apk"
           ls -lh dist
 
-      # Proof the signature actually took. A silently unsigned APK will not
-      # install, and the failure on the phone is unhelpful, so fail here instead.
-      - name: Verify signatures
-        run: |
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
-          for f in dist/*.apk; do
-            echo "--- $f"
-            "$APKSIGNER" verify --print-certs "$f" | grep -E "Signer #1 certificate (DN|SHA-256)"
-          done
-
-      - name: Shred the key
-        if: always()
-        run: rm -f "$RUNNER_TEMP/vs2000-release.jks"
-
+      # Upload BEFORE verifying. The first run of this workflow failed its
+      # signature check and took the finished APKs down with it - the files
+      # existed and were never retrievable. A check that reports on the build
+      # must never be able to destroy the build.
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: vs2000-apks
           path: dist/*.apk
           retention-days: 90
+
+      # Proof the signature actually took. A silently unsigned APK will not
+      # install, and the failure on the phone is unhelpful, so fail here instead.
+      #
+      # Deliberately NOT piped into grep: under `bash -e` a grep that matches
+      # nothing exits 1 and kills the step, which tells you nothing about why.
+      # Print apksigner's own words instead, and report every file before
+      # failing, so one bad APK does not hide the state of the other.
+      - name: Verify signatures
+        run: |
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
+          echo "apksigner: ${APKSIGNER:-** NOT FOUND **}"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found under $ANDROID_HOME/build-tools"
+            exit 1
+          fi
+          rc=0
+          for f in dist/*.apk; do
+            echo "::group::$f"
+            if "$APKSIGNER" verify --verbose --print-certs "$f"; then
+              echo "OK: $f verifies"
+            else
+              echo "::error::$f failed signature verification"
+              rc=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $rc
+
+      - name: Shred the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/vs2000-release.jks"
 
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/v')
