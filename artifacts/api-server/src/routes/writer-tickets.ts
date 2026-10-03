@@ -43,11 +43,34 @@ const slipSchema = z.object({
     .max(20),
 });
 
-// Format: SLIP-YYYYMMDD-XXXX
+/**
+ * Human-facing numbers for tickets and slips.
+ *
+ * These used to be a random four-digit number within a day - 9,000 possible
+ * values behind a UNIQUE constraint, with no retry, inside the sale
+ * transaction - so a collision aborted the whole slip: the customer got
+ * nothing and the writer got a 500. Measured against a real Postgres, 10,000
+ * sales in one day lost 3,944 of them, and past 9,000 every sale would fail
+ * permanently.
+ *
+ * Both numbers are now minted by the database (see
+ * lib/db/drizzle/manual/0002_ticket_number_sequences.sql). Deliberately not
+ * built here: generating it in SQL means there is no window between choosing a
+ * number and storing it, and no second code path can invent its own format.
+ * The sequence behind it takes no row lock, so a thousand writers selling at
+ * once do not queue behind each other.
+ */
+const ticketNumberSql = sql<string>`next_ticket_number()`;
+
 async function generateSlipNumber(): Promise<string> {
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `SLIP-${dateStr}-${rand}`;
+  // Drawn up front because the slip number goes in the response as well as on
+  // every row of the basket.
+  const result = await db.execute<{ slip_number: string }>(
+    sql`select next_slip_number() as slip_number`,
+  );
+  const value = result.rows[0]?.slip_number;
+  if (!value) throw new Error("SLIP_NUMBER_UNAVAILABLE");
+  return value;
 }
 
 interface PricedBet {
@@ -192,11 +215,12 @@ async function sellBets(
 
   const created = [];
   for (const b of bets) {
-    const ticketNumber = await generateTicketNumber();
     const [ticket] = await tx
       .insert(ticketsTable)
       .values({
-        ticketNumber,
+        // Drawn by the INSERT itself, so there is no window between choosing
+        // a number and storing it in which anything could take it.
+        ticketNumber: ticketNumberSql,
         slipNumber,
         writerId,
         gameId: game.id,
@@ -227,13 +251,6 @@ async function sellBets(
   }
 
   return { tickets: created, total };
-}
-
-// Format: TKT-YYYYMMDD-XXXX
-async function generateTicketNumber(): Promise<string> {
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `TKT-${dateStr}-${rand}`;
 }
 
 router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => {

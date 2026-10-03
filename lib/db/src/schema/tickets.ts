@@ -26,7 +26,7 @@ export const ticketsTable = pgTable("tickets", {
    * sold in one basket, so one itemised receipt can be produced. Null on a
    * single bet sold on its own.
    */
-  slipNumber: varchar("slip_number", { length: 30 }),
+  slipNumber: varchar("slip_number", { length: 30 }).unique(),
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
   gameId: uuid("game_id").notNull().references(() => gamesTable.id),
   betTypeId: uuid("bet_type_id").notNull().references(() => betTypesTable.id),
