@@ -19,31 +19,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TokenSalesPanel } from "@/pages/token-sales";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 import { generateDailySettlementPDF } from "@/lib/pdf-generator";
-import {
-  Banknote,
-  Coins,
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  Plus,
-  Trash2,
-  Calendar,
-  Clock,
-  Printer,
-  QrCode,
-  Search,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  ChevronRight,
-  Filter,
-  FileText,
-  User,
-  ArrowRightLeft
-} from "lucide-react";
+import { Activity, AlertTriangle, ArrowRightLeft, Banknote, Calendar, CheckCircle2, ChevronRight, Clock, Coins, FileDown, FileText, Filter, Loader2, Plus, Printer, QrCode, Search, Trash2, TrendingDown, TrendingUp, User, XCircle } from "lucide-react";
 import { AdminPostpaidSettlement } from "@/pages/admin-postpaid-settlement";
 import { UnitRequests } from "@/pages/unit-requests";
 import { TokenSupply } from "@/pages/token-supply";
@@ -226,6 +206,36 @@ export function Payments() {
   const calcList    = useMemo(() => Array.isArray(allCalcs) ? allCalcs : [], [allCalcs]);
   const pendingList = useMemo(() => Array.isArray(pendingPayments) ? pendingPayments : [], [pendingPayments]);
   const paymentList = useMemo(() => Array.isArray(rawPayments) ? rawPayments : [], [rawPayments]);
+
+  /**
+   * Transaction History as a PDF, on the company letterhead.
+   *
+   * Exports exactly what is on screen, filters included, so the paper matches
+   * what the cashier was looking at when she pressed the button. jsPDF is
+   * pulled in on the click rather than at page load - it is one of the
+   * heaviest things in the bundle and most visits never print.
+   */
+  const [exporting, setExporting] = useState(false);
+  const exportHistoryPdf = async () => {
+    if (paymentList.length === 0) return;
+    setExporting(true);
+    try {
+      const { generatePaymentsHistoryPDF } = await import("@/lib/pdf-generator");
+      await generatePaymentsHistoryPDF(paymentList, agentMap, {
+        agentName: filterAgentId ? agentMap[filterAgentId]?.name : undefined,
+        from: filterFrom || undefined,
+        to: filterTo || undefined,
+      });
+    } catch (err) {
+      toast({
+        title: "Could not build the PDF",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
   const allPayments = useMemo(() => Array.isArray(allPaymentsRaw) ? allPaymentsRaw : [], [allPaymentsRaw]);
   const windows     = useMemo(() => Array.isArray(timeWindows) ? timeWindows : [], [timeWindows]);
 
@@ -543,6 +553,9 @@ export function Payments() {
           <TabsTrigger value="token-supply" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             E-Token Supply
           </TabsTrigger>
+          <TabsTrigger value="token-transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+            E-Token Transactions
+          </TabsTrigger>
           <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Transaction History
           </TabsTrigger>
@@ -795,6 +808,12 @@ export function Payments() {
           <TokenSupply />
         </TabsContent>
 
+        {/* Sits between supply and the cash ledger: where the units came from,
+            where they went, then the money that came back. */}
+        <TabsContent value="token-transactions" className="space-y-4 outline-none">
+          <TokenSalesPanel embedded />
+        </TabsContent>
+
         <TabsContent value="history" className="space-y-4 outline-none">
           {/* Filters */}
           <div className="bg-card/45 border border-border/40 backdrop-blur-md rounded-2xl p-4 shadow-sm relative">
@@ -803,11 +822,28 @@ export function Payments() {
                 <Filter className="w-3.5 h-3.5" />
                 Filter Transactions
               </span>
-              {(filterAgentId || filterFrom || filterTo) && (
-                <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>
-                  Clear filters
+              <div className="flex items-center gap-1.5">
+                {(filterAgentId || filterFrom || filterTo) && (
+                  <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>
+                    Clear filters
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 rounded-lg text-[10px] font-bold"
+                  disabled={exporting || paymentList.length === 0}
+                  onClick={exportHistoryPdf}
+                  title={paymentList.length === 0 ? "Nothing to export for this selection" : "Export what is on screen to PDF"}
+                >
+                  {exporting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <FileDown className="h-3 w-3" />
+                  )}
+                  Export to PDF
                 </Button>
-              )}
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">

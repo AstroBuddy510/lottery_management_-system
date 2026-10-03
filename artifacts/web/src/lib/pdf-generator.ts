@@ -1484,4 +1484,97 @@ export async function generateCompanyExpensesPDF(
 }
 
 
+/**
+ * Transaction History, as the cashier's desk copy.
+ *
+ * Voided rows are kept rather than dropped - a statement that quietly omits a
+ * cancelled receipt is worse than useless when someone is reconciling against
+ * a receipt book - but they are marked and excluded from the totals, so the
+ * figures still add up to what actually moved.
+ */
+export async function generatePaymentsHistoryPDF(
+  payments: any[],
+  agentMap: Record<string, { name?: string; code?: string } | undefined>,
+  filters: { agentName?: string; from?: string; to?: string },
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF() as any;
 
+  let paidIn = 0;
+  let paidOut = 0;
+  let voided = 0;
+  for (const p of payments) {
+    if (p.isVoided) {
+      voided += 1;
+      continue;
+    }
+    const amount = parseFloat(p.amount ?? "0") || 0;
+    if (p.transactionType === "pay_out") paidOut += amount;
+    else paidIn += amount;
+  }
+
+  const range =
+    filters.from || filters.to
+      ? `${filters.from || "the beginning"} to ${filters.to || "today"}`
+      : "All dates";
+
+  const startY = drawBrandHeader(
+    doc,
+    "Transaction History",
+    [
+      { label: "Report Ref", value: `TXN-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Filter Range", value: range },
+      { label: "Agent", value: filters.agentName || "All agents" },
+    ],
+    "Financial Summary",
+    [
+      `Total Paid In: ${fmt(paidIn)}`,
+      `Total Paid Out: ${fmt(paidOut)}`,
+      `Net Position: ${fmt(paidIn - paidOut)}`,
+      `Transactions Listed: ${payments.length}${voided > 0 ? ` (${voided} voided, excluded from totals)` : ""}`,
+    ],
+    logoImg,
+  );
+
+  const columns = [
+    { header: "Receipt", dataKey: "receipt" },
+    { header: "Date", dataKey: "date" },
+    { header: "Agent", dataKey: "agent" },
+    { header: "Type", dataKey: "type" },
+    { header: "Method", dataKey: "method" },
+    { header: "Amount", dataKey: "amount" },
+  ];
+
+  const body = payments.map((p) => ({
+    receipt: `${p.receiptNumber ?? "—"}${p.isVoided ? " (VOID)" : ""}`,
+    date: fmtDate(p.paymentDate),
+    agent: `${agentMap[p.agentId]?.name ?? "—"}${
+      agentMap[p.agentId]?.code ? ` (${agentMap[p.agentId]?.code})` : ""
+    }`,
+    type: p.transactionType === "pay_out" ? "Pay Out" : "Pay In",
+    method: p.paymentMethod ?? "—",
+    amount: fmt(p.amount),
+  }));
+
+  autoTable(doc, {
+    startY,
+    columns,
+    body,
+    theme: "grid",
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: [30, 58, 95], textColor: 255, fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [247, 248, 250] },
+    columnStyles: { amount: { halign: "right" } },
+    // Greyed and struck through, so a void never reads as money that moved.
+    didParseCell: (data: any) => {
+      if (data.section !== "body") return;
+      if (payments[data.row.index]?.isVoided) {
+        data.cell.styles.textColor = [150, 150, 150];
+        data.cell.styles.fontStyle = "italic";
+      }
+    },
+  });
+
+  doc.save(`transaction-history-${new Date().toISOString().slice(0, 10)}.pdf`);
+}

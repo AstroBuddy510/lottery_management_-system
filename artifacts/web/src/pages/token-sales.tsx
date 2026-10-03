@@ -97,7 +97,14 @@ const RANGES = [
   { key: "all", label: "All time", from: () => "", to: () => "" },
 ] as const;
 
-export function TokenSales() {
+/**
+ * The ledger itself, without page chrome.
+ *
+ * Lives apart from the route so the Payments page can host it as a tab beside
+ * E-Token Supply, where an administrator reading the supply chain wants it,
+ * without the two growing separate copies that drift.
+ */
+export function TokenSalesPanel({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const isCashier = user?.role === "cashier";
 
@@ -143,15 +150,24 @@ export function TokenSales() {
   const s = sales.data?.summary;
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">E-Token Transactions</h1>
-        <p className="text-muted-foreground text-sm">
+    <div className={embedded ? "space-y-6" : "p-6 space-y-6"}>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">E-Token Transactions</h1>
+          <p className="text-muted-foreground text-sm">
+            {isCashier
+              ? "Every unit that moved through your float — what you received from the company and what you issued to writers."
+              : "Every unit issued to a writer, across all cashiers. Mobile money does not credit a writer by itself, so this is the whole of unit sales."}
+          </p>
+        </div>
+      )}
+      {embedded && (
+        <p className="text-muted-foreground text-xs">
           {isCashier
             ? "Every unit that moved through your float — what you received from the company and what you issued to writers."
             : "Every unit issued to a writer, across all cashiers. Mobile money does not credit a writer by itself, so this is the whole of unit sales."}
         </p>
-      </div>
+      )}
 
       {/* ---- Totals, over the whole filtered set rather than the page ------ */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -356,6 +372,11 @@ export function TokenSales() {
       </Card>
     </div>
   );
+}
+
+/** The standalone route. Kept so existing links and bookmarks still resolve. */
+export function TokenSales() {
+  return <TokenSalesPanel />;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

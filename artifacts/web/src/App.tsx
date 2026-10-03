@@ -195,7 +195,7 @@ function Router() {
       </Route>
 
       <Route path="/payments">
-        {() => <ProtectedRoute component={Payments} roles={['cashier', 'administrator']} />}
+        {() => <ProtectedRoute component={Payments} roles={['cashier', 'administrator', 'director']} />}
       </Route>
 
       <Route path="/token-sales">
