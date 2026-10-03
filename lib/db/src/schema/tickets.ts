@@ -25,8 +25,16 @@ export const ticketsTable = pgTable("tickets", {
    * whatever slip they were printed on. The slip number only says they were
    * sold in one basket, so one itemised receipt can be produced. Null on a
    * single bet sold on its own.
+   *
+   * Deliberately NOT unique. It is a grouping key: every bet in one basket
+   * carries the same value. A unique constraint was briefly added here and
+   * would have rejected every slip of more than one bet - production had five
+   * such groups, all legitimate, each a single writer's basket. Two different
+   * baskets colliding on one number is the real risk, and the sequence behind
+   * next_slip_number() is what removes it; enforcing it as a constraint would
+   * need a slips table of its own.
    */
-  slipNumber: varchar("slip_number", { length: 30 }).unique(),
+  slipNumber: varchar("slip_number", { length: 30 }),
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
   gameId: uuid("game_id").notNull().references(() => gamesTable.id),
   betTypeId: uuid("bet_type_id").notNull().references(() => betTypesTable.id),

@@ -45,33 +45,22 @@ $fn$;
 --    number instead of a constraint violation.
 ALTER TABLE tickets ALTER COLUMN ticket_number SET DEFAULT next_ticket_number();
 
--- 4. Existing slip numbers used the same random scheme and had NO unique
---    constraint, so duplicates may already be in the table - two customers'
---    baskets silently sharing one receipt. Give every duplicate past the first
---    a distinct suffix before the constraint goes on, so the migration cannot
---    fail halfway and the older receipts stay traceable.
-WITH ranked AS (
-  SELECT id, slip_number,
-         row_number() OVER (PARTITION BY slip_number ORDER BY created_at, id) AS rn
-    FROM tickets
-   WHERE slip_number IS NOT NULL
-)
-UPDATE tickets t
-   SET slip_number = ranked.slip_number || '-D' || ranked.rn
-  FROM ranked
- WHERE t.id = ranked.id AND ranked.rn > 1;
+-- 4. NOTE: slip_number is deliberately NOT unique.
+--    It is a grouping key - every bet in one customer's basket carries the
+--    same slip number so a single itemised receipt can be printed. An earlier
+--    draft of this migration added UNIQUE (slip_number) and de-duplicated the
+--    "duplicates"; checking production first showed all five such groups were
+--    one writer each, i.e. ordinary multi-bet slips. That constraint would
+--    have rejected every basket of more than one bet, and the de-duplication
+--    would have broken their receipts. Deliberately not added.
+--
+--    Two different baskets colliding on one number is still the real risk, and
+--    the sequence above is what removes it. Enforcing that properly would need
+--    a slips table with its own primary key; it is not expressible as a
+--    constraint on tickets alone.
 
--- 5. A plain unique index, not a partial one: Postgres treats NULLs as
---    distinct, so single bets sold on their own (slip_number IS NULL) are all
---    still allowed. Plain also matches what the Drizzle schema declares, so
---    `drizzle-kit push` will not try to add a second, competing constraint.
-CREATE UNIQUE INDEX IF NOT EXISTS tickets_slip_number_unique
-    ON tickets (slip_number);
-
--- 6. Say what happened, so running this is not a silent act.
+-- 5. Say what happened, so running this is not a silent act.
 DO $$
-DECLARE renamed integer;
 BEGIN
-  SELECT count(*) INTO renamed FROM tickets WHERE slip_number ~ '-D[0-9]+$';
-  RAISE NOTICE 'Numbering ready. % slip number(s) carry a -D suffix from de-duplication.', renamed;
+  RAISE NOTICE 'Numbering ready: next_ticket_number() and next_slip_number() installed, tickets.ticket_number defaulted.';
 END $$;
