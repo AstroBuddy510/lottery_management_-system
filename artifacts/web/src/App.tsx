@@ -34,6 +34,7 @@ import { CompanyExpenses } from "@/pages/company-expenses";
 import { Inventory } from "@/pages/inventory";
 
 // Writer Pages
+import { TokenSales } from "@/pages/token-sales";
 import { WriterLogin } from "@/pages/writer-login";
 import { WriterRegister } from "@/pages/writer-register";
 import { WriterDashboard } from "@/pages/writer-dashboard";
@@ -195,6 +196,15 @@ function Router() {
 
       <Route path="/payments">
         {() => <ProtectedRoute component={Payments} roles={['cashier', 'administrator']} />}
+      </Route>
+
+      <Route path="/token-sales">
+        {() => (
+          <ProtectedRoute
+            component={TokenSales}
+            roles={['cashier', 'administrator', 'director']}
+          />
+        )}
       </Route>
 
       <Route path="/calculations">

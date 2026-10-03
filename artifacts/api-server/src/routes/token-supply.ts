@@ -8,6 +8,8 @@ import {
   usersTable,
   writersTable,
   writerTokenWalletsTable,
+  writerTokenPurchasesTable,
+  agentsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import { z } from "zod/v4";
@@ -344,6 +346,168 @@ router.get(
       poolTransactions: poolTxns,
       cashierTransactions: disbursements,
     });
+  },
+);
+
+/**
+ * E-token transaction history.
+ *
+ * Who sees what, and why:
+ *
+ *   A cashier sees only her own float. Her job is to account for what she was
+ *   given and what she issued, and a figure she cannot reconcile against her
+ *   own drawer is noise to her.
+ *
+ *   Administrators and directors see every cashier. That is the whole of unit
+ *   sales: the mobile-money webhook does not credit anyone by itself - it marks
+ *   the purchase paid and asks a cashier to issue the units - so every token
+ *   that ever reached a writer left some cashier's float. One table is
+ *   therefore the complete picture, and nothing double-counts.
+ *
+ * The payment method comes from the purchase the disbursement settled, so a
+ * cashier can tell at a glance which rows were cash she physically took and
+ * which were mobile money that had already landed.
+ */
+
+/** Half-open day window in Accra, the day the office would name. */
+const BUSINESS_TZ = "Africa/Accra";
+function isCalendarDate(v: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+}
+function dayFrom(date: string) {
+  return sql`${cashierTokenTransactionsTable.createdAt} >= ((${date})::date)::timestamp AT TIME ZONE ${BUSINESS_TZ}`;
+}
+function dayThrough(date: string) {
+  return sql`${cashierTokenTransactionsTable.createdAt} < (((${date})::date + 1)::timestamp AT TIME ZONE ${BUSINESS_TZ})`;
+}
+
+router.get(
+  "/tokens/sales",
+  requireAuth,
+  requireRole("cashier", "administrator", "director"),
+  async (req, res) => {
+    const q = (k: string) => (typeof req.query[k] === "string" ? (req.query[k] as string).trim() : "");
+    const from = q("from");
+    const to = q("to");
+    const writerId = q("writerId");
+    const agentId = q("agentId");
+    const requestedCashier = q("cashierId");
+    const limit = Math.min(Number(req.query["limit"]) || 200, 500);
+
+    for (const [name, value] of [["from", from], ["to", to]] as const) {
+      if (value && !isCalendarDate(value)) {
+        res.status(400).json({ error: `${name} must be a calendar date, as YYYY-MM-DD` });
+        return;
+      }
+    }
+
+    // A cashier is pinned to her own float whatever the query string says.
+    const ownFloatOnly = req.user!.role === "cashier";
+    const cashierId = ownFloatOnly ? req.user!.userId : requestedCashier;
+
+    const conditions = [
+      cashierId ? eq(cashierTokenTransactionsTable.cashierId, cashierId) : undefined,
+      writerId ? eq(cashierTokenTransactionsTable.writerId, writerId) : undefined,
+      agentId ? eq(writersTable.agentId, agentId) : undefined,
+      from ? dayFrom(from) : undefined,
+      to ? dayThrough(to) : undefined,
+    ].filter(Boolean);
+
+    const where = conditions.length ? and(...(conditions as never[])) : undefined;
+
+    const rows = await db
+      .select({
+        id: cashierTokenTransactionsTable.id,
+        transactionType: cashierTokenTransactionsTable.transactionType,
+        amount: cashierTokenTransactionsTable.amount,
+        balanceAfter: cashierTokenTransactionsTable.balanceAfter,
+        notes: cashierTokenTransactionsTable.notes,
+        createdAt: cashierTokenTransactionsTable.createdAt,
+        cashierId: cashierTokenTransactionsTable.cashierId,
+        cashierName: usersTable.fullName,
+        writerId: writersTable.id,
+        writerName: writersTable.fullName,
+        writerCode: writersTable.fullCode,
+        agentId: agentsTable.id,
+        agentCode: agentsTable.fullCode,
+        agencyName: agentsTable.agencyName,
+        paymentMethod: writerTokenPurchasesTable.paymentMethod,
+        paystackReference: writerTokenPurchasesTable.paystackReference,
+      })
+      .from(cashierTokenTransactionsTable)
+      .innerJoin(usersTable, eq(cashierTokenTransactionsTable.cashierId, usersTable.id))
+      .leftJoin(writersTable, eq(cashierTokenTransactionsTable.writerId, writersTable.id))
+      .leftJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+      .leftJoin(
+        writerTokenPurchasesTable,
+        eq(cashierTokenTransactionsTable.purchaseId, writerTokenPurchasesTable.id),
+      )
+      .where(where)
+      .orderBy(desc(cashierTokenTransactionsTable.createdAt))
+      .limit(limit);
+
+    // Totals are computed over the WHOLE filtered set, not the page, so the
+    // figures do not quietly change meaning when the list is truncated.
+    const [totals] = await db
+      .select({
+        issued: sql<string>`coalesce(sum(case when ${cashierTokenTransactionsTable.transactionType} = 'disbursement' then ${cashierTokenTransactionsTable.amount} else 0 end), 0)::text`,
+        received: sql<string>`coalesce(sum(case when ${cashierTokenTransactionsTable.transactionType} = 'receipt' then ${cashierTokenTransactionsTable.amount} else 0 end), 0)::text`,
+        reversed: sql<string>`coalesce(sum(case when ${cashierTokenTransactionsTable.transactionType} = 'reversal' then ${cashierTokenTransactionsTable.amount} else 0 end), 0)::text`,
+        movements: sql<number>`count(*)::int`,
+        writersServed: sql<number>`count(distinct ${cashierTokenTransactionsTable.writerId})::int`,
+      })
+      .from(cashierTokenTransactionsTable)
+      .leftJoin(writersTable, eq(cashierTokenTransactionsTable.writerId, writersTable.id))
+      .where(where);
+
+    res.json({
+      scope: ownFloatOnly ? "own-float" : "all-cashiers",
+      filters: { from: from || null, to: to || null, writerId: writerId || null, agentId: agentId || null, cashierId: cashierId || null },
+      summary: totals ?? { issued: "0", received: "0", reversed: "0", movements: 0, writersServed: 0 },
+      transactions: rows,
+      truncated: rows.length === limit,
+    });
+  },
+);
+
+/**
+ * The lists the filters are built from. Returned separately so the page can
+ * populate its dropdowns once rather than deriving them from whichever rows
+ * happen to be on screen - a writer with no transactions yet must still be
+ * selectable, otherwise "no results" is indistinguishable from "not an option".
+ */
+router.get(
+  "/tokens/sales/filters",
+  requireAuth,
+  requireRole("cashier", "administrator", "director"),
+  async (req, res) => {
+    const [agents, writers] = await Promise.all([
+      db
+        .select({ id: agentsTable.id, code: agentsTable.fullCode, name: agentsTable.agencyName })
+        .from(agentsTable)
+        .orderBy(agentsTable.fullCode),
+      db
+        .select({
+          id: writersTable.id,
+          code: writersTable.fullCode,
+          name: writersTable.fullName,
+          agentId: writersTable.agentId,
+        })
+        .from(writersTable)
+        .orderBy(writersTable.fullCode),
+    ]);
+
+    // Only staff who have actually moved tokens, so the list stays short.
+    const cashiers =
+      req.user!.role === "cashier"
+        ? []
+        : await db
+            .selectDistinct({ id: usersTable.id, name: usersTable.fullName })
+            .from(cashierTokenTransactionsTable)
+            .innerJoin(usersTable, eq(cashierTokenTransactionsTable.cashierId, usersTable.id))
+            .orderBy(usersTable.fullName);
+
+    res.json({ agents, writers, cashiers });
   },
 );
 
