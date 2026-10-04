@@ -35,6 +35,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AutoPostpaidSettings } from "@/components/auto-postpaid-settings";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { LayoutGrid, List } from "lucide-react";
@@ -428,6 +429,7 @@ export function Settings() {
       <Tabs defaultValue="rates">
         <TabsList className="mb-4 flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="rates">Commission Rates</TabsTrigger>
+          <TabsTrigger value="auto-postpaid">Auto Settlement</TabsTrigger>
           <TabsTrigger value="folders">Folder Settings</TabsTrigger>
           <TabsTrigger value="hours">Cashier Hours</TabsTrigger>
           <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
@@ -481,6 +483,11 @@ export function Settings() {
         </TabsContent>
 
         {/* ── Folder Settings ── */}
+        {/* ── Automated Postpaid Settlement ── */}
+        <TabsContent value="auto-postpaid" className="space-y-4">
+          <AutoPostpaidSettings />
+        </TabsContent>
+
         <TabsContent value="folders" className="space-y-4">
           <Card>
             <CardHeader className="pb-3">

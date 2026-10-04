@@ -1,4 +1,4 @@
-import { pgTable, uuid, decimal, timestamp, pgEnum, date, varchar, text } from "drizzle-orm/pg-core";
+import { pgTable, uuid, decimal, timestamp, pgEnum, date, varchar, text, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -53,6 +53,17 @@ export const postpaidDailyLedgerTable = pgTable("postpaid_daily_ledger", {
   amountPayable: decimal("amount_payable", { precision: 12, scale: 2 }).notNull().default("0"),
   /** When the figures above were locked in. */
   quotedAt: timestamp("quoted_at", { withTimezone: true }),
+  /**
+   * Running total actually collected against this ledger.
+   *
+   * Automated settlement collects mid-game and again at the end of the day, so
+   * a ledger can be part-paid while its bill is still growing. The manual flow
+   * never needed this - it was one payment, settled or not - so the column
+   * defaults to 0 and is simply ignored when the feature is off.
+   */
+  amountPaid: decimal("amount_paid", { precision: 12, scale: 2 }).notNull().default("0"),
+  /** Bitmask of which reminder lead times have already been sent. */
+  remindersSent: integer("reminders_sent").notNull().default(0),
   settlementStatus: postpaidSettlementStatusEnum("settlement_status").notNull().default("open"),
   settlementMethod: varchar("settlement_method", { length: 20 }),
   settlementReference: text("settlement_reference"),

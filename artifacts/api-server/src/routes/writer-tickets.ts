@@ -4,6 +4,7 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { recordTicketEvent } from "../lib/ticket-audit";
+import { gateForWriter, runSweepIfDue } from "./postpaid-auto";
 import {
   quote,
   validateSelection,
@@ -289,6 +290,31 @@ router.post("/tickets", requireAuth, requireRole("writer"), async (req, res) => 
     return;
   }
 
+  // Automated postpaid settlement. The terminal stops selling at the halfway
+  // point of a game whose takings have not been handed in, and the morning
+  // after a bill that was never paid. Enforced here rather than in the portal
+  // because the portal is the thing being locked out - a banner a writer can
+  // reload past is not a control.
+  //
+  // Off by default: when the feature is disabled the gate always allows, so
+  // this costs one settings read and nothing else changes.
+  const gate = await gateForWriter({ writerId, game });
+  if (!gate.allowed) {
+    res.status(423).json({
+      error:
+        gate.reason === "previous-day-unpaid"
+          ? "Settle yesterday's bill before selling again"
+          : "Settlement is due. Selling resumes once the bill is paid",
+      reason: gate.reason,
+      amountDue: gate.amountDue.toFixed(2),
+      owedFrom: gate.owedFrom,
+      lockedAt: gate.locksAt,
+    });
+    return;
+  }
+  // Live traffic is what drives reminders here; there is no scheduler.
+  runSweepIfDue();
+
   // 3. Validate bet type
   const [betType] = await db.select().from(betTypesTable).where(eq(betTypesTable.code, betTypeCode)).limit(1);
   if (!betType || !betType.isActive) {
@@ -356,6 +382,31 @@ router.post("/tickets/slip", requireAuth, requireRole("writer"), async (req, res
     res.status(400).json({ error: "Betting has closed for this game", closedAt: game.closeAt });
     return;
   }
+
+  // Automated postpaid settlement. The terminal stops selling at the halfway
+  // point of a game whose takings have not been handed in, and the morning
+  // after a bill that was never paid. Enforced here rather than in the portal
+  // because the portal is the thing being locked out - a banner a writer can
+  // reload past is not a control.
+  //
+  // Off by default: when the feature is disabled the gate always allows, so
+  // this costs one settings read and nothing else changes.
+  const gate = await gateForWriter({ writerId, game });
+  if (!gate.allowed) {
+    res.status(423).json({
+      error:
+        gate.reason === "previous-day-unpaid"
+          ? "Settle yesterday's bill before selling again"
+          : "Settlement is due. Selling resumes once the bill is paid",
+      reason: gate.reason,
+      amountDue: gate.amountDue.toFixed(2),
+      owedFrom: gate.owedFrom,
+      lockedAt: gate.locksAt,
+    });
+    return;
+  }
+  // Live traffic is what drives reminders here; there is no scheduler.
+  runSweepIfDue();
 
   const priced: PricedBet[] = [];
   for (let i = 0; i < bets.length; i++) {

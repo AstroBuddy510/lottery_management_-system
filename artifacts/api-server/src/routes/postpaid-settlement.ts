@@ -467,6 +467,17 @@ router.post(
       return;
     }
 
+    /**
+     * Confirming settles the ledger AND records the money against it.
+     *
+     * amountPaid is what the automated flow reads to decide whether a writer
+     * may keep selling, so a confirmation that marked the status without
+     * recording the amount would leave the terminal locked against a writer
+     * who had just paid. Marked up to the full payable rather than added to,
+     * because this endpoint settles a bill in full - part payments go through
+     * /postpaid/auto/pay.
+     */
+    const payable = Number(ledger.amountPayable);
     const [updated] = await db
       .update(postpaidDailyLedgerTable)
       .set({
@@ -475,6 +486,7 @@ router.post(
         settlementReference: reference,
         settledAt: new Date(),
         settledBy: req.user!.userId,
+        amountPaid: Math.max(payable, Number(ledger.amountPaid)).toFixed(2),
       })
       .where(eq(postpaidDailyLedgerTable.id, ledgerId))
       .returning();

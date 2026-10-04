@@ -7,6 +7,7 @@ import { TicketReceiptDialog } from "@/components/ticket-receipt";
 import { SlipReceiptDialog } from "@/components/slip-receipt";
 import { NumberKeypad } from "@/components/number-keypad";
 import { getServerNow } from "@/lib/time-sync";
+import { SettlementLockBanner, useSettlementGate, gateFor } from "@/components/settlement-lock";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,6 +156,16 @@ export function WriterPlaceBet() {
   const selectedGame = (games ?? []).find((g: any) => g.id === gameId);
   const bettingClosed = !!selectedGame && !isOpenForBets(selectedGame);
 
+  /**
+   * Automated postpaid settlement, when the administrator has it on.
+   *
+   * The server refuses the sale regardless; this is so the writer knows why
+   * before they have picked numbers and typed a stake, rather than after.
+   */
+  const { data: gateData } = useSettlementGate();
+  const gate = gateFor(gateData, gameId);
+  const settlementLocked = !!gate && !gate.allowed;
+
   // Clear a selection the moment its draw closes, so the form cannot be
   // submitted against a game that shut while the writer was picking numbers.
   useEffect(() => {
@@ -223,6 +234,11 @@ export function WriterPlaceBet() {
     if (wantsNumbers && picked.length === 0) return "Pick your numbers";
     if (!stakeAmount || !(parseFloat(stakeAmount) > 0)) return "Enter the stake per line";
     if (bettingClosed) return "Betting has closed for this game";
+    if (settlementLocked) {
+      return gate?.reason === "previous-day-unpaid"
+        ? "Settle yesterday's bill before selling"
+        : "Settlement is due — hand in this game's takings to resume";
+    }
     return null;
   };
 
@@ -311,6 +327,10 @@ export function WriterPlaceBet() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Place Bet</h1>
+
+      {/* The countdown, or the reason selling has stopped. Renders nothing
+          when automated settlement is off, which is the normal case. */}
+      <SettlementLockBanner gate={gate} />
       
       {user?.operationModel === "prepaid" && (
         <Card className="bg-primary/5 border-primary/20">

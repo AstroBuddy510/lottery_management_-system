@@ -23,6 +23,7 @@ export * from "./bet-types";
 export * from "./tickets";
 export * from "./game-results";
 export * from "./postpaid-ledger";
+export * from "./postpaid-auto";
 export * from "./risk-flags";
 export * from "./hedge-settings";
 export * from "./ticket-events";
