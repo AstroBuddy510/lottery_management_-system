@@ -381,7 +381,7 @@ router.post(
     const [settings] = await db
       .select({ pct: systemSettingsTable.writerCommissionPct })
       .from(systemSettingsTable)
-      .orderBy(desc(systemSettingsTable.effectiveDate))
+      .orderBy(desc(systemSettingsTable.updatedAt))
       .limit(1);
 
     let quote;
@@ -540,7 +540,7 @@ router.get(
     const [settings] = await db
       .select({ pct: systemSettingsTable.writerCommissionPct })
       .from(systemSettingsTable)
-      .orderBy(desc(systemSettingsTable.effectiveDate))
+      .orderBy(desc(systemSettingsTable.updatedAt))
       .limit(1);
 
     try {

@@ -64,11 +64,19 @@ export async function loadAutoConfig(): Promise<{
   };
 }
 
+/**
+ * The writer commission rate in force.
+ *
+ * Ordered by updatedAt, matching every other rate lookup in this codebase.
+ * effectiveDate is not unique - production carries ten settings rows all dated
+ * the same day - so ordering by it returns an arbitrary row, which is exactly
+ * how writers came to be credited at 0% while the office had set 30%.
+ */
 async function liveCommissionPct(): Promise<number> {
   const [s] = await db
     .select({ pct: systemSettingsTable.writerCommissionPct })
     .from(systemSettingsTable)
-    .orderBy(desc(systemSettingsTable.effectiveDate))
+    .orderBy(desc(systemSettingsTable.updatedAt))
     .limit(1);
   return Number(s?.pct ?? 0);
 }
