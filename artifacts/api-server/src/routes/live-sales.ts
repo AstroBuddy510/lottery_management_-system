@@ -215,4 +215,93 @@ router.get("/live-sales/agents/:agentId/writers", requireAuth, async (req, res) 
   res.json(rows);
 });
 
+/**
+ * One day's real sales, for whoever is asking.
+ *
+ * The agent dashboard used to read its "Gross Sales" from the gross_entries
+ * table, which is a figure somebody types in after the fact - so it showed
+ * nothing until it was declared, and then showed whatever was declared rather
+ * than what was sold. This counts tickets.
+ *
+ * Scoped by day rather than by game, because an agent asking "what have we
+ * sold today" means across every draw, and a ticket belongs to the day it was
+ * sold on. The day is an Accra day, half-open, matching the rest of the system.
+ *
+ * One query rather than one per game: the dashboard polls this, and the audit
+ * of this codebase already found polling to be its heaviest load.
+ */
+router.get("/live-sales/day", requireAuth, async (req, res) => {
+  const raw = typeof req.query["date"] === "string" ? req.query["date"].trim() : "";
+  const date =
+    raw ||
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Accra",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+    res.status(400).json({ error: "date must be a calendar date, as YYYY-MM-DD" });
+    return;
+  }
+
+  const role = req.user!.role;
+  let writerIds: string[] | null = null; // null = everybody (director/admin)
+
+  if (role === "writer") {
+    writerIds = [req.user!.userId];
+  } else if (role === "agent") {
+    const [myAgent] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, req.user!.userId))
+      .limit(1);
+    if (!myAgent) {
+      res.json({ date, scope: "agent", totals: ZERO, byGame: [] });
+      return;
+    }
+    const mine = await db
+      .select({ id: writersTable.id })
+      .from(writersTable)
+      .where(eq(writersTable.agentId, myAgent.id));
+    writerIds = mine.map((w) => w.id);
+  }
+
+  if (writerIds !== null && writerIds.length === 0) {
+    res.json({ date, scope: role, totals: ZERO, byGame: [] });
+    return;
+  }
+
+  const dayWindow = and(
+    sql`${ticketsTable.createdAt} >= ((${date})::date)::timestamp AT TIME ZONE 'Africa/Accra'`,
+    sql`${ticketsTable.createdAt} < (((${date})::date + 1)::timestamp AT TIME ZONE 'Africa/Accra')`,
+  );
+  // Voided and cancelled tickets took no money, so they are not sales.
+  const sellable = sql`${ticketsTable.status} not in ('void', 'cancelled')`;
+
+  const scopeFilter =
+    writerIds === null
+      ? and(dayWindow, sellable)
+      : and(dayWindow, sellable, inArray(ticketsTable.writerId, writerIds));
+
+  const [totals] = await db.select(totalsSelection).from(ticketsTable).where(scopeFilter);
+
+  const byGame = await db
+    .select({
+      gameId: gamesTable.id,
+      gameName: gamesTable.name,
+      eventNumber: gamesTable.eventNumber,
+      status: gamesTable.status,
+      ...totalsSelection,
+    })
+    .from(ticketsTable)
+    .innerJoin(gamesTable, eq(ticketsTable.gameId, gamesTable.id))
+    .where(scopeFilter)
+    .groupBy(gamesTable.id, gamesTable.name, gamesTable.eventNumber, gamesTable.status)
+    .orderBy(sql`sum(${ticketsTable.stakeAmount}) desc`);
+
+  res.json({ date, scope: role, totals: totals ?? ZERO, byGame });
+});
+
 export default router;

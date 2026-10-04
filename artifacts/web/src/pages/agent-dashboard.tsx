@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { getServerNow } from "../lib/time-sync";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import {
   useGetMyAgent, getGetMyAgentQueryKey,
@@ -201,7 +201,37 @@ export function AgentDashboard() {
   const grossList = Array.isArray(grossEntries) ? grossEntries : [];
   const winsList = Array.isArray(winsEntries) ? winsEntries : [];
 
-  const todayGross = useMemo(() => {
+  /**
+   * Gross sales as they actually happen.
+   *
+   * This card used to read gross_entries - a figure somebody types in after the
+   * fact - so it showed nothing until it was declared, and then showed whatever
+   * was declared rather than what was sold. It now counts tickets, scoped by
+   * the server to this agent's own writers, refreshed on the same 15 second
+   * cadence the rest of the live screens use.
+   */
+  const { data: liveDay } = useQuery<{
+    date: string;
+    totals: { ticketCount: number; totalStakes: string; winningTickets: number; totalWins: string };
+    byGame: { gameId: string; gameName: string; ticketCount: number; totalStakes: string }[];
+  }>({
+    queryKey: ["/api/live-sales/day", selectedDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/live-sales/day?date=${selectedDate}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.ok) throw new Error("Could not load live sales");
+      return res.json();
+    },
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const liveGross = Number(liveDay?.totals.totalStakes ?? 0);
+  const liveTickets = liveDay?.totals.ticketCount ?? 0;
+
+  /** What was declared through gross entries, kept for the comparison below. */
+  const declaredGross = useMemo(() => {
     const liveGameIds = new Set(liveGames.map(g => g.id));
     return grossList
       .filter(e => e.gameId && liveGameIds.has(e.gameId))
@@ -436,13 +466,33 @@ export function AgentDashboard() {
                   <IconGross />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-gray-800">Gross Sales</div>
-                  <div className="text-[11px] text-gray-400">{grossList.length === 1 ? "1 entry" : `${grossList.length} entries`} today</div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="text-sm font-semibold text-gray-800">Gross Sales</div>
+                    {/* Says where the number comes from. Without it, a figure
+                        that disagrees with the declared entry just looks wrong. */}
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Live
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-400">
+                    {liveTickets === 1 ? "1 ticket" : `${liveTickets} tickets`} sold today
+                  </div>
+                  {/* The declared figure, shown only when it disagrees. That gap
+                      is the reconciliation question an agent most needs to see. */}
+                  {declaredGross > 0 && Math.abs(declaredGross - liveGross) >= 0.01 && (
+                    <div className="text-[10px] text-amber-600 mt-0.5 font-medium">
+                      Declared GH₵{declaredGross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {" · "}
+                      {declaredGross > liveGross ? "over" : "under"} by GH₵
+                      {Math.abs(declaredGross - liveGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="text-base font-black text-gray-900 font-mono">
                 <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                {todayGross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {liveGross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
 
