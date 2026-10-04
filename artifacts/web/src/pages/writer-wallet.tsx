@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
-import { Plus, Loader2, Info, Banknote, Smartphone } from "lucide-react";
+import { Banknote, ChevronRight, Info, Loader2, Plus, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 
@@ -202,6 +202,190 @@ function BuyUnitDialog({ open, onClose }: { open: boolean; onClose: () => void }
   );
 }
 
+
+/**
+ * Recent Transactions, grouped by the day they happened.
+ *
+ * A writer's list grows by a dozen rows a day and is read on a phone, so a flat
+ * list becomes unusable within a week. Grouping by day gives the history a
+ * shape that matches how a writer thinks about it - "what did I do today",
+ * "what came in yesterday" - and collapsing the older days keeps the screen
+ * about the present.
+ *
+ * Days are Accra days, matching the rest of the system, so a sale at 23:30
+ * belongs to the day the writer would name rather than whatever the handset's
+ * timezone makes of it.
+ */
+const WALLET_TZ = "Africa/Accra";
+
+function accraDayKey(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: WALLET_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
+function dayLabel(key: string): string {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: WALLET_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  if (key === today) return "Today";
+
+  const yesterday = new Date(`${today}T12:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  if (key === yesterday.toISOString().slice(0, 10)) return "Yesterday";
+
+  // Noon avoids the parsed date sliding to the previous day in any timezone.
+  const d = new Date(`${key}T12:00:00Z`);
+  const thisYear = new Date().getUTCFullYear();
+  return format(d, d.getUTCFullYear() === thisYear ? "EEEE, d MMM" : "d MMM yyyy");
+}
+
+interface DayGroup {
+  key: string;
+  label: string;
+  rows: any[];
+  net: number;
+}
+
+function groupByDay(transactions: any[]): DayGroup[] {
+  const order: string[] = [];
+  const byKey = new Map<string, any[]>();
+  // The API already returns newest first; preserving that order means the
+  // groups come out newest first too, without a second sort.
+  for (const tx of transactions) {
+    const key = accraDayKey(tx.createdAt);
+    if (!byKey.has(key)) {
+      byKey.set(key, []);
+      order.push(key);
+    }
+    byKey.get(key)!.push(tx);
+  }
+  return order.map((key) => {
+    const rows = byKey.get(key)!;
+    return {
+      key,
+      label: dayLabel(key),
+      rows,
+      net: rows.reduce((sum, r) => sum + Number(r.amount ?? 0), 0),
+    };
+  });
+}
+
+function TransactionRow({ tx }: { tx: any }) {
+  const positive = Number(tx.amount) > 0;
+  return (
+    <li className="py-2.5 flex items-start gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="outline" className="capitalize text-[10px] px-1.5 py-0 h-5">
+            {tx.transactionType.replace(/_/g, " ")}
+          </Badge>
+          {/* Only the time: the day is the heading this row sits under. */}
+          <span className="text-[10px] text-muted-foreground/70 tabular-nums">
+            {format(new Date(tx.createdAt), "h:mm a")}
+          </span>
+        </div>
+        <div className="text-[11px] text-muted-foreground mt-0.5 break-words">{tx.description}</div>
+      </div>
+      <div className="text-right shrink-0">
+        <div
+          className={`text-sm font-bold tabular-nums ${positive ? "text-emerald-600" : "text-destructive"}`}
+        >
+          {positive ? "+" : ""}
+          {fmtGHS(tx.amount)}
+        </div>
+        <div className="text-[10px] text-muted-foreground tabular-nums">
+          bal {fmtGHS(tx.balanceAfter)}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function DaySection({ group, open, onToggle }: { group: DayGroup; open: boolean; onToggle: () => void }) {
+  const panelId = `wallet-day-${group.key}`;
+  return (
+    <div className="border-b border-border/60 last:border-b-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex w-full items-center gap-2.5 py-3 text-left transition-colors hover:bg-muted/40"
+      >
+        <ChevronRight
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-90" : ""}`}
+        />
+        <span className="text-sm font-semibold">{group.label}</span>
+        <span className="text-[11px] text-muted-foreground">
+          {group.rows.length} {group.rows.length === 1 ? "entry" : "entries"}
+        </span>
+        <span
+          className={`ml-auto text-xs font-bold tabular-nums ${
+            group.net > 0 ? "text-emerald-600" : group.net < 0 ? "text-destructive" : "text-muted-foreground"
+          }`}
+        >
+          {group.net > 0 ? "+" : ""}
+          {fmtGHS(group.net)}
+        </span>
+      </button>
+
+      {open && (
+        <ul id={panelId} className="divide-y divide-border/40 pb-1 pl-6">
+          {group.rows.map((tx: any) => (
+            <TransactionRow key={tx.id} tx={tx} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function TransactionAccordion({ transactions }: { transactions: any[] }) {
+  const groups = useMemo(() => groupByDay(transactions), [transactions]);
+
+  /**
+   * Only the newest day opens. Tracking the OPEN set rather than the closed one
+   * means a day that arrives later - a sale made while the page is open - does
+   * not spring open on its own and push the rest down under the writer's thumb.
+   */
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() =>
+    groups.length > 0 ? new Set([groups[0]!.key]) : new Set(),
+  );
+
+  // A writer who leaves the page open overnight should still find today open.
+  const firstKey = groups[0]?.key;
+  const seeded = useRef<string | undefined>(firstKey);
+  useEffect(() => {
+    if (firstKey && seeded.current === undefined) {
+      seeded.current = firstKey;
+      setOpenKeys(new Set([firstKey]));
+    }
+  }, [firstKey]);
+
+  const toggle = (key: string) =>
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  return (
+    <div>
+      {groups.map((g) => (
+        <DaySection key={g.key} group={g} open={openKeys.has(g.key)} onToggle={() => toggle(g.key)} />
+      ))}
+    </div>
+  );
+}
+
 export function WriterWallet() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -369,31 +553,7 @@ export function WriterWallet() {
               ) : !transactions?.length ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">No transactions yet.</p>
               ) : (
-                <ul className="divide-y divide-border/60">
-                  {transactions.map((tx: any) => (
-                    <li key={tx.id} className="py-2.5 flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="capitalize text-[10px] px-1.5 py-0 h-5">
-                            {tx.transactionType.replace(/_/g, " ")}
-                          </Badge>
-                        </div>
-                        <div className="text-[11px] text-muted-foreground mt-0.5 break-words">{tx.description}</div>
-                        <div className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          {format(new Date(tx.createdAt), "d MMM yyyy · h:mm a")}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className={`text-sm font-bold tabular-nums ${Number(tx.amount) > 0 ? "text-emerald-600" : "text-destructive"}`}>
-                          {Number(tx.amount) > 0 ? "+" : ""}{fmtGHS(tx.amount)}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground tabular-nums">
-                          bal {fmtGHS(tx.balanceAfter)}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <TransactionAccordion transactions={transactions} />
               )}
             </CardContent>
           </Card>
