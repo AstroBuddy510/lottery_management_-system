@@ -73,6 +73,8 @@ export async function sendWhatsAppTemplate(opts: {
   template: string;
   language?: string;
   variables?: string[];
+  /** Media id for a template whose header is an image. */
+  imageMediaId?: string;
 }): Promise<WhatsAppResult> {
   if (!whatsappConfigured()) {
     logger.info({ to: opts.to, template: opts.template }, "[WHATSAPP SKIPPED] not configured");
@@ -92,16 +94,22 @@ export async function sendWhatsAppTemplate(opts: {
     template: {
       name: opts.template,
       language: { code: opts.language ?? "en" },
-      ...(opts.variables && opts.variables.length > 0
-        ? {
-            components: [
-              {
-                type: "body",
-                parameters: opts.variables.map((text) => ({ type: "text", text })),
-              },
-            ],
-          }
-        : {}),
+      ...(() => {
+        const components: unknown[] = [];
+        if (opts.imageMediaId) {
+          components.push({
+            type: "header",
+            parameters: [{ type: "image", image: { id: opts.imageMediaId } }],
+          });
+        }
+        if (opts.variables && opts.variables.length > 0) {
+          components.push({
+            type: "body",
+            parameters: opts.variables.map((text) => ({ type: "text", text })),
+          });
+        }
+        return components.length > 0 ? { components } : {};
+      })(),
     },
   };
 
@@ -134,6 +142,64 @@ export async function sendWhatsAppTemplate(opts: {
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     logger.error({ to, error }, "[WHATSAPP ERROR]");
+    return { success: false, error };
+  }
+}
+
+/** WhatsApp rejects images over 5MB. A receipt slip is nowhere near it, but a
+ *  bad capture should fail here with a clear reason rather than at Meta. */
+export const MAX_MEDIA_BYTES = 5 * 1024 * 1024;
+
+export interface MediaResult {
+  success: boolean;
+  mediaId?: string;
+  error?: string;
+}
+
+/**
+ * Upload an image and get a media id back.
+ *
+ * Needed because a template's image header takes either a public URL or a
+ * media id, and a ticket must not be reachable at a public URL: ticket numbers
+ * are sequential, so anyone could walk the series and read other people's
+ * slips. Uploading keeps the image inside Meta's media store, reachable only
+ * by the message it is attached to.
+ *
+ * Meta keeps uploaded media for 30 days, which is far longer than a draw.
+ */
+export async function uploadWhatsAppMedia(
+  bytes: Buffer,
+  mimeType = "image/png",
+): Promise<MediaResult> {
+  if (!whatsappConfigured()) return { success: false, error: "not-configured" };
+  if (bytes.byteLength > MAX_MEDIA_BYTES) {
+    return { success: false, error: "Image is too large for WhatsApp (5MB limit)" };
+  }
+
+  try {
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", mimeType);
+    form.append("file", new Blob([new Uint8Array(bytes)], { type: mimeType }), "ticket.png");
+
+    const res = await fetch(`${GRAPH}/${apiVersion()}/${phoneNumberId()}/media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token()}` },
+      body: form,
+    });
+    const payload = (await res.json().catch(() => ({}))) as {
+      id?: string;
+      error?: { message?: string };
+    };
+    if (!res.ok || !payload.id) {
+      const error = payload.error?.message ?? `HTTP ${res.status}`;
+      logger.error({ error }, "[WHATSAPP MEDIA FAILED]");
+      return { success: false, error };
+    }
+    return { success: true, mediaId: payload.id };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    logger.error({ error }, "[WHATSAPP MEDIA ERROR]");
     return { success: false, error };
   }
 }

@@ -10,7 +10,14 @@ import {
 } from "@workspace/db";
 import { eq, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { recordTicketEventSafe } from "../lib/ticket-audit";
+import { z } from "zod/v4";
+import { logger } from "../lib/logger";
+import {
+  sendWhatsAppTemplate,
+  uploadWhatsAppMedia,
+  whatsappConfigured,
+  toWhatsAppNumber,
+} from "../lib/whatsapp-gateway";
 import {
   buildReceiptText,
   buildSmsText,
@@ -24,6 +31,8 @@ import {
   TICKET_VALIDITY_DAYS,
   type ReceiptData,
 } from "../lib/receipt";
+import QRCode from "qrcode";
+import { recordTicketEventSafe } from "../lib/ticket-audit";
 import { winningPicks, parseNumberList, type Mechanic } from "../lib/bet-engine";
 
 const router = Router();
@@ -361,6 +370,112 @@ router.get("/tickets/:ticketId/receipt", requireAuth, async (req, res) => {
     return;
   }
   res.json(receiptResponse(row));
+});
+
+/* ------------------------------------------------------- send to customer */
+
+const sendSchema = z.object({
+  phone: z.string().min(7).max(20),
+});
+
+/**
+ * Send a ticket to the customer over WhatsApp.
+ *
+ * Two platform rules shape this, and neither is optional:
+ *
+ * A business cannot message someone who has not messaged it in the last 24
+ * hours, except with a pre-approved TEMPLATE. A lottery customer has never
+ * messaged the company, so this always sends a template. The template, its
+ * image header and its variables are created and approved in the Meta Business
+ * account - not here - and named by WHATSAPP_TICKET_TEMPLATE.
+ *
+ * A template's image header takes a public URL or an uploaded media id. A
+ * public URL is not an option: ticket numbers are sequential, so a predictable
+ * image address would let anyone walk the series and read other people's
+ * slips. The image is therefore uploaded to Meta's media store, where only the
+ * message that carries it can reach it.
+ *
+ * The QR image is rendered HERE, not uploaded from the writer's screen. The
+ * screen has the prettier picture, but accepting image bytes from a client
+ * would mean the company's own WhatsApp number will send out whatever a
+ * writer hands it - to any phone number they type. The payload comes from
+ * buildQrPayload, the same call the slip on screen uses, so the code the
+ * customer scans verifies identically.
+ */
+router.post("/tickets/:ticketId/whatsapp", requireAuth, async (req, res) => {
+  if (!whatsappConfigured()) {
+    res.status(503).json({
+      error:
+        "WhatsApp is not connected yet. An administrator needs to add the WhatsApp credentials.",
+    });
+    return;
+  }
+
+  const parse = sendSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: "Enter the customer's phone number", details: parse.error.issues });
+    return;
+  }
+
+  const to = toWhatsAppNumber(parse.data.phone);
+  if (!to) {
+    res.status(400).json({ error: "That phone number does not look right" });
+    return;
+  }
+
+  const row = await loadTicket(req.params["ticketId"] as string);
+  if (!row) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+  // Same visibility rule as reading the receipt: a writer may only send their
+  // own tickets, and the 404 does not disclose that the ticket exists.
+  if (!(await mayView(req.user!.role, req.user!.userId, row))) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+
+  const payload = receiptResponse(row);
+  const qrPng = await QRCode.toBuffer(payload.qrPayload, {
+    type: "png",
+    // Printed small on a phone and often re-photographed from the screen, so
+    // the extra pixels and the quiet zone are what keep it scannable.
+    width: 512,
+    margin: 2,
+    errorCorrectionLevel: "M",
+  });
+
+  const upload = await uploadWhatsAppMedia(qrPng, "image/png");
+  if (!upload.success || !upload.mediaId) {
+    logger.error({ ticketId: row.ticket.id, error: upload.error }, "[TICKET WHATSAPP] upload failed");
+    res.status(502).json({ error: upload.error ?? "Could not upload the ticket image" });
+    return;
+  }
+
+  const sent = await sendWhatsAppTemplate({
+    to,
+    template: process.env["WHATSAPP_TICKET_TEMPLATE"] ?? "ticket_receipt",
+    imageMediaId: upload.mediaId,
+    variables: [
+      row.ticket.ticketNumber,
+      row.game.name,
+      row.ticket.numbers,
+      Number(row.ticket.stakeAmount).toFixed(2),
+    ],
+  });
+
+  if (!sent.success) {
+    logger.error({ ticketId: row.ticket.id, error: sent.error }, "[TICKET WHATSAPP] send failed");
+    res.status(502).json({ error: sent.error ?? "WhatsApp did not accept the message" });
+    return;
+  }
+
+  // Deliberately not a ticket_event: the enum has no "shared" value, and
+  // adding one would mean a migration and a new case for the anomaly rules to
+  // reason about - too much weight for an audit nicety. The structured log
+  // line below carries the same facts.
+  logger.info({ ticketId: row.ticket.id, messageId: sent.messageId }, "[TICKET WHATSAPP] sent");
+  res.json({ sent: true, to, messageId: sent.messageId ?? null });
 });
 
 export default router;
