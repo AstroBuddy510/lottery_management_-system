@@ -31,10 +31,35 @@ async function getJson<T>(url: string): Promise<T> {
  * the cashier confirming receipt IS the confirmation. Either way a cashier
  * issues the units from their float, so the audit trail is the same.
  */
+/**
+ * What a payment buys, asked of the server as the writer types.
+ *
+ * The uplift is the writer's own commission, built into the units rather than
+ * paid back later, so the figure must be visible before they commit - finding
+ * out afterwards that 100 became 142.86 is a pleasant surprise once and a
+ * support call every time the rate changes.
+ */
+function useUnitQuote(amount: string) {
+  const value = Number(amount);
+  return useQuery<{ paid: string; commissionPct: number; units: string; commissionValue: string }>({
+    queryKey: ["/api/writer-tokens/quote", value],
+    queryFn: async () => {
+      const res = await fetch(`/api/writer-tokens/quote?amount=${value}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.ok) throw new Error("quote failed");
+      return res.json();
+    },
+    enabled: Number.isFinite(value) && value > 0,
+    staleTime: 60_000,
+  });
+}
+
 function BuyUnitDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [amount, setAmount] = useState("");
+  const quote = useUnitQuote(amount);
   const [method, setMethod] = useState<"momo" | "cash">("momo");
 
   const buy = useMutation({
@@ -124,6 +149,24 @@ function BuyUnitDialog({ open, onClose }: { open: boolean; onClose: () => void }
               className="h-12 text-lg font-bold tabular-nums"
             />
           </div>
+
+          {/* What this payment actually credits. */}
+          {quote.data && Number(quote.data.commissionValue) > 0 && (
+            <div className="rounded-xl border border-emerald-300/60 bg-emerald-50 p-3 dark:border-emerald-500/40 dark:bg-emerald-950/30">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">
+                  You will receive
+                </span>
+                <span className="font-mono text-xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                  {fmtGHS(quote.data.units)}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-emerald-800/90 dark:text-emerald-200/80">
+                {fmtGHS(quote.data.paid)} paid plus {fmtGHS(quote.data.commissionValue)} of your{" "}
+                {(quote.data.commissionPct * 100).toFixed(0)}% commission, included up front.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-4 gap-2">
             {[20, 50, 100, 200].map((v) => (

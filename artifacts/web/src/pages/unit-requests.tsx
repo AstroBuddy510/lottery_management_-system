@@ -76,6 +76,25 @@ export function UnitRequests() {
 
   const list = requests ?? [];
   const total = list.reduce((s, r) => s + Number(r.amount), 0);
+
+  /**
+   * Units are the cash grossed up by the writer's commission, and the float is
+   * debited by the UNITS. A cashier looking at a GH₵100 request needs to know
+   * it will take 142.86 off her float, or she will top up for the wrong figure.
+   */
+  const { data: rate } = useQuery<{ commissionPct: number; units: string }>({
+    queryKey: ["/api/writer-tokens/quote", 100],
+    queryFn: async () => {
+      const res = await fetch("/api/writer-tokens/quote?amount=100", { headers: authHeaders() });
+      if (!res.ok) throw new Error("rate unavailable");
+      return res.json();
+    },
+    staleTime: 300_000,
+  });
+  const pct = rate?.commissionPct ?? 0;
+  const unitsFor = (cash: string | number) =>
+    pct > 0 && pct < 1 ? Number(cash) / (1 - pct) : Number(cash);
+  const totalUnits = list.reduce((s, r) => s + unitsFor(r.amount), 0);
   const floatBalance = Number(float?.wallet?.balance ?? 0);
   const short = floatBalance < total;
 
@@ -104,6 +123,11 @@ export function UnitRequests() {
             <div className="text-right">
               <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Awaiting</div>
               <div className="text-lg font-bold tabular-nums">{fmtGHS(total)}</div>
+              {pct > 0 && (
+                <div className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+                  {fmtGHS(totalUnits)} of float needed
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -169,7 +193,14 @@ export function UnitRequests() {
                         </>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-bold tabular-nums">{fmtGHS(r.amount)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <div className="font-bold">{fmtGHS(r.amount)}</div>
+                      {pct > 0 && (
+                        <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                          issues {fmtGHS(unitsFor(r.amount))}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         size="sm"
@@ -179,7 +210,9 @@ export function UnitRequests() {
                           if (
                             r.paymentMethod === "cash" &&
                             !confirm(
-                              `Have you received ${fmtGHS(r.amount)} in cash from ${r.writerName}?\n\nCrediting issues the units from your float and cannot be undone.`,
+                              pct > 0
+                                ? `Have you received ${fmtGHS(r.amount)} in cash from ${r.writerName}?\n\nThis credits ${fmtGHS(unitsFor(r.amount))} of units — the payment plus ${(pct * 100).toFixed(0)}% commission — and that full amount leaves your float. It cannot be undone.`
+                                : `Have you received ${fmtGHS(r.amount)} in cash from ${r.writerName}?\n\nCrediting issues the units from your float and cannot be undone.`,
                             )
                           ) {
                             return;

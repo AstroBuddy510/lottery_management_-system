@@ -77,6 +77,18 @@ export const writerTokenPurchasesTable = pgTable("writer_token_purchases", {
    * cashier action either way.
    */
   paymentMethod: varchar("payment_method", { length: 10 }).notNull().default("momo"),
+  /**
+   * Units actually credited, which is the cash grossed up by the writer's
+   * commission: paid / (1 - rate). `amount` stays the money that changed
+   * hands, so a receipt and a bank reconciliation still agree.
+   */
+  creditedUnits: decimal("credited_units", { precision: 12, scale: 2 }),
+  /**
+   * The rate used, frozen at the moment of crediting. Same reason the
+   * settlement ledger freezes its own: an administrator editing the rate next
+   * month must not restate what a writer was already given.
+   */
+  commissionPct: decimal("commission_pct", { precision: 5, scale: 4 }),
   status: tokenPurchaseStatusEnum("status").notNull().default("pending"),
   // Paystack's transaction reference, unique so a webhook replay cannot
   // create or credit the same purchase twice.

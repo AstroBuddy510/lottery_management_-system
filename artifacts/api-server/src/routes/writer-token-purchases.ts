@@ -8,12 +8,14 @@ import {
   cashierTokenWalletsTable,
   cashierTokenTransactionsTable,
   usersTable,
+  systemSettingsTable,
 } from "@workspace/db";
 import { eq, and, or, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { dispatchSystemNotification } from "../lib/notify";
 import { paystackConfigured, paystackSecret, verifyWebhook, verifyCharge } from "../lib/paystack";
+import { quoteUnits } from "../lib/unit-pricing";
 
 const router = Router();
 
@@ -362,6 +364,44 @@ router.post(
 
     const amount = Number(claimed.amount);
 
+    /**
+     * Commission-inclusive units.
+     *
+     * The writer's commission is built into what they receive rather than paid
+     * back afterwards, so the cash is grossed up: paid / (1 - rate). At 30%,
+     * GH₵100 buys 142.86 units, and selling all of them remits exactly the
+     * 100 that was handed over.
+     *
+     * The float is debited by the UNITS, not the cash. Units are selling power
+     * and the schema is explicit that nothing creates them except a pool mint -
+     * crediting a writer more than the float gives up would break the
+     * reconciliation the whole supply chain exists to provide. The practical
+     * consequence is that a cashier needs more float than cash collected.
+     */
+    const [settings] = await db
+      .select({ pct: systemSettingsTable.writerCommissionPct })
+      .from(systemSettingsTable)
+      .orderBy(desc(systemSettingsTable.effectiveDate))
+      .limit(1);
+
+    let quote;
+    try {
+      quote = quoteUnits(amount, Number(settings?.pct ?? 0));
+    } catch {
+      // Put the request back: a misconfigured rate is the office's problem to
+      // fix, not a reason to strand a writer's paid request in limbo.
+      await db
+        .update(writerTokenPurchasesTable)
+        .set({ status: claimed.status })
+        .where(eq(writerTokenPurchasesTable.id, purchaseId));
+      res.status(409).json({
+        error:
+          "Writer commission rate is not usable (it must be under 95%). Fix it in Settings → Commission Rates, then credit this request.",
+      });
+      return;
+    }
+    const units = quote.units;
+
     // Units are disbursed from this cashier's float, not created here. If the
     // float cannot cover it the whole credit is rolled back, including the
     // status claim above, so the request stays available to whoever recharges.
@@ -374,25 +414,25 @@ router.post(
           .limit(1);
 
         const floatBalance = float ? Number(float.balance) : 0;
-        if (floatBalance < amount) {
+        if (floatBalance < units) {
           throw new Error(
-            `Your float holds ${floatBalance.toFixed(2)} but this request needs ${amount.toFixed(2)}. Ask an administrator to recharge you.`,
+            `Your float holds ${floatBalance.toFixed(2)} but this request needs ${units.toFixed(2)} units (GH₵${amount.toFixed(2)} paid plus ${(quote.commissionPct * 100).toFixed(0)}% commission). Ask an administrator to recharge you.`,
           );
         }
 
-        const newFloat = floatBalance - amount;
+        const newFloat = floatBalance - units;
         await tx
           .update(cashierTokenWalletsTable)
           .set({
             balance: newFloat.toFixed(2),
-            totalDisbursed: (Number(float!.totalDisbursed) + amount).toFixed(2),
+            totalDisbursed: (Number(float!.totalDisbursed) + units).toFixed(2),
           })
           .where(eq(cashierTokenWalletsTable.cashierId, req.user!.userId));
 
         await tx.insert(cashierTokenTransactionsTable).values({
           cashierId: req.user!.userId,
           transactionType: "disbursement",
-          amount: amount.toFixed(2),
+          amount: units.toFixed(2),
           balanceAfter: newFloat.toFixed(2),
           writerId: claimed.writerId,
           purchaseId: claimed.id,
@@ -408,20 +448,20 @@ router.post(
 
         let newBalance: number;
         if (wallet) {
-          newBalance = Number(wallet.balance) + amount;
+          newBalance = Number(wallet.balance) + units;
           await tx
             .update(writerTokenWalletsTable)
             .set({
               balance: newBalance.toFixed(2),
-              totalPurchased: (Number(wallet.totalPurchased) + amount).toFixed(2),
+              totalPurchased: (Number(wallet.totalPurchased) + units).toFixed(2),
             })
             .where(eq(writerTokenWalletsTable.writerId, claimed.writerId));
         } else {
-          newBalance = amount;
+          newBalance = units;
           await tx.insert(writerTokenWalletsTable).values({
             writerId: claimed.writerId,
             balance: newBalance.toFixed(2),
-            totalPurchased: amount.toFixed(2),
+            totalPurchased: units.toFixed(2),
           });
         }
 
@@ -430,24 +470,42 @@ router.post(
           .values({
             writerId: claimed.writerId,
             transactionType: "purchase",
-            amount: amount.toFixed(2),
+            // The units, because that is what the balance actually moved by.
+            // The cash is named in the description so the two never have to be
+            // inferred from one another.
+            amount: units.toFixed(2),
             balanceAfter: newBalance.toFixed(2),
             referenceId: claimed.id,
-            description: `Unit purchase${claimed.paystackReference ? ` · ${claimed.paystackReference}` : ""}`,
+            description:
+              quote.commissionValue > 0
+                ? `Unit purchase · paid GH₵${amount.toFixed(2)} + ${(quote.commissionPct * 100).toFixed(0)}% commission${claimed.paystackReference ? ` · ${claimed.paystackReference}` : ""}`
+                : `Unit purchase${claimed.paystackReference ? ` · ${claimed.paystackReference}` : ""}`,
             createdBy: req.user!.userId,
           })
           .returning();
 
         await tx
           .update(writerTokenPurchasesTable)
-          .set({ transactionId: txn.id })
+          .set({
+            transactionId: txn.id,
+            creditedUnits: units.toFixed(2),
+            commissionPct: quote.commissionPct.toFixed(4),
+          })
           .where(eq(writerTokenPurchasesTable.id, claimed.id));
 
         return { txnId: txn.id, balance: newBalance.toFixed(2), float: newFloat.toFixed(2) };
       });
 
       res.json({
-        purchase: { ...claimed, transactionId: out.txnId },
+        purchase: {
+          ...claimed,
+          transactionId: out.txnId,
+          creditedUnits: units.toFixed(2),
+          commissionPct: quote.commissionPct.toFixed(4),
+        },
+        paid: amount.toFixed(2),
+        unitsCredited: units.toFixed(2),
+        commissionValue: quote.commissionValue.toFixed(2),
         balance: out.balance,
         floatBalance: out.float,
       });
@@ -458,6 +516,45 @@ router.post(
         .set({ status: "paid", creditedBy: null, creditedAt: null })
         .where(eq(writerTokenPurchasesTable.id, claimed.id));
       res.status(409).json({ error: (e as Error).message });
+    }
+  },
+);
+
+/**
+ * What a given payment will buy, before the writer commits to it.
+ *
+ * Read-only and deliberately cheap: the buy screen calls it as the amount is
+ * typed, so a writer sees "pay 100, receive 142.86" rather than discovering
+ * the uplift after the fact.
+ */
+router.get(
+  "/writer-tokens/quote",
+  requireAuth,
+  requireRole("writer", "cashier", "administrator", "director"),
+  async (req, res) => {
+    const amount = Number(req.query["amount"]);
+    if (!Number.isFinite(amount) || amount < 0) {
+      res.status(400).json({ error: "Enter a valid amount" });
+      return;
+    }
+    const [settings] = await db
+      .select({ pct: systemSettingsTable.writerCommissionPct })
+      .from(systemSettingsTable)
+      .orderBy(desc(systemSettingsTable.effectiveDate))
+      .limit(1);
+
+    try {
+      const q = quoteUnits(amount, Number(settings?.pct ?? 0));
+      res.json({
+        paid: q.paid.toFixed(2),
+        commissionPct: q.commissionPct,
+        units: q.units.toFixed(2),
+        commissionValue: q.commissionValue.toFixed(2),
+      });
+    } catch {
+      res.status(409).json({
+        error: "Writer commission rate is not usable. An administrator must fix it in Settings.",
+      });
     }
   },
 );
