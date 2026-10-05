@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { SmsAdapter } from "../lib/sms-gateway";
 import { recordTicketEvent } from "../lib/ticket-audit";
 import { payoutFor } from "../lib/settle-tickets";
+import { creditWallet } from "../lib/wallet";
 
 const router = Router();
 const smsAdapter = new SmsAdapter();
@@ -124,19 +125,23 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
 
     if (writer.operationModel === "prepaid") {
       // Credit wallet
-      const [wallet] = await db.select().from(writerTokenWalletsTable).where(eq(writerTokenWalletsTable.writerId, writer.id)).limit(1);
-      if (!wallet) {
-        skipped.push({ payoutId: payout.id, reason: "token wallet not found" });
-        continue;
-      }
-      const newBalance = parseFloat(wallet.balance) + parseFloat(payout.payoutAmount);
-      await db.update(writerTokenWalletsTable).set({ balance: newBalance.toString() }).where(eq(writerTokenWalletsTable.writerId, writer.id));
+      // Atomic, and it creates the wallet if the writer somehow has none -
+      // the old code skipped the payout in that case, quietly keeping money
+      // the writer had won. A credit landing while the writer is mid-sale
+      // used to be lost outright: both sides read the same balance and the
+      // sale's write won.
+      const newBalance = await creditWallet(
+        db,
+        writer.id,
+        parseFloat(payout.payoutAmount),
+        false,
+      );
       
       await db.insert(writerTokenTransactionsTable).values({
         writerId: writer.id,
         transactionType: "win_credit",
         amount: payout.payoutAmount,
-        balanceAfter: newBalance.toString(),
+        balanceAfter: newBalance,
         description: `Win payout for ticket on game`,
       });
     } else {

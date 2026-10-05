@@ -3,6 +3,7 @@ import { db, writerTokenWalletsTable, writerTokenTransactionsTable } from "@work
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { adjustWallet } from "../lib/wallet";
 
 const router = Router();
 
@@ -50,32 +51,21 @@ router.post("/writer-tokens/adjust", requireAuth, requireRole("director", "admin
   const { writerId, amount, description } = parse.data;
 
   const result = await db.transaction(async (tx) => {
-    let [wallet] = await tx.select().from(writerTokenWalletsTable).where(eq(writerTokenWalletsTable.writerId, writerId)).limit(1);
-    
-    if (!wallet) {
-      [wallet] = await tx.insert(writerTokenWalletsTable).values({
-        writerId,
-        balance: "0",
-      }).returning();
+    // One statement, so a correction cannot be lost against a sale landing at
+    // the same moment. Null means a deduction would take the float below
+    // zero - refused here, with a sentence an administrator can act on,
+    // rather than left to surface as a constraint violation.
+    const newBalance = await adjustWallet(tx, writerId, amount);
+    if (newBalance === null) {
+      throw new Error("INSUFFICIENT_FUNDS");
     }
-
-    const oldBalance = parseFloat(wallet.balance);
-    const newBalance = oldBalance + amount;
-
-    await tx.update(writerTokenWalletsTable)
-      .set({ 
-        balance: newBalance.toString(),
-        totalPurchased: amount > 0 ? (parseFloat(wallet.totalPurchased) + amount).toString() : wallet.totalPurchased,
-        updatedAt: new Date()
-      })
-      .where(eq(writerTokenWalletsTable.writerId, writerId));
 
     const [transaction] = await tx.insert(writerTokenTransactionsTable)
       .values({
         writerId,
         transactionType: "admin_adjustment",
         amount: amount.toString(),
-        balanceAfter: newBalance.toString(),
+        balanceAfter: newBalance,
         description: description || "Manual adjustment",
         createdBy: req.user!.userId,
       })

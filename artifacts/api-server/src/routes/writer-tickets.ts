@@ -11,6 +11,7 @@ import {
   parseNumberList,
   type Mechanic,
 } from "../lib/bet-engine";
+import { debitWallet } from "../lib/wallet";
 
 const router = Router();
 
@@ -149,23 +150,14 @@ async function sellBets(
   let transactionId: string | null = null;
 
   if (writer.operationModel === "prepaid") {
-    const [wallet] = await tx
-      .select()
-      .from(writerTokenWalletsTable)
-      .where(eq(writerTokenWalletsTable.writerId, writerId))
-      .limit(1);
-    if (!wallet || parseFloat(wallet.balance) < total) {
+    // Checking the float and taking it are one statement, not two. Two
+    // concurrent sales from the same writer would otherwise both read the
+    // same balance and both write their own answer, letting the writer sell
+    // twice against one float.
+    const newBalance = await debitWallet(tx, writerId, total);
+    if (newBalance === null) {
       throw new Error("INSUFFICIENT_FUNDS");
     }
-
-    const newBalance = parseFloat(wallet.balance) - total;
-    await tx
-      .update(writerTokenWalletsTable)
-      .set({
-        balance: newBalance.toString(),
-        totalSpent: (parseFloat(wallet.totalSpent) + total).toString(),
-      })
-      .where(eq(writerTokenWalletsTable.writerId, writerId));
 
     // One debit for one payment, whether that is one bet or ten.
     const [tokenTx] = await tx
@@ -174,7 +166,9 @@ async function sellBets(
         writerId,
         transactionType: "bet_deduction",
         amount: (-total).toString(),
-        balanceAfter: newBalance.toString(),
+        // The balance the database actually settled on, not one recomputed
+        // here - that is the number the audit trail has to be able to stand on.
+        balanceAfter: newBalance,
         description: slipNumber
           ? `${bets.length} bets on ${game.name} - ${slipNumber}`
           : `Bet placed on ${game.name}`,
@@ -182,36 +176,23 @@ async function sellBets(
       .returning();
     transactionId = tokenTx.id;
   } else {
+    // Ghana keeps GMT all year, so the UTC date is the Accra date.
     const today = new Date().toISOString().slice(0, 10);
-    const [ledger] = await tx
-      .select()
-      .from(postpaidDailyLedgerTable)
-      .where(
-        and(
-          eq(postpaidDailyLedgerTable.writerId, writerId),
-          eq(postpaidDailyLedgerTable.ledgerDate, today),
-          eq(postpaidDailyLedgerTable.gameId, game.id),
-        ),
-      )
-      .limit(1);
 
-    if (!ledger) {
-      await tx.insert(postpaidDailyLedgerTable).values({
-        writerId,
-        gameId: game.id,
-        ledgerDate: today,
-        totalStakes: total.toString(),
-        netBalance: total.toString(),
-      });
-    } else {
-      await tx
-        .update(postpaidDailyLedgerTable)
-        .set({
-          totalStakes: (parseFloat(ledger.totalStakes) + total).toString(),
-          netBalance: (parseFloat(ledger.netBalance) + total).toString(),
-        })
-        .where(eq(postpaidDailyLedgerTable.id, ledger.id));
-    }
+    // One statement, resting on the unique index over the triple. Read-then-
+    // insert let two concurrent sales each find no row and each create one,
+    // splitting the writer's debt across two rows - so the bill presented at
+    // settlement was only half of what they had actually sold.
+    await tx.execute(sql`
+      INSERT INTO postpaid_daily_ledger
+        (writer_id, game_id, ledger_date, total_stakes, net_balance)
+      VALUES
+        (${writerId}, ${game.id}, ${today},
+         ${total.toFixed(2)}::numeric, ${total.toFixed(2)}::numeric)
+      ON CONFLICT (writer_id, game_id, ledger_date) DO UPDATE
+         SET total_stakes = postpaid_daily_ledger.total_stakes + EXCLUDED.total_stakes,
+             net_balance  = postpaid_daily_ledger.net_balance  + EXCLUDED.net_balance
+    `);
   }
 
   const created = [];

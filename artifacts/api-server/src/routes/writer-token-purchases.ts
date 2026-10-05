@@ -16,6 +16,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { dispatchSystemNotification } from "../lib/notify";
 import { paystackConfigured, paystackSecret, verifyWebhook, verifyCharge } from "../lib/paystack";
 import { quoteUnits } from "../lib/unit-pricing";
+import { creditWallet } from "../lib/wallet";
 
 const router = Router();
 
@@ -440,30 +441,10 @@ router.post(
         });
 
         // Credit the wallet, creating it on a first purchase.
-        const [wallet] = await tx
-          .select()
-          .from(writerTokenWalletsTable)
-          .where(eq(writerTokenWalletsTable.writerId, claimed.writerId))
-          .limit(1);
-
-        let newBalance: number;
-        if (wallet) {
-          newBalance = Number(wallet.balance) + units;
-          await tx
-            .update(writerTokenWalletsTable)
-            .set({
-              balance: newBalance.toFixed(2),
-              totalPurchased: (Number(wallet.totalPurchased) + units).toFixed(2),
-            })
-            .where(eq(writerTokenWalletsTable.writerId, claimed.writerId));
-        } else {
-          newBalance = units;
-          await tx.insert(writerTokenWalletsTable).values({
-            writerId: claimed.writerId,
-            balance: newBalance.toFixed(2),
-            totalPurchased: units.toFixed(2),
-          });
-        }
+        // Upsert in one statement: the two branches below used to be a read
+        // and then a write, so units bought while a sale was being rung up
+        // could vanish.
+        const newBalance = await creditWallet(tx, claimed.writerId, units, true);
 
         const [txn] = await tx
           .insert(writerTokenTransactionsTable)
@@ -474,7 +455,7 @@ router.post(
             // The cash is named in the description so the two never have to be
             // inferred from one another.
             amount: units.toFixed(2),
-            balanceAfter: newBalance.toFixed(2),
+            balanceAfter: newBalance,
             referenceId: claimed.id,
             description:
               quote.commissionValue > 0
@@ -493,7 +474,7 @@ router.post(
           })
           .where(eq(writerTokenPurchasesTable.id, claimed.id));
 
-        return { txnId: txn.id, balance: newBalance.toFixed(2), float: newFloat.toFixed(2) };
+        return { txnId: txn.id, balance: newBalance, float: newFloat.toFixed(2) };
       });
 
       res.json({
