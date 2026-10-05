@@ -8,6 +8,12 @@ import { LoginBody, RefreshTokenBody } from "@workspace/api-zod";
 import { requireAuth } from "../middleware/auth";
 import type { JwtPayload } from "../middleware/auth";
 import { JWT_SECRET } from "../lib/jwt-secret";
+import { clientIp } from "../lib/login-throttle";
+import {
+  checkLoginAllowed,
+  registerLoginFailure,
+  registerLoginSuccess,
+} from "../lib/login-throttle-db";
 
 const router = Router();
 const ACCESS_TOKEN_EXPIRY = "15m";
@@ -34,6 +40,20 @@ router.post("/auth/login", async (req, res) => {
   }
   const { phone, role, pin } = parse.data;
 
+  const ip = clientIp(req.headers as Record<string, unknown>, req.ip);
+  const gate = await checkLoginAllowed(phone, ip);
+  if (!gate.allowed) {
+    res.setHeader("Retry-After", String(gate.retryAfterSeconds));
+    res.status(429).json({
+      error:
+        gate.scope === "ip"
+          ? "Too many sign-in attempts from this network. Try again shortly."
+          : "Too many wrong PINs. This account is locked for a moment.",
+      retryAfterSeconds: gate.retryAfterSeconds,
+    });
+    return;
+  }
+
   const [user] = await db
     .select()
     .from(usersTable)
@@ -41,6 +61,7 @@ router.post("/auth/login", async (req, res) => {
     .limit(1);
 
   if (!user || !user.isActive) {
+    await registerLoginFailure(phone, ip);
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
@@ -52,9 +73,12 @@ router.post("/auth/login", async (req, res) => {
 
   const valid = await bcrypt.compare(pin, user.pinHash);
   if (!valid) {
+    await registerLoginFailure(phone, ip);
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
+
+  await registerLoginSuccess(phone, ip);
 
   await db
     .update(usersTable)

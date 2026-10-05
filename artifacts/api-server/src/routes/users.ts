@@ -10,6 +10,7 @@ import {
   RegeneratePinParams,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { clearLoginThrottle } from "../lib/login-throttle-db";
 
 const router = Router();
 
@@ -105,12 +106,17 @@ router.post(
       .update(usersTable)
       .set({ pinHash })
       .where(eq(usersTable.id, parse.data.id))
-      .returning({ id: usersTable.id });
+      .returning({ id: usersTable.id, phone: usersTable.phone });
 
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
+    // Same reason as the writer reset: someone being given a new PIN has
+    // usually just failed with the old one, and a lock left in place would
+    // make the new PIN look wrong.
+    if (user.phone) await clearLoginThrottle(user.phone);
 
     res.json({ pin });
   },

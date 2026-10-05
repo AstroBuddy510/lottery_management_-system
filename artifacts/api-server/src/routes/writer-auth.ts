@@ -8,6 +8,13 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { composeWriterFullCode } from "../lib/writer-onboarding";
 import type { JwtPayload } from "../middleware/auth";
 import { JWT_SECRET } from "../lib/jwt-secret";
+import { clientIp } from "../lib/login-throttle";
+import {
+  checkLoginAllowed,
+  clearLoginThrottle,
+  registerLoginFailure,
+  registerLoginSuccess,
+} from "../lib/login-throttle-db";
 
 const router = Router();
 const ACCESS_TOKEN_EXPIRY = "15m";
@@ -49,6 +56,20 @@ router.post("/writer-auth/login", async (req, res) => {
   }
   const { phone, pin } = parse.data;
 
+  const ip = clientIp(req.headers as Record<string, unknown>, req.ip);
+  const gate = await checkLoginAllowed(phone, ip);
+  if (!gate.allowed) {
+    res.setHeader("Retry-After", String(gate.retryAfterSeconds));
+    res.status(429).json({
+      error:
+        gate.scope === "ip"
+          ? "Too many sign-in attempts from this network. Try again shortly."
+          : "Too many wrong PINs. This account is locked for a moment.",
+      retryAfterSeconds: gate.retryAfterSeconds,
+    });
+    return;
+  }
+
   const [writer] = await db
     .select()
     .from(writersTable)
@@ -56,6 +77,8 @@ router.post("/writer-auth/login", async (req, res) => {
     .limit(1);
 
   if (!writer || !writer.isActive) {
+    // Counted too: guessing phone numbers is the other half of the attack.
+    await registerLoginFailure(phone, ip);
     res.status(401).json({ error: "Invalid credentials or account inactive" });
     return;
   }
@@ -70,9 +93,12 @@ router.post("/writer-auth/login", async (req, res) => {
 
   const valid = await bcrypt.compare(pin, writer.pinHash);
   if (!valid) {
+    await registerLoginFailure(phone, ip);
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
+
+  await registerLoginSuccess(phone, ip);
 
   const payload: JwtPayload = {
     userId: writer.id,
@@ -205,6 +231,12 @@ router.post(
 
     const pinHash = await bcrypt.hash(parse.data.newPin, 10);
     await db.update(writersTable).set({ pinHash }).where(eq(writersTable.id, writerId));
+
+    // Release any lockout. A writer who forgot their PIN has usually spent
+    // several wrong tries discovering that, so without this the new PIN they
+    // were just given would be refused by the throttle for the next hour -
+    // and the reset would look broken to the agent who performed it.
+    if (writer.phone) await clearLoginThrottle(writer.phone);
 
     res.json({ success: true, message: "PIN reset successfully" });
   }
