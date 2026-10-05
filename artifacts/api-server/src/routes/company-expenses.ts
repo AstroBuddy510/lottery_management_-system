@@ -7,8 +7,8 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import jwt from "jsonwebtoken";
+import { JWT_SECRET } from "../lib/jwt-secret";
 
-const JWT_SECRET = process.env["SESSION_SECRET"] ?? "dev-secret-change-in-prod";
 
 interface SSEClient {
   id: string;

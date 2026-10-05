@@ -7,9 +7,9 @@ import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { composeWriterFullCode } from "../lib/writer-onboarding";
 import type { JwtPayload } from "../middleware/auth";
+import { JWT_SECRET } from "../lib/jwt-secret";
 
 const router = Router();
-const JWT_SECRET = process.env["SESSION_SECRET"] ?? "dev-secret-change-in-prod";
 const ACCESS_TOKEN_EXPIRY = "15m";
 const REFRESH_TOKEN_EXPIRY = "7d";
 
