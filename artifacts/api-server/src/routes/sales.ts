@@ -63,13 +63,28 @@ router.post(
       return;
     }
     const [writer] = await db
-      .select({ id: writersTable.id })
+      .select({ id: writersTable.id, agentId: writersTable.agentId })
       .from(writersTable)
       .where(eq(writersTable.id, parse.data.writerId))
       .limit(1);
     if (!writer) {
       res.status(404).json({ error: "Writer not found" });
       return;
+    }
+
+    // An agent may only log sales for their own writers. These rows feed the
+    // sales reports, so without this an agent could inflate or pollute
+    // another agency's figures by posting against their writers.
+    if (req.user!.role === "agent") {
+      const [myAgent] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, req.user!.userId))
+        .limit(1);
+      if (!myAgent || myAgent.id !== writer.agentId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
     }
     const [sale] = await db
       .insert(salesLogsTable)

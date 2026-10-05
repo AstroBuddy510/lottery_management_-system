@@ -185,10 +185,22 @@ router.post(
       return;
     }
 
-    // Verify agent owns this writer if the user is an agent
+    // An agent may only reset the PIN of their own writers.
+    //
+    // Without this, any agent could set any writer's PIN to a value of their
+    // choosing, across any agency, and then sign in as that writer - selling
+    // against their float, declaring settlements and reading their wallet.
+    // The PIN is the whole credential: writers authenticate by phone and PIN.
     if (req.user!.role === "agent") {
-      // Need to map req.user.userId to agentId
-      // Omitted full agent check for brevity, assuming standard RBAC
+      const [myAgent] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, req.user!.userId))
+        .limit(1);
+      if (!myAgent || myAgent.id !== writer.agentId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
     }
 
     const pinHash = await bcrypt.hash(parse.data.newPin, 10);
