@@ -11,11 +11,42 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { clearLoginThrottle } from "../lib/login-throttle-db";
+// The same cryptographic generator the writer flows use. The staff PIN was
+// built from Math.random(), which is seeded and predictable - fine for a
+// shuffle, not for a credential that is the whole of someone's login.
+import { generatePin } from "../lib/writer-onboarding";
 
 const router = Router();
 
-function generatePin(): string {
-  return String(Math.floor(1000 + Math.random() * 9000));
+/**
+ * Who may act on whom.
+ *
+ * An administrator could promote themselves to director, create a director
+ * outright, read back any director's PIN, or delete a director - four doors
+ * into the role that is meant to supervise them. The rule is now stated once
+ * and applied at all four: a director is touched only by a director.
+ */
+async function isDirector(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ role: usersTable.role })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  return row?.role === "director";
+}
+
+/** True when the caller may not act on this target, having said why. */
+async function blockedByRank(
+  req: { user?: { role: string; userId: string } },
+  targetId: string,
+  res: { status: (c: number) => { json: (b: unknown) => void } },
+): Promise<boolean> {
+  if (req.user!.role === "director") return false;
+  if (await isDirector(targetId)) {
+    res.status(403).json({ error: "Only a director may act on a director's account" });
+    return true;
+  }
+  return false;
 }
 
 router.get(
@@ -58,6 +89,13 @@ router.post(
     }
     const { fullName, phone, role } = parse.data;
 
+    // Creating a director is as good as becoming one: the PIN comes back in
+    // this very response.
+    if (role === "director" && req.user!.role !== "director") {
+      res.status(403).json({ error: "Only a director may create a director" });
+      return;
+    }
+
     const [existing] = await db
       .select({ id: usersTable.id })
       .from(usersTable)
@@ -99,6 +137,10 @@ router.post(
       return;
     }
 
+    // The plaintext PIN comes back in this response, so resetting someone's
+    // PIN is the same as taking their account.
+    if (await blockedByRank(req, parse.data.id, res)) return;
+
     const pin = generatePin();
     const pinHash = await bcrypt.hash(pin, 10);
 
@@ -137,6 +179,22 @@ router.patch(
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
+    const targetId = paramsResult.data.id;
+
+    // Nobody edits their own rank. This is the self-promotion door: an
+    // administrator could set their own role to director and simply be one.
+    if (targetId === req.user!.userId && bodyResult.data.role) {
+      res.status(403).json({ error: "You cannot change your own role" });
+      return;
+    }
+    if (await blockedByRank(req, targetId, res)) return;
+    // Nor may an administrator mint a director by promotion rather than
+    // creation - the same door, approached from the other side.
+    if (bodyResult.data.role === "director" && req.user!.role !== "director") {
+      res.status(403).json({ error: "Only a director may grant the director role" });
+      return;
+    }
+
     const updates: Record<string, unknown> = {};
     if (bodyResult.data.fullName) updates.fullName = bodyResult.data.fullName;
     if (bodyResult.data.phone) updates.phone = bodyResult.data.phone;
@@ -199,6 +257,16 @@ router.delete(
       return;
     }
     const userId = parse.data.id;
+
+    // Removing the role that supervises you is escalation by subtraction.
+    if (await blockedByRank(req, userId, res)) return;
+    // And deleting yourself is how an organisation locks itself out of its
+    // own system - irreversibly, if you were the last director.
+    if (userId === req.user!.userId) {
+      res.status(403).json({ error: "You cannot delete your own account" });
+      return;
+    }
+
     try {
       // First, try deleting the agent associated with this user if they are an agent
       await db.delete(agentsTable).where(eq(agentsTable.userId, userId));
