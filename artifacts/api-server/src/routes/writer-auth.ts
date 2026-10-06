@@ -1,13 +1,12 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { db, usersTable, writersTable, agentsTable, writerModelRequestsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { composeWriterFullCode } from "../lib/writer-onboarding";
 import type { JwtPayload } from "../middleware/auth";
-import { JWT_SECRET } from "../lib/jwt-secret";
+import { mintTokens } from "../lib/tokens";
 import { clientIp } from "../lib/login-throttle";
 import {
   checkLoginAllowed,
@@ -42,11 +41,6 @@ const resetPinSchema = z.object({
   newPin: z.string().length(4),
 });
 
-function generateTokens(payload: JwtPayload): { accessToken: string; refreshToken: string } {
-  const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
-  const refreshToken = jwt.sign(payload, JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
-  return { accessToken, refreshToken };
-}
 
 router.post("/writer-auth/login", async (req, res) => {
   const parse = writerLoginSchema.safeParse(req.body);
@@ -100,12 +94,12 @@ router.post("/writer-auth/login", async (req, res) => {
 
   await registerLoginSuccess(phone, ip);
 
-  const payload: JwtPayload = {
+  const payload = {
     userId: writer.id,
     role: "writer",
     phone: writer.phone!,
   };
-  const { accessToken, refreshToken } = generateTokens(payload);
+  const { accessToken, refreshToken } = mintTokens(payload);
   res.json({
     accessToken,
     refreshToken,

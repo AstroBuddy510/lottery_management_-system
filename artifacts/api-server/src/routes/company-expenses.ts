@@ -6,8 +6,7 @@ import {
   ListCompanyExpensesQueryParams,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
-import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../lib/jwt-secret";
+import { verifyToken } from "../lib/tokens";
 
 
 interface SSEClient {
@@ -52,7 +51,13 @@ router.get(
     }
 
     try {
-      const payload = jwt.verify(token, JWT_SECRET) as { userId: string; role: string; phone: string };
+      // Through the shared checker, so this stream holds the same line as
+      // every other route: a refresh token is not a session.
+      const payload = verifyToken(token, "access");
+      if (!payload) {
+        res.status(401).json({ error: "Unauthorized: Invalid token" });
+        return;
+      }
       if (payload.role !== "director" && payload.role !== "administrator") {
         res.status(403).json({ error: "Forbidden: insufficient role" });
         return;

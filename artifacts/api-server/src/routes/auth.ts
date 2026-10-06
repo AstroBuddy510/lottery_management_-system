@@ -1,14 +1,13 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { db } from "@workspace/db";
 import { usersTable, writersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { LoginBody, RefreshTokenBody } from "@workspace/api-zod";
 import { requireAuth } from "../middleware/auth";
 import type { JwtPayload } from "../middleware/auth";
-import { JWT_SECRET } from "../lib/jwt-secret";
 import { clientIp } from "../lib/login-throttle";
+import { issuedBeforeRevocation, mintTokens, verifyToken } from "../lib/tokens";
 import {
   checkLoginAllowed,
   registerLoginFailure,
@@ -19,18 +18,6 @@ const router = Router();
 const ACCESS_TOKEN_EXPIRY = "15m";
 const REFRESH_TOKEN_EXPIRY = "7d";
 
-function generateTokens(payload: JwtPayload): {
-  accessToken: string;
-  refreshToken: string;
-} {
-  const accessToken = jwt.sign(payload, JWT_SECRET, {
-    expiresIn: ACCESS_TOKEN_EXPIRY,
-  });
-  const refreshToken = jwt.sign(payload, JWT_SECRET, {
-    expiresIn: REFRESH_TOKEN_EXPIRY,
-  });
-  return { accessToken, refreshToken };
-}
 
 router.post("/auth/login", async (req, res) => {
   const parse = LoginBody.safeParse(req.body);
@@ -85,12 +72,12 @@ router.post("/auth/login", async (req, res) => {
     .set({ lastLogin: new Date() })
     .where(eq(usersTable.id, user.id));
 
-  const payload: JwtPayload = {
+  const payload = {
     userId: user.id,
     role: user.role,
     phone: user.phone!,
   };
-  const { accessToken, refreshToken } = generateTokens(payload);
+  const { accessToken, refreshToken } = mintTokens(payload);
   res.json({
     accessToken,
     refreshToken,
@@ -103,28 +90,95 @@ router.post("/auth/login", async (req, res) => {
   });
 });
 
-router.post("/auth/refresh", (req, res) => {
+/**
+ * Exchange a refresh token for a fresh pair.
+ *
+ * This is the one point where a live session meets the database, so it is
+ * where account state is enforced. It used to re-mint straight from the old
+ * token's claims: an account could be deactivated, rejected or demoted and
+ * roll its session forward for ever, because nothing ever asked.
+ *
+ * The role is taken from the database, not from the token, so a demotion
+ * takes hold at the next refresh rather than never. Writers live in their own
+ * table and are resolved there.
+ */
+router.post("/auth/refresh", async (req, res) => {
   const parse = RefreshTokenBody.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: "Invalid request body" });
     return;
   }
-  const { refreshToken } = parse.data;
-  try {
-    const decoded = jwt.verify(refreshToken, JWT_SECRET) as JwtPayload;
-    const payload: JwtPayload = {
-      userId: decoded.userId,
-      role: decoded.role,
-      phone: decoded.phone,
-    };
-    const { accessToken, refreshToken: newRefreshToken } = generateTokens(payload);
-    res.json({ accessToken, refreshToken: newRefreshToken });
-  } catch {
+
+  // Must be a refresh token. An access token presented here is refused.
+  const claims = verifyToken(parse.data.refreshToken, "refresh");
+  if (!claims) {
     res.status(401).json({ error: "Invalid or expired refresh token" });
+    return;
   }
+
+  const denied = () => {
+    res.status(401).json({ error: "Session is no longer valid" });
+  };
+
+  if (claims.role === "writer") {
+    const [writer] = await db
+      .select()
+      .from(writersTable)
+      .where(eq(writersTable.id, claims.userId))
+      .limit(1);
+    if (
+      !writer ||
+      !writer.isActive ||
+      writer.approvalStatus !== "approved" ||
+      issuedBeforeRevocation(claims, writer.sessionsValidFrom)
+    ) {
+      denied();
+      return;
+    }
+    res.json(mintTokens({ userId: writer.id, role: "writer", phone: writer.phone! }));
+    return;
+  }
+
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, claims.userId))
+    .limit(1);
+  if (!user || !user.isActive || issuedBeforeRevocation(claims, user.sessionsValidFrom)) {
+    denied();
+    return;
+  }
+
+  // user.role, not claims.role - this is what makes a demotion stick.
+  res.json(mintTokens({ userId: user.id, role: user.role, phone: user.phone! }));
 });
 
-router.post("/auth/logout", (req, res) => {
+/**
+ * Sign out, and mean it.
+ *
+ * This used to return success and do nothing: both tokens stayed valid for
+ * their full life, so signing out of a shared terminal left a working session
+ * behind. Stamping the account revokes every refresh token issued up to now,
+ * so the session cannot be rolled forward.
+ *
+ * The access token already in hand still works until it expires - at most
+ * fifteen minutes. Closing that too would mean a database read on every
+ * request, which this deployment cannot afford; the short expiry is what
+ * bounds it.
+ */
+router.post("/auth/logout", requireAuth, async (req, res) => {
+  const now = new Date();
+  if (req.user!.role === "writer") {
+    await db
+      .update(writersTable)
+      .set({ sessionsValidFrom: now })
+      .where(eq(writersTable.id, req.user!.userId));
+  } else {
+    await db
+      .update(usersTable)
+      .set({ sessionsValidFrom: now })
+      .where(eq(usersTable.id, req.user!.userId));
+  }
   res.json({ success: true });
 });
 

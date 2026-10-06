@@ -1,13 +1,12 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../lib/jwt-secret";
+import { verifyToken, type SessionClaims } from "../lib/tokens";
 
 
-export interface JwtPayload {
-  userId: string;
-  role: string;
-  phone: string;
-}
+/**
+ * Kept as the name the routes already import. The claims now also carry
+ * `typ`, which is what distinguishes an access token from a refresh token.
+ */
+export type JwtPayload = SessionClaims;
 
 declare global {
   namespace Express {
@@ -24,13 +23,17 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
   const token = authHeader.slice(7);
-  try {
-    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    req.user = payload;
-    next();
-  } catch {
+
+  // Only an access token opens a session. The refresh token used to be
+  // accepted here too - it carried identical claims - which made the real
+  // session seven days long and the fifteen-minute access token ornamental.
+  const claims = verifyToken(token, "access");
+  if (!claims) {
     res.status(401).json({ error: "Invalid or expired token" });
+    return;
   }
+  req.user = claims;
+  next();
 }
 
 export function requireRole(...roles: string[]) {

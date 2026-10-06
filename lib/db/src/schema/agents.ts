@@ -42,6 +42,8 @@ export const writersTable = pgTable("writers", {
   redFlaggedBy: uuid("red_flagged_by").references(() => usersTable.id),
   redFlaggedAt: timestamp("red_flagged_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** See the note on usersTable.sessionsValidFrom. */
+  sessionsValidFrom: timestamp("sessions_valid_from", { withTimezone: true }),
 });
 
 export const insertAgentSchema = createInsertSchema(agentsTable).omit({

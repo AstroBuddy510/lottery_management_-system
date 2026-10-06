@@ -24,6 +24,14 @@ export const usersTable = pgTable("users", {
   profilePicture: text("profile_picture"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastLogin: timestamp("last_login", { withTimezone: true }),
+  /**
+   * Nothing issued before this moment is a valid session any more.
+   *
+   * One timestamp revokes every token for the account at once and never
+   * grows, which a list of dead token ids would. Checked when a token is
+   * refreshed; see artifacts/api-server/src/lib/tokens.ts.
+   */
+  sessionsValidFrom: timestamp("sessions_valid_from", { withTimezone: true }),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({
