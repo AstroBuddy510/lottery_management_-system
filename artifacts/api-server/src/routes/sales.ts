@@ -6,51 +6,64 @@ import { requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
 
-router.get("/sales", requireAuth, async (req, res) => {
-  const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
-  const conditions = [];
-  if (dateFrom) conditions.push(gte(salesLogsTable.saleDate, dateFrom));
-  if (dateTo) conditions.push(lte(salesLogsTable.saleDate, dateTo));
+/**
+ * The sales log.
+ *
+ * Agents were scoped properly, but the role gate was missing entirely, so a
+ * writer fell past the agent branch into the unscoped one: pass any writerId
+ * and read that writer's sales, or pass none and read the company's. Writers
+ * have their own views of their own figures and no business here at all.
+ */
+router.get(
+  "/sales",
+  requireAuth,
+  requireRole("agent", "administrator", "director"),
+  async (req, res) => {
+    const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
+    const conditions = [];
+    if (dateFrom) conditions.push(gte(salesLogsTable.saleDate, dateFrom));
+    if (dateTo) conditions.push(lte(salesLogsTable.saleDate, dateTo));
 
-  if (req.user!.role === "agent") {
-    const [agentRecord] = await db
-      .select({ id: agentsTable.id })
-      .from(agentsTable)
-      .where(eq(agentsTable.userId, req.user!.userId))
-      .limit(1);
-    if (!agentRecord) {
-      res.status(404).json({ error: "Agent record not found" });
-      return;
-    }
-    const agentWriters = await db
-      .select({ id: writersTable.id })
-      .from(writersTable)
-      .where(eq(writersTable.agentId, agentRecord.id));
-    const agentWriterIds = agentWriters.map(w => w.id);
-    if (agentWriterIds.length === 0) {
-      res.json([]);
-      return;
-    }
-    if (writerId) {
-      if (!agentWriterIds.includes(writerId)) {
+    if (req.user!.role === "agent") {
+      const [agentRecord] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, req.user!.userId))
+        .limit(1);
+      if (!agentRecord) {
+        res.status(404).json({ error: "Agent record not found" });
+        return;
+      }
+      const agentWriters = await db
+        .select({ id: writersTable.id })
+        .from(writersTable)
+        .where(eq(writersTable.agentId, agentRecord.id));
+      const agentWriterIds = agentWriters.map(w => w.id);
+      if (agentWriterIds.length === 0) {
         res.json([]);
         return;
       }
+      if (writerId) {
+        if (!agentWriterIds.includes(writerId)) {
+          res.json([]);
+          return;
+        }
+        conditions.push(eq(salesLogsTable.writerId, writerId));
+      } else {
+        conditions.push(inArray(salesLogsTable.writerId, agentWriterIds));
+      }
+    } else if (writerId) {
       conditions.push(eq(salesLogsTable.writerId, writerId));
-    } else {
-      conditions.push(inArray(salesLogsTable.writerId, agentWriterIds));
     }
-  } else if (writerId) {
-    conditions.push(eq(salesLogsTable.writerId, writerId));
-  }
 
-  const sales = await db
-    .select()
-    .from(salesLogsTable)
-    .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(salesLogsTable.createdAt));
-  res.json(sales);
-});
+    const sales = await db
+      .select()
+      .from(salesLogsTable)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(salesLogsTable.createdAt));
+    res.json(sales);
+  },
+);
 
 router.post(
   "/sales",

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, ticketsTable, gamesTable, betTypesTable, writersTable, writerTokenWalletsTable, writerTokenTransactionsTable, postpaidDailyLedgerTable } from "@workspace/db";
+import { db, ticketsTable, gamesTable, betTypesTable, writersTable, agentsTable, writerTokenWalletsTable, writerTokenTransactionsTable, postpaidDailyLedgerTable } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
@@ -435,13 +435,64 @@ router.post("/tickets/slip", requireAuth, requireRole("writer"), async (req, res
   }
 });
 
-router.get("/tickets", requireAuth, async (req, res) => {
-  const writerId = req.user!.role === "writer" ? req.user!.userId : (req.query.writerId as string);
-  const query = db.select().from(ticketsTable);
-  if (writerId) query.where(eq(ticketsTable.writerId, writerId));
-  const tickets = await query.orderBy(desc(ticketsTable.createdAt)).limit(100);
-  res.json(tickets);
-});
+/**
+ * Recent tickets, scoped to whoever is asking.
+ *
+ * This used to carry requireAuth and nothing else. A writer was pinned to
+ * their own id correctly, but every other role took writerId straight from
+ * the query string and nobody checked it - so any signed-in account could
+ * read another agency's tickets by passing their id, or leave it off
+ * entirely and take the hundred most recent tickets in the company. A
+ * cashier or a wins-entry clerk had the same reach as a director.
+ *
+ * The scope is now decided here from the token, never from the request.
+ */
+router.get(
+  "/tickets",
+  requireAuth,
+  requireRole("writer", "agent", "administrator", "director"),
+  async (req, res) => {
+    const role = req.user!.role;
+    const asked = typeof req.query["writerId"] === "string" ? req.query["writerId"] : null;
+
+    let writerId: string | null = null;
+
+    if (role === "writer") {
+      // Their own, whatever they ask for.
+      writerId = req.user!.userId;
+    } else if (role === "agent") {
+      // An agent must name a writer, and it must be one of theirs.
+      if (!asked) {
+        res.status(400).json({ error: "writerId is required" });
+        return;
+      }
+      const [row] = await db
+        .select({ agentId: writersTable.agentId })
+        .from(writersTable)
+        .where(eq(writersTable.id, asked))
+        .limit(1);
+      const [myAgent] = await db
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, req.user!.userId))
+        .limit(1);
+      if (!row || !myAgent || row.agentId !== myAgent.id) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+      writerId = asked;
+    } else {
+      // Administrators and directors oversee the whole company, so an
+      // unscoped read is theirs to make.
+      writerId = asked;
+    }
+
+    const query = db.select().from(ticketsTable);
+    if (writerId) query.where(eq(ticketsTable.writerId, writerId));
+    const tickets = await query.orderBy(desc(ticketsTable.createdAt)).limit(100);
+    res.json(tickets);
+  },
+);
 
 /**
  * Price a selection without placing it.
