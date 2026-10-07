@@ -16,6 +16,13 @@ import {
 } from "../lib/login-throttle-db";
 
 const router = Router();
+
+/**
+ * A real bcrypt hash of a value nothing can match, compared against when no
+ * account was found so that the timing of a refusal carries no information.
+ * Cost 10, the same as every stored PIN.
+ */
+const DUMMY_HASH = "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 const ACCESS_TOKEN_EXPIRY = "15m";
 const REFRESH_TOKEN_EXPIRY = "7d";
 
@@ -70,25 +77,35 @@ router.post("/writer-auth/login", async (req, res) => {
     .where(eq(writersTable.phone, phone))
     .limit(1);
 
-  if (!writer || !writer.isActive) {
-    // Counted too: guessing phone numbers is the other half of the attack.
+  /**
+   * One answer for every way a sign-in can fail.
+   *
+   * The four branches below used to say different things - unknown number,
+   * account pending, PIN not set, wrong PIN - which let anyone map the
+   * company's writers by trying phone numbers and reading the replies. The
+   * guidance about a missing PIN is kept, because 73 writers are waiting on
+   * one; it is simply said to everyone, so saying it reveals nothing.
+   */
+  const refuse = async () => {
     await registerLoginFailure(phone, ip);
-    res.status(401).json({ error: "Invalid credentials or account inactive" });
-    return;
-  }
-  if (writer.approvalStatus !== "approved") {
-    res.status(403).json({ error: `Account is ${writer.approvalStatus}` });
-    return;
-  }
-  if (!writer.pinHash) {
-    res.status(401).json({ error: "PIN not set. Please contact your agent." });
+    res.status(401).json({
+      error:
+        "That phone number and PIN do not match. If you have not been given a PIN yet, ask your agent.",
+    });
+  };
+
+  if (!writer || !writer.isActive || writer.approvalStatus !== "approved" || !writer.pinHash) {
+    // Spend the same time as a real comparison would. Without this, a reply
+    // that arrives instantly says "no such writer" just as plainly as the
+    // old message did.
+    await bcrypt.compare(pin, DUMMY_HASH);
+    await refuse();
     return;
   }
 
   const valid = await bcrypt.compare(pin, writer.pinHash);
   if (!valid) {
-    await registerLoginFailure(phone, ip);
-    res.status(401).json({ error: "Invalid credentials" });
+    await refuse();
     return;
   }
 

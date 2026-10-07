@@ -15,6 +15,9 @@ import {
 } from "../lib/login-throttle-db";
 
 const router = Router();
+
+/** See the note in writer-auth.ts. */
+const DUMMY_HASH = "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 const ACCESS_TOKEN_EXPIRY = "15m";
 const REFRESH_TOKEN_EXPIRY = "7d";
 
@@ -47,21 +50,26 @@ router.post("/auth/login", async (req, res) => {
     .where(and(eq(usersTable.phone, phone), eq(usersTable.role, role)))
     .limit(1);
 
-  if (!user || !user.isActive) {
+  // Same single answer, for the same reason as the writer route - and the
+  // role is part of the lookup, so differing replies would also have told an
+  // attacker which role a number belongs to.
+  const refuse = async () => {
     await registerLoginFailure(phone, ip);
-    res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
+    res.status(401).json({
+      error:
+        "That phone number and PIN do not match. If your account is new, ask your administrator.",
+    });
+  };
 
-  if (!user.pinHash) {
-    res.status(401).json({ error: "Account not configured — contact your administrator" });
+  if (!user || !user.isActive || !user.pinHash) {
+    await bcrypt.compare(pin, DUMMY_HASH);
+    await refuse();
     return;
   }
 
   const valid = await bcrypt.compare(pin, user.pinHash);
   if (!valid) {
-    await registerLoginFailure(phone, ip);
-    res.status(401).json({ error: "Invalid credentials" });
+    await refuse();
     return;
   }
 
