@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, primaryKey, index } from "drizzle-orm/pg-core";
 
 /**
  * Failed sign-in counters, keyed by what is being protected.
@@ -26,5 +26,8 @@ export const authThrottleTable = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.scope, t.key] })],
+  (t) => [
+    primaryKey({ columns: [t.scope, t.key] }),
+    index("auth_throttle_last_failed_at_idx").on(t.lastFailedAt),
+  ],
 );

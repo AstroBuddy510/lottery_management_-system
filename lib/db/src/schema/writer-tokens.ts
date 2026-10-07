@@ -1,4 +1,4 @@
-import { varchar, pgTable, uuid, decimal, timestamp, pgEnum, text } from "drizzle-orm/pg-core";
+import { varchar, pgTable, uuid, decimal, timestamp, pgEnum, text, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -99,7 +99,16 @@ export const writerTokenPurchasesTable = pgTable("writer_token_purchases", {
   transactionId: uuid("transaction_id"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+  (table) => [
+    index("writer_token_purchases_queue_idx").on(
+      table.status,
+      table.paymentMethod,
+      table.createdAt.desc(),
+    ),
+    index("writer_token_purchases_status_idx").on(table.status),
+  ],
+);
 
 export const insertWriterTokenPurchaseSchema = createInsertSchema(writerTokenPurchasesTable).omit({
   id: true,

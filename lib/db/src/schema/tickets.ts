@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar, decimal, boolean, timestamp, pgEnum, integer } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, uuid, varchar, decimal, boolean, timestamp, pgEnum, integer, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -56,7 +57,20 @@ export const ticketsTable = pgTable("tickets", {
   winAmount: decimal("win_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   tokenTransactionId: uuid("token_transaction_id").references(() => writerTokenTransactionsTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+  (table) => [
+    // Every writer opening their ticket list reads this way: their own
+    // tickets, newest first. Without it that is a full scan of the table
+    // the whole company sells into.
+    index("tickets_writer_created_idx").on(table.writerId, table.createdAt.desc()),
+    // Settlement and the live board sweep one game at a time, by state.
+    index("tickets_game_status_idx").on(table.gameId, table.status),
+    // Reprinting a slip finds every ticket sold on it.
+    index("tickets_slip_number_idx")
+      .on(table.slipNumber)
+      .where(sql`${table.slipNumber} IS NOT NULL`),
+  ],
+);
 
 export const insertTicketSchema = createInsertSchema(ticketsTable).omit({
   id: true,

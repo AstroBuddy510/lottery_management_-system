@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, decimal, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, date, decimal, timestamp, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -18,7 +18,15 @@ export const dailyCalculationsTable = pgTable("daily_calculations", {
   reserveAmount: decimal("reserve_amount", { precision: 12, scale: 2 }).notNull(),
   writerBalance: decimal("writer_balance", { precision: 12, scale: 2 }).notNull(),
   calculatedAt: timestamp("calculated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+  (table) => [
+    // Both lock checks on the entry routes ask "has this game been
+    // calculated yet", once per entry and once per edit. This table had no
+    // index of any kind.
+    index("daily_calculations_game_idx").on(table.gameId),
+    index("daily_calculations_writer_date_idx").on(table.writerId, table.calcDate),
+  ],
+);
 
 export const insertDailyCalculationSchema = createInsertSchema(dailyCalculationsTable).omit({
   id: true,

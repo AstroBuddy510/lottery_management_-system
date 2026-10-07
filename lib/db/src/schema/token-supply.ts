@@ -1,4 +1,4 @@
-import { pgTable, uuid, decimal, timestamp, pgEnum, text } from "drizzle-orm/pg-core";
+import { pgTable, uuid, decimal, timestamp, pgEnum, text, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -53,7 +53,12 @@ export const tokenPoolTransactionsTable = pgTable("token_pool_transactions", {
     .references(() => usersTable.id),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+  (table) => [
+    index("token_pool_transactions_cashier_idx").on(table.cashierId),
+    index("token_pool_transactions_created_at_idx").on(table.createdAt.desc()),
+  ],
+);
 
 /** A cashier's float: tokens they hold and can disburse. */
 export const cashierTokenWalletsTable = pgTable("cashier_token_wallets", {
@@ -87,7 +92,12 @@ export const cashierTokenTransactionsTable = pgTable("cashier_token_transactions
     .references(() => usersTable.id),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+  (table) => [
+    index("cashier_token_transactions_cashier_idx").on(table.cashierId, table.createdAt.desc()),
+    index("cashier_token_transactions_writer_idx").on(table.writerId),
+  ],
+);
 
 export const insertTokenPoolTransactionSchema = createInsertSchema(tokenPoolTransactionsTable).omit({
   id: true,

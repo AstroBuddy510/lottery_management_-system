@@ -1,4 +1,4 @@
-import { pgTable, uuid, decimal, timestamp, pgEnum, date, varchar, text, integer } from "drizzle-orm/pg-core";
+import { pgTable, uuid, decimal, timestamp, pgEnum, date, varchar, text, integer, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -79,7 +79,22 @@ export const postpaidDailyLedgerTable = pgTable("postpaid_daily_ledger", {
    */
   unsettledAtCalculation: timestamp("unsettled_at_calculation", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+  (table) => [
+    // The ON CONFLICT in the sell path rests on this one. If it is ever
+    // dropped, postpaid sales stop with "no unique or exclusion
+    // constraint matching the ON CONFLICT specification".
+    uniqueIndex("postpaid_daily_ledger_writer_game_date_key").on(
+      table.writerId,
+      table.gameId,
+      table.ledgerDate,
+    ),
+    index("postpaid_ledger_open_idx").on(table.ledgerDate, table.settlementStatus),
+    index("postpaid_ledger_status_idx").on(table.settlementStatus),
+    index("postpaid_ledger_writer_date_idx").on(table.writerId, table.ledgerDate),
+    index("postpaid_ledger_writer_game_idx").on(table.writerId, table.gameId),
+  ],
+);
 
 export const insertPostpaidDailyLedgerSchema = createInsertSchema(postpaidDailyLedgerTable).omit({
   id: true,

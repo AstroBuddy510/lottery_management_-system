@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar, boolean, timestamp, numeric, text } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, uuid, varchar, boolean, timestamp, numeric, text, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -44,7 +45,13 @@ export const writersTable = pgTable("writers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   /** See the note on usersTable.sessionsValidFrom. */
   sessionsValidFrom: timestamp("sessions_valid_from", { withTimezone: true }),
-});
+},
+  (table) => [
+    index("writers_red_flagged_idx")
+      .on(table.isRedFlagged)
+      .where(sql`${table.isRedFlagged}`),
+  ],
+);
 
 export const insertAgentSchema = createInsertSchema(agentsTable).omit({
   id: true,

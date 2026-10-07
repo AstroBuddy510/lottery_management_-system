@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, decimal, boolean, timestamp, integer, pgEnum, text } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, decimal, boolean, timestamp, integer, pgEnum, text, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { gamesTable } from "./games";
@@ -47,7 +47,13 @@ export const payoutRequestsTable = pgTable("payout_requests", {
   writerUnsettledAmount: decimal("writer_unsettled_amount", { precision: 12, scale: 2 }),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+  (table) => [
+    index("payout_requests_game_result_idx").on(table.gameResultId),
+    index("payout_requests_ticket_idx").on(table.ticketId),
+    index("payout_requests_writer_status_idx").on(table.writerId, table.status),
+  ],
+);
 
 export const insertGameResultSchema = createInsertSchema(gameResultsTable).omit({
   id: true,
