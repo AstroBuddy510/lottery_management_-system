@@ -8,7 +8,7 @@ import {
   dailyCalculationsTable,
   gamesTable,
 } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
 import { getUnifiedWriterTotals } from "../lib/unified-sales";
@@ -297,13 +297,21 @@ router.get("/dashboard/my-summary", requireAuth, async (req, res) => {
     return;
   }
 
-  const unified = await getUnifiedWriterTotals(db, { calcDate, gameId });
+  // Scoped in SQL. The viewer's own writers were already worked out above;
+  // handing that list to the aggregation is the difference between reading
+  // one writer's rows and reading the company's.
+  const scopeIds = [...writerIds];
+  const unified = await getUnifiedWriterTotals(db, { calcDate, gameId, writerIds: scopeIds });
   const meta = new Map(
     (
-      await db
-        .select({ id: writersTable.id, fullName: writersTable.fullName, fullCode: writersTable.fullCode })
-        .from(writersTable)
-    ).map((w) => [w.id, w]),
+      scopeIds.length === 0
+        ? []
+        : await db
+            .select({ id: writersTable.id, fullName: writersTable.fullName, fullCode: writersTable.fullCode })
+            .from(writersTable)
+            // Names for the writers in view, not for all 74 of them on every poll.
+            .where(inArray(writersTable.id, scopeIds))
+    ).map((w: { id: string; fullName: string; fullCode: string }) => [w.id, w]),
   );
 
   const totals = emptyTotals();

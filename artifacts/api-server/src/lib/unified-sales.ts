@@ -4,7 +4,7 @@ import {
   ticketsTable,
   writersTable,
 } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 
 /**
  * Unified per-writer gross and wins.
@@ -48,6 +48,17 @@ export interface UnifiedScope {
   calcDate: string;
   /** Restrict to one draw. Omitted means every game on that date. */
   gameId?: string | undefined;
+  /**
+   * Restrict to these writers. Omitted means every writer, which is what the
+   * calculation run and the company-wide dashboard want.
+   *
+   * A writer asking for their own figures used to come through here unscoped:
+   * every writer's gross, wins and tickets were aggregated and all but one
+   * row thrown away in JavaScript. One writer's dashboard did the whole
+   * company's arithmetic, and with every writer polling, the work grew with
+   * the square of the roster.
+   */
+  writerIds?: readonly string[] | undefined;
 }
 
 /**
@@ -57,9 +68,12 @@ export interface UnifiedScope {
  */
 export async function getUnifiedWriterTotals(
   database: any,
-  { calcDate, gameId }: UnifiedScope,
+  { calcDate, gameId, writerIds }: UnifiedScope,
 ): Promise<Map<string, WriterTotals>> {
   const scoped = gameId && gameId !== "undefined" && gameId !== "null" ? gameId : undefined;
+  // An empty list means "no writers", which is not the same as "all writers".
+  const only = writerIds && writerIds.length > 0 ? writerIds : undefined;
+  if (writerIds && writerIds.length === 0) return new Map();
   const totals = new Map<string, WriterTotals>();
   const bucket = (writerId: string): WriterTotals => {
     let t = totals.get(writerId);
@@ -73,6 +87,7 @@ export async function getUnifiedWriterTotals(
   // ── Agent-entered gross ──
   const grossConditions = [eq(grossEntriesTable.entryDate, calcDate)];
   if (scoped) grossConditions.push(eq(grossEntriesTable.gameId, scoped));
+  if (only) grossConditions.push(inArray(grossEntriesTable.writerId, only as string[]));
   const grossEntries = await database
     .select()
     .from(grossEntriesTable)
@@ -88,6 +103,7 @@ export async function getUnifiedWriterTotals(
   // ── Agent-entered wins ──
   const winsConditions = [eq(winsEntriesTable.entryDate, calcDate)];
   if (scoped) winsConditions.push(eq(winsEntriesTable.gameId, scoped));
+  if (only) winsConditions.push(inArray(winsEntriesTable.writerId, only as string[]));
   const winsEntries = await database
     .select()
     .from(winsEntriesTable)
@@ -101,6 +117,7 @@ export async function getUnifiedWriterTotals(
   // ── Writer portal tickets (prepaid and postpaid alike) ──
   // Cancelled and void tickets are not sales and must not inflate gross.
   const ticketConditions = [sql`${ticketsTable.status} not in ('cancelled', 'void')`];
+  if (only) ticketConditions.push(inArray(ticketsTable.writerId, only as string[]));
   if (scoped) {
     ticketConditions.push(eq(ticketsTable.gameId, scoped));
   } else {
