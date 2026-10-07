@@ -11,6 +11,7 @@ import {
   UpdateWinsEntryBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { grossEntryMoney, winsEntryMoney, moneyString } from "../lib/money-input";
 
 const router = Router();
 
@@ -91,6 +92,13 @@ router.post(
     const parse = CreateGrossEntryBody.safeParse(req.body);
     if (!parse.success) {
       res.status(400).json({ error: "Invalid request body" });
+      return;
+    }
+    // The generated schema types this as a bare string; this is what makes it
+    // a number, unsigned and bounded.
+    const money = grossEntryMoney.safeParse(parse.data);
+    if (!money.success) {
+      res.status(400).json({ error: money.error.issues[0]?.message ?? "Invalid amount" });
       return;
     }
 
@@ -181,6 +189,12 @@ router.patch(
     const bodyResult = UpdateGrossEntryBody.safeParse(req.body);
     if (!bodyResult.success) {
       res.status(400).json({ error: "Invalid request body" });
+      return;
+    }
+    // Editing a figure has to clear the same bar as declaring one.
+    const money = grossEntryMoney.safeParse(bodyResult.data);
+    if (!money.success) {
+      res.status(400).json({ error: money.error.issues[0]?.message ?? "Invalid amount" });
       return;
     }
     const [existing] = await db
@@ -338,6 +352,11 @@ router.post(
       res.status(400).json({ error: "Invalid request body" });
       return;
     }
+    const money = winsEntryMoney.safeParse(parse.data);
+    if (!money.success) {
+      res.status(400).json({ error: money.error.issues[0]?.message ?? "Invalid amount" });
+      return;
+    }
 
     // Agents can only add entries for their own writers
     if (req.user!.role === "agent") {
@@ -412,6 +431,14 @@ router.patch(
     if (!bodyResult.success) {
       res.status(400).json({ error: "Invalid request body" });
       return;
+    }
+    // winsAmount is optional on an update, so only check it when sent.
+    if (bodyResult.data.winsAmount !== undefined) {
+      const money = moneyString().safeParse(bodyResult.data.winsAmount);
+      if (!money.success) {
+        res.status(400).json({ error: money.error.issues[0]?.message ?? "Invalid amount" });
+        return;
+      }
     }
     const [existing] = await db
       .select()

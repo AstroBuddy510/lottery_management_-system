@@ -7,6 +7,7 @@ import { quoteDueLedgers, currentWriterCommissionPct } from "../lib/postpaid";
 import { dispatchSystemNotification } from "../lib/notify";
 import { logger } from "../lib/logger";
 import { paystackConfigured, paystackSecret, verifyWebhook, verifyCharge } from "../lib/paystack";
+import { toMinorUnits } from "../lib/money-input";
 
 const router = Router();
 
@@ -418,6 +419,30 @@ export const handleSettlementWebhook: RequestHandler = async (req, res) => {
     return;
   }
 
+  // A settlement is only settled if the money covers the bill. Paying one
+  // pesewa against a debt used to clear it in full.
+  const [owed] = await db
+    .select({
+      payable: postpaidDailyLedgerTable.amountPayable,
+      paid: postpaidDailyLedgerTable.amountPaid,
+    })
+    .from(postpaidDailyLedgerTable)
+    .where(eq(postpaidDailyLedgerTable.settlementReference, reference))
+    .limit(1);
+  if (!owed) {
+    res.status(200).json({ message: "Unknown reference" });
+    return;
+  }
+  const outstandingMinor = toMinorUnits(owed.payable) - toMinorUnits(owed.paid);
+  if ((charge.amountMinor ?? 0) < outstandingMinor) {
+    logger.error(
+      { reference, outstandingMinor, paidMinor: charge.amountMinor },
+      "[SETTLEMENT WEBHOOK] payment is short of the bill - not settling",
+    );
+    res.status(200).json({ message: "Short payment" });
+    return;
+  }
+
   const [updated] = await db
     .update(postpaidDailyLedgerTable)
     .set({
@@ -438,6 +463,19 @@ export const handleSettlementWebhook: RequestHandler = async (req, res) => {
 
 router.post("/postpaid/settlement-webhook", handleSettlementWebhook);
 
+const confirmSchema = z
+  .object({
+    settlementMethod: z.enum(["cash", "momo", "bank"]).default("cash"),
+    settlementReference: z.string().trim().max(200).optional(),
+  })
+  .refine(
+    (v) => v.settlementMethod === "cash" || !!v.settlementReference,
+    {
+      message: "A transfer needs its reference",
+      path: ["settlementReference"],
+    },
+  );
+
 /**
  * The cashier confirms the money is in hand.
  *
@@ -450,8 +488,18 @@ router.post(
   requireRole("director", "administrator", "cashier"),
   async (req, res) => {
     const ledgerId = req.params["ledgerId"] as string;
-    const method = typeof req.body?.settlementMethod === "string" ? req.body.settlementMethod : "cash";
-    const reference = typeof req.body?.settlementReference === "string" ? req.body.settlementReference : null;
+
+    // Both of these were taken as whatever string arrived and written
+    // straight to the ledger, which is how "cashier" ended up stored as a
+    // payment method. The same shape the auto-pay route already uses.
+    const confirm = confirmSchema.safeParse(req.body ?? {});
+    if (!confirm.success) {
+      res.status(400).json({
+        error: confirm.error.issues[0]?.message ?? "Invalid settlement details",
+      });
+      return;
+    }
+    const { settlementMethod: method, settlementReference: reference } = confirm.data;
 
     const [ledger] = await db
       .select()
@@ -483,7 +531,7 @@ router.post(
       .set({
         settlementStatus: "settled",
         settlementMethod: method,
-        settlementReference: reference,
+        settlementReference: reference ?? null,
         settledAt: new Date(),
         settledBy: req.user!.userId,
         amountPaid: Math.max(payable, Number(ledger.amountPaid)).toFixed(2),

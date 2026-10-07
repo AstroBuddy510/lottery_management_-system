@@ -17,6 +17,8 @@ import { dispatchSystemNotification } from "../lib/notify";
 import { paystackConfigured, paystackSecret, verifyWebhook, verifyCharge } from "../lib/paystack";
 import { quoteUnits } from "../lib/unit-pricing";
 import { creditWallet } from "../lib/wallet";
+import { logger } from "../lib/logger";
+import { toMinorUnits } from "../lib/money-input";
 
 const router = Router();
 
@@ -149,6 +151,32 @@ export const handlePurchaseWebhook: RequestHandler = async (req, res) => {
   const charge = await verifyCharge(reference);
   if (!charge.ok) {
     res.status(400).json({ error: "Verification failed", reason: charge.reason });
+    return;
+  }
+
+  // What was actually paid, against what this request asked for.
+  //
+  // verifyCharge has always returned the amount and nothing ever looked at
+  // it, so a charge that settled for less than the request would have been
+  // marked paid in full. Paystack is asked for the amount by this server, so
+  // the normal flow cannot disagree - which is exactly why a disagreement
+  // here means something is wrong and must not be credited quietly.
+  const [requested] = await db
+    .select({ amount: writerTokenPurchasesTable.amount })
+    .from(writerTokenPurchasesTable)
+    .where(eq(writerTokenPurchasesTable.paystackReference, reference))
+    .limit(1);
+  if (!requested) {
+    res.status(200).json({ message: "Unknown reference" });
+    return;
+  }
+  const expectedMinor = toMinorUnits(requested.amount);
+  if (charge.amountMinor !== expectedMinor) {
+    logger.error(
+      { reference, expectedMinor, paidMinor: charge.amountMinor },
+      "[PURCHASE WEBHOOK] amount paid does not match the amount requested - not crediting",
+    );
+    res.status(200).json({ message: "Amount mismatch" });
     return;
   }
 
