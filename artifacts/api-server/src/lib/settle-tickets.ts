@@ -5,8 +5,8 @@ import {
   writersTable,
   betTypesTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { recordTicketEvent } from "./ticket-audit";
+import { eq, inArray } from "drizzle-orm";
+import { recordTicketEvents, type RecordEventInput } from "./ticket-audit";
 import { settleSelection, parseNumberList, type Mechanic } from "./bet-engine";
 
 /**
@@ -108,13 +108,42 @@ export async function settleGameTickets(
   const writers = await tx
     .select({ id: writersTable.id, agentId: writersTable.agentId })
     .from(writersTable);
-  const agentByWriter = new Map(
-    writers.map((w: { id: string; agentId: string }) => [w.id, w.agentId]),
+  const agentByWriter = new Map<string, string>(
+    writers.map((w: { id: string; agentId: string }) => [w.id, w.agentId] as const),
   );
 
   let totalWinners = 0;
   let totalPayouts = 0;
   let totalStakes = 0;
+
+  /**
+   * Decide first, write second.
+   *
+   * Settlement used to write as it walked: an UPDATE per ticket, plus an
+   * event row, plus a payout row for each winner. On a large draw that is
+   * hundreds of thousands of statements issued one after another inside one
+   * transaction, each waiting for a network round trip - the deciding is
+   * trivial, the waiting is what cannot finish inside a function's time
+   * limit.
+   *
+   * The engine below is unchanged and still the only place a payout is
+   * worked out. Expressing seven mechanics, their combinatorics and the
+   * banker rules a second time in SQL would be a second implementation of
+   * the one calculation this company cannot afford to get wrong, free to
+   * drift from this one. So the decisions stay here, in memory, and only
+   * the writing becomes set-based.
+   */
+  const wonIds: string[] = [];
+  const wonAmounts: string[] = [];
+  const lostIds: string[] = [];
+  const payouts: Array<{
+    ticketId: string;
+    gameResultId: string;
+    writerId: string;
+    agentId: string;
+    payoutAmount: string;
+  }> = [];
+  const events: RecordEventInput[] = [];
 
   for (const ticket of tickets) {
     if (ticket.status !== "active") continue;
@@ -130,12 +159,22 @@ export async function settleGameTickets(
       totalPayouts += payout;
       const winAmount = payout.toFixed(2);
 
-      await tx
-        .update(ticketsTable)
-        .set({ status: "won", isWinner: true, winAmount })
-        .where(eq(ticketsTable.id, ticket.id));
+      const agentId = agentByWriter.get(ticket.writerId);
+      if (!agentId) {
+        throw new Error(`Writer ${ticket.writerId} not found for ticket ${ticket.id}`);
+      }
 
-      await recordTicketEvent(tx, {
+      wonIds.push(ticket.id);
+      wonAmounts.push(winAmount);
+      payouts.push({
+        ticketId: ticket.id,
+        gameResultId: gameResult.id,
+        writerId: ticket.writerId,
+        agentId,
+        // What the draw actually owes, which for a perm is rarely the ceiling.
+        payoutAmount: winAmount,
+      });
+      events.push({
         ticketId: ticket.id,
         eventType: "settled_won",
         fromStatus: "active",
@@ -144,23 +183,9 @@ export async function settleGameTickets(
         source: "settlement",
         note: `Draw ${winningNumbers}`,
       });
-
-      const agentId = agentByWriter.get(ticket.writerId);
-      if (!agentId) {
-        throw new Error(`Writer ${ticket.writerId} not found for ticket ${ticket.id}`);
-      }
-
-      await tx.insert(payoutRequestsTable).values({
-        ticketId: ticket.id,
-        gameResultId: gameResult.id,
-        writerId: ticket.writerId,
-        agentId,
-        // What the draw actually owes, which for a perm is rarely the ceiling.
-        payoutAmount: winAmount,
-      });
     } else {
-      await tx.update(ticketsTable).set({ status: "lost" }).where(eq(ticketsTable.id, ticket.id));
-      await recordTicketEvent(tx, {
+      lostIds.push(ticket.id);
+      events.push({
         ticketId: ticket.id,
         eventType: "settled_lost",
         fromStatus: "active",
@@ -170,6 +195,52 @@ export async function settleGameTickets(
         note: `Draw ${winningNumbers}`,
       });
     }
+  }
+
+  // Chunked because Postgres takes at most 65535 bind parameters in one
+  // statement, and a payout row carries five of them.
+  const CHUNK = 2_000;
+
+  for (let i = 0; i < lostIds.length; i += CHUNK) {
+    const slice = lostIds.slice(i, i + CHUNK);
+    await tx
+      .update(ticketsTable)
+      .set({ status: "lost" })
+      .where(inArray(ticketsTable.id, slice));
+  }
+
+  /**
+   * Winners, grouped by the amount they won.
+   *
+   * A payout is stake-per-line times multiplier times winning lines, so a
+   * draw produces a handful of distinct amounts however many tickets won -
+   * in a mixed 40,000-ticket draw, two. Grouping turns "one statement per
+   * winner" into one statement per distinct amount per chunk, with no SQL
+   * built by hand: each is an ordinary UPDATE ... WHERE id IN (...).
+   */
+  const byAmount = new Map<string, string[]>();
+  for (let i = 0; i < wonIds.length; i++) {
+    const amount = wonAmounts[i]!;
+    const list = byAmount.get(amount);
+    if (list) list.push(wonIds[i]!);
+    else byAmount.set(amount, [wonIds[i]!]);
+  }
+
+  for (const [amount, ids] of byAmount) {
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      await tx
+        .update(ticketsTable)
+        .set({ status: "won", isWinner: true, winAmount: amount })
+        .where(inArray(ticketsTable.id, ids.slice(i, i + CHUNK)));
+    }
+  }
+
+  for (let i = 0; i < payouts.length; i += CHUNK) {
+    await tx.insert(payoutRequestsTable).values(payouts.slice(i, i + CHUNK));
+  }
+
+  for (let i = 0; i < events.length; i += CHUNK) {
+    await recordTicketEvents(tx, events.slice(i, i + CHUNK));
   }
 
   await tx

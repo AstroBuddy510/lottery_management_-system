@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { db, gameResultsTable, ticketsTable, payoutRequestsTable, writersTable, writerTokenWalletsTable, writerTokenTransactionsTable, postpaidDailyLedgerTable, betTypesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { SmsAdapter } from "../lib/sms-gateway";
 import { recordTicketEvent } from "../lib/ticket-audit";
-import { payoutFor } from "../lib/settle-tickets";
+import { payoutFor, settleGameTickets } from "../lib/settle-tickets";
 import { creditWallet } from "../lib/wallet";
+import { logger } from "../lib/logger";
 
 const router = Router();
 const smsAdapter = new SmsAdapter();
@@ -25,76 +26,33 @@ router.post("/game-results", requireAuth, requireRole("director", "administrator
   }
   const { gameId, winningNumbers, machineNumbers } = parse.data;
 
-  // Ensure game is closed
-  // Process winners, update tickets, create payout requests
+  /**
+   * One settlement path, not two.
+   *
+   * This route used to carry its own copy of the loop: it looked the
+   * writer's agent up per winning ticket rather than once, wrote no ticket
+   * events at all - so a draw settled here left no audit trail while the
+   * same draw settled through /calculations left a full one - and had no
+   * guard against settling a game twice beyond the unique constraint on
+   * game_results.game_id, which fails with a database error rather than an
+   * answer.
+   *
+   * settleGameTickets is the same engine the calculation run uses, is
+   * idempotent, and now writes in batches.
+   */
   const result = await db.transaction(async (tx) => {
-    // Create game result
-    const [gameResult] = await tx.insert(gameResultsTable).values({
+    const summary = await settleGameTickets(
+      tx,
       gameId,
       winningNumbers,
       machineNumbers,
-      processedBy: req.user!.userId,
-    }).returning();
-
-    // Fetch tickets and bet types
-    const tickets = await tx.select().from(ticketsTable).where(eq(ticketsTable.gameId, gameId));
-    const betTypes = await tx.select().from(betTypesTable);
-    const betTypeMap = new Map(betTypes.map(b => [b.id, b]));
-
-    let totalWinners = 0;
-    let totalPayouts = 0;
-    let totalStakes = 0;
-
-    for (const ticket of tickets) {
-      if (ticket.status !== "active") continue;
-      totalStakes += parseFloat(ticket.stakeAmount);
-
-      const betType = betTypeMap.get(ticket.betTypeId);
-      if (!betType) continue;
-
-      // Same engine as the calculation run. These two paths must never
-      // disagree about what a ticket is owed.
-      const payout = payoutFor(ticket, winningNumbers, betType);
-      const winAmount = payout.toFixed(2);
-
-      if (payout > 0) {
-        totalWinners++;
-        totalPayouts += payout;
-
-        await tx.update(ticketsTable)
-          .set({ status: "won", isWinner: true, winAmount })
-          .where(eq(ticketsTable.id, ticket.id));
-          
-        const [ticketWriter] = await tx
-          .select({ agentId: writersTable.agentId })
-          .from(writersTable)
-          .where(eq(writersTable.id, ticket.writerId))
-          .limit(1);
-        if (!ticketWriter) {
-          throw new Error(`Writer ${ticket.writerId} not found for ticket ${ticket.id}`);
-        }
-
-        await tx.insert(payoutRequestsTable).values({
-          ticketId: ticket.id,
-          gameResultId: gameResult.id,
-          writerId: ticket.writerId,
-          agentId: ticketWriter.agentId,
-          payoutAmount: winAmount,
-        });
-      } else {
-        await tx.update(ticketsTable)
-          .set({ status: "lost" })
-          .where(eq(ticketsTable.id, ticket.id));
-      }
-    }
-
-    await tx.update(gameResultsTable).set({
-      totalTickets: tickets.length,
-      totalStakes: totalStakes.toString(),
-      totalWinners,
-      totalPayouts: totalPayouts.toString()
-    }).where(eq(gameResultsTable.id, gameResult.id));
-
+      req.user!.userId,
+    );
+    const [gameResult] = await tx
+      .select()
+      .from(gameResultsTable)
+      .where(eq(gameResultsTable.id, summary.gameResultId))
+      .limit(1);
     return gameResult;
   });
 
@@ -116,6 +74,28 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
   const payouts = await db.select().from(payoutRequestsTable).where(and(eq(payoutRequestsTable.gameResultId, gameResult.id), eq(payoutRequestsTable.status, "approved")));
   const skipped: Array<{ payoutId: string; reason: string }> = [];
 
+  /**
+   * One transaction per payout, and the claim inside it.
+   *
+   * This loop used to run straight against db, so each payout was a sequence
+   * of independent writes: credit the wallet, write the token transaction,
+   * mark the request paid. A function that died between the first and the
+   * last left a writer credited against a request still marked approved -
+   * and the next run credited them again. Re-running a failed payout run is
+   * exactly what an administrator would do.
+   *
+   * Claiming the request inside the same transaction as the credit makes the
+   * pair all-or-nothing, and the WHERE on status means a second run - or a
+   * second administrator pressing the button - finds nothing to claim rather
+   * than paying twice.
+   *
+   * The whole run is deliberately NOT one transaction. At a large draw that
+   * would be back to a single statement stream that cannot finish inside the
+   * time limit, and a timeout would roll back every payout including the ones
+   * that worked. Per-payout is the unit that can be safely retried.
+   */
+  const texts: Array<{ phone: string; message: string }> = [];
+
   for (const payout of payouts) {
     const [writer] = await db.select().from(writersTable).where(eq(writersTable.id, payout.writerId)).limit(1);
     if (!writer) {
@@ -123,62 +103,100 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
       continue;
     }
 
-    if (writer.operationModel === "prepaid") {
-      // Credit wallet
-      // Atomic, and it creates the wallet if the writer somehow has none -
-      // the old code skipped the payout in that case, quietly keeping money
-      // the writer had won. A credit landing while the writer is mid-sale
-      // used to be lost outright: both sides read the same balance and the
-      // sale's write won.
-      const newBalance = await creditWallet(
-        db,
-        writer.id,
-        parseFloat(payout.payoutAmount),
-        false,
-      );
-      
-      await db.insert(writerTokenTransactionsTable).values({
-        writerId: writer.id,
-        transactionType: "win_credit",
-        amount: payout.payoutAmount,
-        balanceAfter: newBalance,
-        description: `Win payout for ticket on game`,
+    try {
+      const claimed = await db.transaction(async (tx) => {
+        // Claim first, inside the transaction. Zero rows means someone else
+        // already paid this one.
+        const [got] = await tx
+          .update(payoutRequestsTable)
+          .set({ status: "paid", paidAt: new Date() })
+          .where(
+            and(
+              eq(payoutRequestsTable.id, payout.id),
+              eq(payoutRequestsTable.status, "approved"),
+            ),
+          )
+          .returning({ id: payoutRequestsTable.id });
+        if (!got) return false;
+
+        if (writer.operationModel === "prepaid") {
+          const newBalance = await creditWallet(
+            tx,
+            writer.id,
+            parseFloat(payout.payoutAmount),
+            false,
+          );
+          await tx.insert(writerTokenTransactionsTable).values({
+            writerId: writer.id,
+            transactionType: "win_credit",
+            amount: payout.payoutAmount,
+            balanceAfter: newBalance,
+            description: `Win payout for ticket on game`,
+          });
+        } else {
+          const today = new Date().toISOString().slice(0, 10);
+          // Recorded against the writer's sales, and recorded ONLY. The company
+          // pays this winner through the agent, so it must not come off what the
+          // writer hands in - netting it off would let a writer who recorded a
+          // win keep the day's takings, which is the risk-free position the
+          // ledger exists to close.
+          //
+          // Added in SQL rather than read-then-written, so a win landing while
+          // the writer is still selling cannot be lost.
+          await tx.execute(sql`
+            UPDATE postpaid_daily_ledger
+               SET total_winnings = total_winnings + ${Number(payout.payoutAmount).toFixed(2)}::numeric
+             WHERE writer_id = ${writer.id}
+               AND ledger_date = ${today}
+               AND game_id = ${gameId}
+          `);
+        }
+
+        await recordTicketEvent(tx, {
+          ticketId: payout.ticketId,
+          eventType: "paid",
+          actorUserId: req.user!.userId,
+          actorRole: req.user!.role,
+          source: "admin",
+          note: `Paid ${payout.payoutAmount}`,
+        });
+
+        return true;
       });
-    } else {
-      // Postpaid credit
-      const today = new Date().toISOString().slice(0, 10);
-      let [ledger] = await db.select().from(postpaidDailyLedgerTable)
-        .where(and(eq(postpaidDailyLedgerTable.writerId, writer.id), eq(postpaidDailyLedgerTable.ledgerDate, today), eq(postpaidDailyLedgerTable.gameId, gameId))).limit(1);
-      
-      if (ledger) {
-        // Recorded against the writer's sales, and recorded ONLY. The company
-        // pays this winner through the agent, so it must not come off what the
-        // writer hands in - netting it off would let a writer who recorded a
-        // win keep the day's takings, which is the risk-free position the
-        // ledger exists to close.
-        await db.update(postpaidDailyLedgerTable)
-          .set({
-            totalWinnings: (parseFloat(ledger.totalWinnings) + parseFloat(payout.payoutAmount)).toString(),
-          })
-          .where(eq(postpaidDailyLedgerTable.id, ledger.id));
+
+      if (!claimed) {
+        skipped.push({ payoutId: payout.id, reason: "already paid" });
+        continue;
       }
+    } catch (err) {
+      // One payout failing must not stop the rest. It stays approved, so the
+      // run can simply be repeated.
+      logger.error(
+        { payoutId: payout.id, err: err instanceof Error ? err.message : String(err) },
+        "[PAYOUTS] payout failed and was left unpaid",
+      );
+      skipped.push({ payoutId: payout.id, reason: "failed, still approved" });
+      continue;
     }
 
-    await db.update(payoutRequestsTable).set({ status: "paid", paidAt: new Date() }).where(eq(payoutRequestsTable.id, payout.id));
-
-    await recordTicketEvent(db, {
-      ticketId: payout.ticketId,
-      eventType: "paid",
-      actorUserId: req.user!.userId,
-      actorRole: req.user!.role,
-      source: "admin",
-      note: `Paid ${payout.payoutAmount}`,
-    });
-
-    // Send SMS
+    // Texts go out after the money is committed, never inside the
+    // transaction: a gateway timeout must not roll back a payment, and
+    // waiting on an SMS per writer is most of what made this loop slow.
     if (writer.phone) {
-      await smsAdapter.send(writer.phone, `Congratulations! You won GHS ${payout.payoutAmount} on VS2000 Lottery. Reference: ${payout.ticketId}`);
+      texts.push({
+        phone: writer.phone,
+        message: `Congratulations! You won GHS ${payout.payoutAmount} on VS2000 Lottery. Reference: ${payout.ticketId}`,
+      });
     }
+  }
+
+  // Sent together, and never fatal - the money has already moved.
+  const smsResults = await Promise.allSettled(
+    texts.map((t) => smsAdapter.send(t.phone, t.message)),
+  );
+  const smsFailed = smsResults.filter((r) => r.status === "rejected").length;
+  if (smsFailed > 0) {
+    logger.error({ smsFailed, of: texts.length }, "[PAYOUTS] some win texts did not send");
   }
 
   await db.update(gameResultsTable).set({ smsNotificationsSent: true }).where(eq(gameResultsTable.id, gameResult.id));
@@ -186,6 +204,7 @@ router.post("/game-results/:gameId/process-payouts", requireAuth, requireRole("d
   res.json({
     success: true,
     processedCount: payouts.length - skipped.length,
+    smsSent: texts.length - smsFailed,
     skippedCount: skipped.length,
     skipped,
   });

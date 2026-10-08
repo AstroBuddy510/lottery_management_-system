@@ -36,7 +36,9 @@ export interface RecordEventInput {
 /** Minimal shape of a Drizzle handle - the db, or a transaction. */
 interface Inserter {
   insert: (table: typeof ticketEventsTable) => {
-    values: (values: Record<string, unknown>) => Promise<unknown>;
+    // One row or many - drizzle accepts an array and writes a single
+    // multi-row INSERT, which is what the bulk helper below relies on.
+    values: (values: Record<string, unknown> | Record<string, unknown>[]) => Promise<unknown>;
   };
 }
 
@@ -56,6 +58,33 @@ export async function recordTicketEvent(exec: Inserter, event: RecordEventInput)
     note: event.note ?? null,
     ...(event.occurredAt ? { occurredAt: event.occurredAt } : {}),
   });
+}
+
+/**
+ * Append many events in one statement.
+ *
+ * Settlement writes an event per ticket. One INSERT per event is one network
+ * round trip per ticket, which is what made settling a large draw impossible
+ * inside a function's time limit - the work is trivial, the waiting is not.
+ */
+export async function recordTicketEvents(
+  exec: Inserter,
+  events: readonly RecordEventInput[],
+): Promise<void> {
+  if (events.length === 0) return;
+  await exec.insert(ticketEventsTable).values(
+    events.map((event) => ({
+      ticketId: event.ticketId,
+      eventType: event.eventType,
+      fromStatus: event.fromStatus ?? null,
+      toStatus: event.toStatus ?? null,
+      actorUserId: event.actorUserId ?? null,
+      actorRole: event.actorRole ?? null,
+      source: event.source ?? "system",
+      note: event.note ?? null,
+      ...(event.occurredAt ? { occurredAt: event.occurredAt } : {}),
+    })),
+  );
 }
 
 /**
