@@ -517,13 +517,23 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
         </Button>
         {/* Sits directly above Download Image: the writer's eye is already
             here after a sale, and sending beats saving-then-attaching. */}
-        <div className="col-span-2 flex gap-2">
+        {/* Stacked on a phone, side by side from sm up.
+            "Enter customer's phone number" needs 256px and only 254px was
+            left beside the Send button at 390px, so the placeholder clipped
+            on exactly the handsets writers use - and worse on a 360px screen.
+            Given the whole row, it has 332px and reads in full. */}
+        <div className="col-span-2 flex flex-col gap-2 sm:flex-row">
           <Input
             type="tel"
             inputMode="tel"
             autoComplete="tel"
-            placeholder="Customer's phone number"
+            placeholder="Enter customer's phone number"
             aria-label="Customer's phone number for WhatsApp"
+            // h-11 rather than the default h-9: 44px is a size a thumb can
+            // hit, and the extra height gives the text room to sit in rather
+            // than fill the box. text-base is kept on mobile deliberately -
+            // below 16px, iOS zooms the page the moment the field is focused.
+            className="h-11 text-base"
             value={customerPhone}
             onChange={(e) => setCustomerPhone(e.target.value)}
             onKeyDown={(e) => {
@@ -536,7 +546,9 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
           />
           <Button
             variant="outline"
-            className="shrink-0 border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+            // Matches the input's height so the pair sits level, and takes the
+            // full width when stacked.
+            className="h-11 w-full shrink-0 border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 sm:w-auto dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
             disabled={sending || !customerPhone.trim()}
             onClick={sendWhatsApp}
           >
