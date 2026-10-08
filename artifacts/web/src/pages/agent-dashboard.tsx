@@ -41,7 +41,15 @@ function Avatar({ name, src, size = "md", onPress, uploading }: {
     );
   if (!onPress) return content;
   return (
-    <button type="button" onClick={onPress} disabled={uploading} className="relative flex-shrink-0">
+    <button
+      type="button"
+      onClick={onPress}
+      disabled={uploading}
+      // An avatar and a camera glyph, no words: without this the button
+      // is announced as just "button".
+      aria-label={uploading ? "Uploading profile photo" : "Change profile photo"}
+      className="relative flex-shrink-0"
+    >
       {content}
       <span className="absolute inset-0 rounded-full flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 active:opacity-100 transition-opacity">
         {uploading

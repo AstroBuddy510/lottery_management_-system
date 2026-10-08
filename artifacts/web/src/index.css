@@ -179,3 +179,25 @@
     @apply font-sans antialiased bg-background text-foreground text-sm;
   }
 }
+
+/**
+ * Respect a request for less motion.
+ *
+ * The portal animates throughout - the closing-time alerts slide in, the
+ * writer's navigation transitions, dialogs fade. For someone with vestibular
+ * sensitivity that is not decoration, it is a reason to put the phone down.
+ * The setting is in every mobile OS and the app ignored it.
+ *
+ * Animations are reduced to near-zero rather than removed, so anything whose
+ * completion fires an event still finishes immediately instead of never.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -96,8 +96,11 @@ export function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs text-blue-100 font-medium">Phone Number</Label>
+              {/* htmlFor/id, so tapping the label focuses the field and a
+                  screen reader announces which field it is reading. */}
+              <Label htmlFor="login-phone" className="text-xs text-blue-100 font-medium">Phone Number</Label>
               <Input
+                id="login-phone"
                 type="tel"
                 autoComplete="tel"
                 value={phone}
@@ -109,9 +112,9 @@ export function Login() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-blue-100 font-medium">Role</Label>
+              <Label htmlFor="login-role" className="text-xs text-blue-100 font-medium">Role</Label>
               <Select value={role} onValueChange={setRole}>
-                <SelectTrigger className="h-10 text-sm bg-white/20 border-white/30 text-white focus:bg-white/30 focus:border-white/60 [&>span]:text-white data-[placeholder]:text-white/50">
+                <SelectTrigger id="login-role" className="h-10 text-sm bg-white/20 border-white/30 text-white focus:bg-white/30 focus:border-white/60 [&>span]:text-white data-[placeholder]:text-white/50">
                   <SelectValue placeholder="Select your role…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -123,8 +126,9 @@ export function Login() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-blue-100 font-medium">4-Digit PIN</Label>
+              <Label htmlFor="login-pin" className="text-xs text-blue-100 font-medium">4-Digit PIN</Label>
               <Input
+                id="login-pin"
                 type="password"
                 inputMode="numeric"
                 autoComplete="one-time-code"
