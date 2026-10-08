@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,46 +9,64 @@ import { useAuth } from "@/lib/auth";
 // Pages
 import NotFound from "@/pages/not-found";
 import { Login } from "@/pages/login";
-import { Dashboard } from "@/pages/dashboard";
-import { Users } from "@/pages/users";
-import { Settings } from "@/pages/settings";
-import { Games } from "@/pages/games";
-import { AgentDetail } from "@/pages/agent-detail";
-import { Sales } from "@/pages/sales";
-import { GrossEntries } from "@/pages/gross-entries";
-import { WinsEntries } from "@/pages/wins-entries";
-import { GrossWins } from "@/pages/gross-wins";
-import { Payments } from "@/pages/payments";
-import { Calculations } from "@/pages/calculations";
-import { Reports } from "@/pages/reports";
-import { Reserve } from "@/pages/reserve";
-import { ReserveReceipts } from "@/pages/reserve-receipts";
-import { Notifications } from "@/pages/notifications";
-import { MyWriters } from "@/pages/my-writers";
-import { WinsDebt } from "@/pages/wins-debt";
-import { AgencyDashboard } from "@/pages/agency-dashboard";
-import { EntryChangeRequests } from "@/pages/entry-change-requests";
-import { OnlinePayment } from "@/pages/online-payment";
-import { AgencyStaffExpenses } from "@/pages/agency-staff-expenses";
-import { StaffsEmployees } from "@/pages/staffs-employees";
-import { CompanyExpenses } from "@/pages/company-expenses";
-import { Inventory } from "@/pages/inventory";
 
 // Writer Pages
-import { TokenSales } from "@/pages/token-sales";
+
 import { WriterLogin } from "@/pages/writer-login";
-import { WriterRegister } from "@/pages/writer-register";
-import { WriterDashboard } from "@/pages/writer-dashboard";
-import { WriterPlaceBet } from "@/pages/writer-place-bet";
-import { WriterTickets } from "@/pages/writer-tickets";
-import { WriterWallet } from "@/pages/writer-wallet";
+
 import { WriterLayout } from "@/components/writer-layout";
 
 // Admin Pages
-import { AdminRiskManagement } from "@/pages/admin-risk-management";
-import { TicketLookup } from "@/pages/ticket-lookup";
 
 import { Layout } from "@/components/layout";
+
+/**
+ * Routes load when they are visited.
+ *
+ * Every page used to be imported at the top of this file, so one chunk
+ * carried all 42 of them plus everything they pull in - the PDF generator,
+ * the charting library, the map - and a writer on mobile data downloaded
+ * and parsed the lot before the login screen painted, to use three screens.
+ *
+ * The login screens stay eager: they are the first thing anyone sees, and
+ * making them lazy would add a round trip before anything is on screen.
+ *
+ * The pages export names rather than defaults, hence the .then() that hands
+ * React.lazy the default shape it expects.
+ */
+const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.Dashboard })));
+const Users = lazy(() => import("@/pages/users").then((m) => ({ default: m.Users })));
+const Settings = lazy(() => import("@/pages/settings").then((m) => ({ default: m.Settings })));
+const Games = lazy(() => import("@/pages/games").then((m) => ({ default: m.Games })));
+const AgentDetail = lazy(() => import("@/pages/agent-detail").then((m) => ({ default: m.AgentDetail })));
+const Sales = lazy(() => import("@/pages/sales").then((m) => ({ default: m.Sales })));
+const GrossEntries = lazy(() => import("@/pages/gross-entries").then((m) => ({ default: m.GrossEntries })));
+const WinsEntries = lazy(() => import("@/pages/wins-entries").then((m) => ({ default: m.WinsEntries })));
+const GrossWins = lazy(() => import("@/pages/gross-wins").then((m) => ({ default: m.GrossWins })));
+const Payments = lazy(() => import("@/pages/payments").then((m) => ({ default: m.Payments })));
+const Calculations = lazy(() => import("@/pages/calculations").then((m) => ({ default: m.Calculations })));
+const Reports = lazy(() => import("@/pages/reports").then((m) => ({ default: m.Reports })));
+const Reserve = lazy(() => import("@/pages/reserve").then((m) => ({ default: m.Reserve })));
+const ReserveReceipts = lazy(() => import("@/pages/reserve-receipts").then((m) => ({ default: m.ReserveReceipts })));
+const Notifications = lazy(() => import("@/pages/notifications").then((m) => ({ default: m.Notifications })));
+const MyWriters = lazy(() => import("@/pages/my-writers").then((m) => ({ default: m.MyWriters })));
+const WinsDebt = lazy(() => import("@/pages/wins-debt").then((m) => ({ default: m.WinsDebt })));
+const AgencyDashboard = lazy(() => import("@/pages/agency-dashboard").then((m) => ({ default: m.AgencyDashboard })));
+const EntryChangeRequests = lazy(() => import("@/pages/entry-change-requests").then((m) => ({ default: m.EntryChangeRequests })));
+const OnlinePayment = lazy(() => import("@/pages/online-payment").then((m) => ({ default: m.OnlinePayment })));
+const AgencyStaffExpenses = lazy(() => import("@/pages/agency-staff-expenses").then((m) => ({ default: m.AgencyStaffExpenses })));
+const StaffsEmployees = lazy(() => import("@/pages/staffs-employees").then((m) => ({ default: m.StaffsEmployees })));
+const CompanyExpenses = lazy(() => import("@/pages/company-expenses").then((m) => ({ default: m.CompanyExpenses })));
+const Inventory = lazy(() => import("@/pages/inventory").then((m) => ({ default: m.Inventory })));
+const TokenSales = lazy(() => import("@/pages/token-sales").then((m) => ({ default: m.TokenSales })));
+const WriterRegister = lazy(() => import("@/pages/writer-register").then((m) => ({ default: m.WriterRegister })));
+const WriterDashboard = lazy(() => import("@/pages/writer-dashboard").then((m) => ({ default: m.WriterDashboard })));
+const WriterPlaceBet = lazy(() => import("@/pages/writer-place-bet").then((m) => ({ default: m.WriterPlaceBet })));
+const WriterTickets = lazy(() => import("@/pages/writer-tickets").then((m) => ({ default: m.WriterTickets })));
+const WriterWallet = lazy(() => import("@/pages/writer-wallet").then((m) => ({ default: m.WriterWallet })));
+const AdminRiskManagement = lazy(() => import("@/pages/admin-risk-management").then((m) => ({ default: m.AdminRiskManagement })));
+const TicketLookup = lazy(() => import("@/pages/ticket-lookup").then((m) => ({ default: m.TicketLookup })));
+
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -262,7 +281,18 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AuthProvider>
-            <Router />
+            {/* A route's chunk arrives over the network, so there is a moment
+                with nothing to render. This is what fills it - deliberately
+                the same wording and layout as the auth check above, so a
+                slow connection shows one steady "Loading..." rather than two
+                different ones flickering past each other. */}
+            <Suspense
+              fallback={
+                <div className="flex h-screen items-center justify-center">Loading...</div>
+              }
+            >
+              <Router />
+            </Suspense>
           </AuthProvider>
         </WouterRouter>
         <Toaster />

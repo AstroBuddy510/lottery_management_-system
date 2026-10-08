@@ -1,4 +1,3 @@
-import html2canvas from "html2canvas";
 import { WIN_GREEN } from "@/components/ticket-receipt";
 
 /**
@@ -27,6 +26,13 @@ export async function captureTicketPng(
 ): Promise<Blob> {
   const node = document.getElementById(elementId);
   if (!node) throw new Error("The ticket is not on screen yet. Open it and try again.");
+
+  // Fetched when a writer actually asks for the picture, not when the app
+  // loads. html2canvas is among the largest things in the bundle and most
+  // sessions never call this - the writer sells, prints, and never taps
+  // Download Image. By this point the ticket is on screen, so the wait is
+  // hidden behind a button the writer has just pressed.
+  const { default: html2canvas } = await import("html2canvas");
 
   // Where the winning numbers are, horizontally, before anything is drawn.
   // Across is faithful in the capture; down is not, which is the whole reason
