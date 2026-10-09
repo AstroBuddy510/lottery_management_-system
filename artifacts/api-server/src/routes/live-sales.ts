@@ -8,6 +8,7 @@ import {
 } from "@workspace/db";
 import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth";
+import { getUnifiedWriterTotals, getUnifiedWriterActivity } from "../lib/unified-sales";
 
 const router = Router();
 
@@ -30,6 +31,44 @@ const ZERO: Totals = {
   totalStakes: "0",
   winningTickets: 0,
   totalWins: "0",
+};
+
+/**
+ * A calendar date from the query string, or null.
+ *
+ * Date.parse is not enough on its own: it accepts 2026-02-30 and silently
+ * rolls it to March 2nd, so the string reached Postgres as a date literal and
+ * came back as a failed query - a 500 with the SQL in the response body, for
+ * what is only a typo. Round-tripping the parsed date back to a string is
+ * what rejects a day that does not exist.
+ *
+ * Defaults to today in Accra, which is the day every live view means.
+ */
+function accraDate(raw: unknown): string | null {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (!text) {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Accra",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const parsed = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  // February 30th parses, then becomes March 2nd. Only a real day survives this.
+  return parsed.toISOString().slice(0, 10) === text ? text : null;
+}
+
+const BLANK_ENTRY_TOTALS = {
+  gross: "0.00",
+  wins: "0.00",
+  entryGross: "0.00",
+  entryWins: "0.00",
+  ticketGross: "0.00",
+  ticketWins: "0.00",
+  ticketCount: 0,
 };
 
 /** Aggregate expressions shared by every scope below. */
@@ -216,6 +255,128 @@ router.get("/live-sales/agents/:agentId/writers", requireAuth, async (req, res) 
 });
 
 /**
+ * One day's live per-writer figures for one agent, from BOTH sources.
+ *
+ * The admin portal's Live Entries table was built on the gross_entries and
+ * wins_entries tables alone - the figures an agent types in. A writer selling
+ * on a POS terminal writes tickets and no entry row, so every portal sale was
+ * invisible here: the table showed a dash against a writer who had taken money
+ * all morning, and the estimated commission, net, reserve and balance beneath
+ * it were all computed from a gross that was too low.
+ *
+ * This reads the same unified figures the daily calculation run reads, so the
+ * live estimate and the locked figure describe the same sales. They are
+ * estimates only because the draw has not settled and nothing is confirmed,
+ * not because they come from a different place.
+ *
+ * Scoped by day, not by game: a supervisor asking what an agency has taken
+ * today means across every draw.
+ */
+router.get("/live-sales/agents/:agentId/entries", requireAuth, async (req, res) => {
+  const agentId = req.params["agentId"] as string;
+  const date = accraDate(req.query["date"]);
+  if (!date) {
+    res.status(400).json({ error: "date must be a calendar date, as YYYY-MM-DD" });
+    return;
+  }
+
+  // Same ownership rule as the per-writer ticket view above: an agent reads
+  // their own agency and nobody else's, and a writer has no business here.
+  if (req.user!.role === "agent") {
+    const [myAgent] = await db
+      .select({ id: agentsTable.id })
+      .from(agentsTable)
+      .where(eq(agentsTable.userId, req.user!.userId))
+      .limit(1);
+    if (!myAgent || myAgent.id !== agentId) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+  } else if (req.user!.role === "writer") {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  const roster = await db
+    .select({
+      id: writersTable.id,
+      fullName: writersTable.fullName,
+      fullCode: writersTable.fullCode,
+      isActive: writersTable.isActive,
+    })
+    .from(writersTable)
+    .where(eq(writersTable.agentId, agentId))
+    .orderBy(writersTable.fullCode);
+
+  if (roster.length === 0) {
+    res.json({ date, agentId, rows: [], totals: BLANK_ENTRY_TOTALS });
+    return;
+  }
+
+  const writerIds = roster.map((w) => w.id);
+  const [totalsByWriter, activityByWriter] = await Promise.all([
+    getUnifiedWriterTotals(db, { calcDate: date, writerIds }),
+    getUnifiedWriterActivity(db, { calcDate: date, writerIds }),
+  ]);
+
+  const money = (n: number) => n.toFixed(2);
+
+  const rows = roster
+    .map((w) => {
+      const t = totalsByWriter.get(w.id);
+      const a = activityByWriter.get(w.id);
+      return {
+        writerId: w.id,
+        writerName: w.fullName,
+        writerCode: w.fullCode,
+        isActive: w.isActive,
+        gross: money(t?.gross ?? 0),
+        wins: money(t?.wins ?? 0),
+        // Split by origin so a figure that looks wrong can be traced to the
+        // agent's keyboard or to a terminal without opening the database.
+        entryGross: money(t?.entryGross ?? 0),
+        entryWins: money(t?.entryWins ?? 0),
+        ticketGross: money(t?.ticketGross ?? 0),
+        ticketWins: money(t?.ticketWins ?? 0),
+        ticketCount: t?.ticketCount ?? 0,
+        grossAt: a?.grossAt ?? null,
+        winsAt: a?.winsAt ?? null,
+      };
+    })
+    // A writer who has neither sold nor won today is listed separately in the
+    // UI as "no entries yet", not as a row of zeroes.
+    .filter((r) => parseFloat(r.gross) !== 0 || parseFloat(r.wins) !== 0 || r.ticketCount > 0);
+
+  const totals = rows.reduce(
+    (acc, r) => ({
+      gross: acc.gross + parseFloat(r.gross),
+      wins: acc.wins + parseFloat(r.wins),
+      entryGross: acc.entryGross + parseFloat(r.entryGross),
+      entryWins: acc.entryWins + parseFloat(r.entryWins),
+      ticketGross: acc.ticketGross + parseFloat(r.ticketGross),
+      ticketWins: acc.ticketWins + parseFloat(r.ticketWins),
+      ticketCount: acc.ticketCount + r.ticketCount,
+    }),
+    { gross: 0, wins: 0, entryGross: 0, entryWins: 0, ticketGross: 0, ticketWins: 0, ticketCount: 0 },
+  );
+
+  res.json({
+    date,
+    agentId,
+    rows,
+    totals: {
+      gross: money(totals.gross),
+      wins: money(totals.wins),
+      entryGross: money(totals.entryGross),
+      entryWins: money(totals.entryWins),
+      ticketGross: money(totals.ticketGross),
+      ticketWins: money(totals.ticketWins),
+      ticketCount: totals.ticketCount,
+    },
+  });
+});
+
+/**
  * One day's real sales, for whoever is asking.
  *
  * The agent dashboard used to read its "Gross Sales" from the gross_entries
@@ -231,17 +392,8 @@ router.get("/live-sales/agents/:agentId/writers", requireAuth, async (req, res) 
  * of this codebase already found polling to be its heaviest load.
  */
 router.get("/live-sales/day", requireAuth, async (req, res) => {
-  const raw = typeof req.query["date"] === "string" ? req.query["date"].trim() : "";
-  const date =
-    raw ||
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Africa/Accra",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date());
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+  const date = accraDate(req.query["date"]);
+  if (!date) {
     res.status(400).json({ error: "date must be a calendar date, as YYYY-MM-DD" });
     return;
   }

@@ -3,6 +3,7 @@ import {
   winsEntriesTable,
   ticketsTable,
   writersTable,
+  ticketEventsTable,
 } from "@workspace/db";
 import { eq, and, sql, inArray } from "drizzle-orm";
 
@@ -149,4 +150,125 @@ export async function getUnifiedWriterTotals(
   }
 
   return totals;
+}
+
+/**
+ * When each writer's figures last moved.
+ *
+ * The Live Entries table shows a "Gross At" and a "Wins At" so a supervisor
+ * can tell a stale row from a quiet one. Those columns used to read the
+ * created_at of the agent's typed entry, which is the only timestamp that
+ * exists if you never look at tickets - so a writer selling steadily through
+ * the portal showed an empty clock all day.
+ *
+ * Gross moves when an entry is keyed in or a ticket is sold. Wins move when a
+ * wins entry is keyed in or a draw settles. Settlement time comes from the
+ * ticket_events row rather than the ticket, because the tickets table keeps no
+ * record of when it was settled - only that it was.
+ *
+ * Kept out of getUnifiedWriterTotals on purpose: the nightly calculation run
+ * needs the money and not the clock, and these are four more queries.
+ */
+export interface WriterActivity {
+  /** ISO timestamp, or null when nothing has moved. */
+  grossAt: string | null;
+  winsAt: string | null;
+}
+
+function later(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return Date.parse(a) >= Date.parse(b) ? a : b;
+}
+
+function iso(value: unknown): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const parsed = new Date(value as string);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+export async function getUnifiedWriterActivity(
+  database: any,
+  { calcDate, gameId, writerIds }: UnifiedScope,
+): Promise<Map<string, WriterActivity>> {
+  const scoped = gameId && gameId !== "undefined" && gameId !== "null" ? gameId : undefined;
+  const only = writerIds && writerIds.length > 0 ? writerIds : undefined;
+  if (writerIds && writerIds.length === 0) return new Map();
+
+  const activity = new Map<string, WriterActivity>();
+  const mark = (writerId: string, field: "grossAt" | "winsAt", at: unknown) => {
+    const stamp = iso(at);
+    if (!stamp) return;
+    let row = activity.get(writerId);
+    if (!row) {
+      row = { grossAt: null, winsAt: null };
+      activity.set(writerId, row);
+    }
+    row[field] = later(row[field], stamp);
+  };
+
+  const grossConditions = [eq(grossEntriesTable.entryDate, calcDate)];
+  if (scoped) grossConditions.push(eq(grossEntriesTable.gameId, scoped));
+  if (only) grossConditions.push(inArray(grossEntriesTable.writerId, only as string[]));
+  const grossStamps = await database
+    .select({
+      writerId: grossEntriesTable.writerId,
+      at: sql<string>`max(${grossEntriesTable.createdAt})`,
+    })
+    .from(grossEntriesTable)
+    .where(and(...grossConditions))
+    .groupBy(grossEntriesTable.writerId);
+  for (const r of grossStamps) mark(r.writerId, "grossAt", r.at);
+
+  const winsConditions = [eq(winsEntriesTable.entryDate, calcDate)];
+  if (scoped) winsConditions.push(eq(winsEntriesTable.gameId, scoped));
+  if (only) winsConditions.push(inArray(winsEntriesTable.writerId, only as string[]));
+  const winsStamps = await database
+    .select({
+      writerId: winsEntriesTable.writerId,
+      at: sql<string>`max(${winsEntriesTable.createdAt})`,
+    })
+    .from(winsEntriesTable)
+    .where(and(...winsConditions))
+    .groupBy(winsEntriesTable.writerId);
+  for (const r of winsStamps) mark(r.writerId, "winsAt", r.at);
+
+  // The same ticket filter getUnifiedWriterTotals uses, so the clock and the
+  // money can never describe different sets of tickets.
+  const ticketConditions = [sql`${ticketsTable.status} not in ('cancelled', 'void')`];
+  if (only) ticketConditions.push(inArray(ticketsTable.writerId, only as string[]));
+  if (scoped) {
+    ticketConditions.push(eq(ticketsTable.gameId, scoped));
+  } else {
+    ticketConditions.push(sql`date(${ticketsTable.createdAt}) = ${calcDate}`);
+  }
+
+  const soldStamps = await database
+    .select({
+      writerId: ticketsTable.writerId,
+      at: sql<string>`max(${ticketsTable.createdAt})`,
+    })
+    .from(ticketsTable)
+    .where(and(...(ticketConditions as never[])))
+    .groupBy(ticketsTable.writerId);
+  for (const r of soldStamps) mark(r.writerId, "grossAt", r.at);
+
+  const settledStamps = await database
+    .select({
+      writerId: ticketsTable.writerId,
+      at: sql<string>`max(${ticketEventsTable.occurredAt})`,
+    })
+    .from(ticketEventsTable)
+    .innerJoin(ticketsTable, eq(ticketEventsTable.ticketId, ticketsTable.id))
+    .where(
+      and(
+        eq(ticketEventsTable.eventType, "settled_won"),
+        ...(ticketConditions as never[]),
+      ),
+    )
+    .groupBy(ticketsTable.writerId);
+  for (const r of settledStamps) mark(r.writerId, "winsAt", r.at);
+
+  return activity;
 }

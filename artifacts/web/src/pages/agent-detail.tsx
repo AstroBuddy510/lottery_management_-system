@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
 import { useLocation, useParams } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   useListCalculations, useListPayments, useListAgents, useListWriters,
-  useListGrossEntries, useListWinsEntries, useGetSettings,
+  useGetSettings,
   useListAgentDebtReductions,
   getListCalculationsQueryKey, getListWritersQueryKey,
-  getListGrossEntriesQueryKey, getListWinsEntriesQueryKey,
   getGetSettingsQueryKey, getListAgentDebtReductionsQueryKey,
 } from "@workspace/api-client-react";
 import { WriterManager } from "@/components/writer-manager";
@@ -18,6 +18,53 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { fmtGHS } from "@/lib/utils";
 
 type TabId = "overview" | "writers" | "entries" | "debt";
+
+/** Shape of GET /api/live-sales/agents/:agentId/entries. Money arrives as strings. */
+interface LiveEntryRow {
+  writerId: string;
+  writerName: string;
+  writerCode: string;
+  isActive: boolean;
+  gross: string;
+  wins: string;
+  entryGross: string;
+  entryWins: string;
+  ticketGross: string;
+  ticketWins: string;
+  ticketCount: number;
+  grossAt: string | null;
+  winsAt: string | null;
+}
+
+interface LiveEntriesResponse {
+  date: string;
+  agentId: string;
+  rows: LiveEntryRow[];
+  totals: {
+    gross: string;
+    wins: string;
+    entryGross: string;
+    entryWins: string;
+    ticketGross: string;
+    ticketWins: string;
+    ticketCount: number;
+  };
+}
+
+interface EntryRow {
+  writerId: string;
+  writerCode: string;
+  writerName: string;
+  gross: number;
+  wins: number;
+  entryGross: number;
+  entryWins: number;
+  ticketGross: number;
+  ticketWins: number;
+  ticketCount: number;
+  grossAt: string;
+  winsAt: string;
+}
 
 function LiveDot() {
   return (
@@ -50,15 +97,32 @@ export function AgentDetail() {
   const { data: payments } = useListPayments({});
   const { data: settings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey() } });
 
-  // Live entries — poll every 30s
-  const { data: rawGross } = useListGrossEntries(
-    { dateFrom: selectedDate, dateTo: selectedDate },
-    { query: { queryKey: getListGrossEntriesQueryKey({ dateFrom: selectedDate, dateTo: selectedDate }), refetchInterval: 30_000 } }
-  );
-  const { data: rawWins } = useListWinsEntries(
-    { dateFrom: selectedDate, dateTo: selectedDate },
-    { query: { queryKey: getListWinsEntriesQueryKey({ dateFrom: selectedDate, dateTo: selectedDate }), refetchInterval: 30_000 } }
-  );
+  /**
+   * Live entries, both sources, polled every 30s.
+   *
+   * This used to read the gross_entries and wins_entries tables - the figures
+   * an agent types in. A writer selling on a POS terminal writes tickets and
+   * no entry row, so their sales never appeared here and the estimates below
+   * were computed from a gross that was too low. The endpoint returns the same
+   * unified figures the daily calculation run uses, so the live estimate and
+   * the locked figure describe the same sales.
+   */
+  const { data: liveEntries, isLoading: liveEntriesLoading, error: liveEntriesError } = useQuery<LiveEntriesResponse>({
+    queryKey: ["/api/live-sales/agents", agentId, "entries", selectedDate],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/live-sales/agents/${agentId}/entries?date=${encodeURIComponent(selectedDate)}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` } },
+      );
+      if (!res.ok) {
+        throw new Error((await res.json().catch(() => ({}))).error || "Could not load live entries");
+      }
+      return res.json();
+    },
+    enabled: !!agentId,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
 
   const agentList = Array.isArray(agents) ? agents : [];
   const writerList = Array.isArray(writers) ? writers : [];
@@ -99,35 +163,28 @@ export function AgentDetail() {
     { gross: 0, commission: 0, net: 0, wins: 0, reserve: 0, balance: 0 }
   ), [dateCalcs]);
 
-  // Per-writer live entries (for Entries tab)
-  const grossEntries = useMemo(
-    () => (Array.isArray(rawGross) ? rawGross : []).filter(e => writerIds.has(e.writerId)),
-    [rawGross, writerIds]
-  );
-  const winsEntries = useMemo(
-    () => (Array.isArray(rawWins) ? rawWins : []).filter(e => writerIds.has(e.writerId)),
-    [rawWins, writerIds]
+  // Per-writer live entries, already unified and scoped to this agent by the
+  // server. Ordered by writer code there; kept in that order here.
+  const entryRows: EntryRow[] = useMemo(
+    () => (liveEntries?.rows ?? []).map(r => ({
+      writerId: r.writerId,
+      writerCode: r.writerCode,
+      writerName: r.writerName,
+      gross: Number(r.gross),
+      wins: Number(r.wins),
+      entryGross: Number(r.entryGross),
+      entryWins: Number(r.entryWins),
+      ticketGross: Number(r.ticketGross),
+      ticketWins: Number(r.ticketWins),
+      ticketCount: r.ticketCount,
+      grossAt: r.grossAt ?? "",
+      winsAt: r.winsAt ?? "",
+    })),
+    [liveEntries]
   );
 
-  // Build per-writer entry rows
-  const entryRows = useMemo(() => {
-    const map: Record<string, { writerId: string; gross: number; wins: number; grossAt: string; winsAt: string }> = {};
-    for (const e of grossEntries) {
-      if (!map[e.writerId]) map[e.writerId] = { writerId: e.writerId, gross: 0, wins: 0, grossAt: "", winsAt: "" };
-      map[e.writerId].gross += Number(e.grossAmount ?? 0);
-      map[e.writerId].grossAt = e.createdAt ?? "";
-    }
-    for (const e of winsEntries) {
-      if (!map[e.writerId]) map[e.writerId] = { writerId: e.writerId, gross: 0, wins: 0, grossAt: "", winsAt: "" };
-      map[e.writerId].wins += Number(e.winsAmount ?? 0);
-      map[e.writerId].winsAt = e.createdAt ?? "";
-    }
-    return Object.values(map).sort((a, b) => {
-      const wa = writerMap[a.writerId]?.fullCode ?? "";
-      const wb = writerMap[b.writerId]?.fullCode ?? "";
-      return wa.localeCompare(wb);
-    });
-  }, [grossEntries, winsEntries, writerMap]);
+  /** Whether any of today's gross came from a POS terminal rather than a typed entry. */
+  const posTicketCount = liveEntries ? liveEntries.totals.ticketCount : 0;
 
   const liveTotals = useMemo(() => {
     const gross = entryRows.reduce((s, r) => s + r.gross, 0);
@@ -464,6 +521,10 @@ export function AgentDetail() {
               </span>
             )}
             <LiveDot />
+            <span className="text-[11px] text-muted-foreground ml-auto">
+              Agent entries + writer POS terminals
+              {posTicketCount > 0 && ` · ${posTicketCount} POS ticket${posTicketCount !== 1 ? "s" : ""} today`}
+            </span>
           </div>
 
           {/* Live summary cards */}
@@ -496,8 +557,13 @@ export function AgentDetail() {
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-base font-semibold">Entry History</h2>
               <span className="text-sm text-muted-foreground">
-                {entryRows.length} writer{entryRows.length !== 1 ? "s" : ""} with entries
+                {entryRows.length} writer{entryRows.length !== 1 ? "s" : ""} with activity
               </span>
+              {liveEntriesError && (
+                <span className="text-xs text-destructive">
+                  Live figures could not be refreshed — showing the last good reading.
+                </span>
+              )}
             </div>
             <div className="border rounded-lg overflow-hidden">
               <Table>
@@ -506,10 +572,10 @@ export function AgentDetail() {
                     <TableHead>Writer</TableHead>
                     <TableHead className="text-right">Gross</TableHead>
                     <TableHead className="text-right">Wins</TableHead>
-                    <TableHead className="text-right">Commission~</TableHead>
-                    <TableHead className="text-right">Net~</TableHead>
-                    <TableHead className="text-right">Reserve~</TableHead>
-                    <TableHead className="text-right">Balance~</TableHead>
+                    <TableHead className="text-right">Commission{!hasCalcForDate ? "~" : ""}</TableHead>
+                    <TableHead className="text-right">Net{!hasCalcForDate ? "~" : ""}</TableHead>
+                    <TableHead className="text-right">Reserve{!hasCalcForDate ? "~" : ""}</TableHead>
+                    <TableHead className="text-right">Balance{!hasCalcForDate ? "~" : ""}</TableHead>
                     <TableHead>Gross At</TableHead>
                     <TableHead>Wins At</TableHead>
                   </TableRow>
@@ -518,7 +584,9 @@ export function AgentDetail() {
                   {entryRows.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-10 text-muted-foreground text-sm">
-                        No entries for {selectedDate} yet.
+                        {liveEntriesLoading
+                          ? "Loading live figures…"
+                          : `No sales or wins recorded for ${selectedDate} yet — from entries or from terminals.`}
                       </TableCell>
                     </TableRow>
                   ) : entryRows.map(row => {
@@ -530,14 +598,31 @@ export function AgentDetail() {
                     return (
                       <TableRow key={row.writerId}>
                         <TableCell className="text-sm">
-                          <div className="font-mono font-medium">{writer?.fullCode ?? row.writerId.slice(0, 8)}</div>
-                          {writer && <div className="text-xs text-muted-foreground">{writer.fullName}</div>}
+                          <div className="font-mono font-medium">{writer?.fullCode ?? row.writerCode}</div>
+                          <div className="text-xs text-muted-foreground">{writer?.fullName ?? row.writerName}</div>
                         </TableCell>
                         <TableCell className="text-sm text-right font-mono">
                           {row.gross > 0 ? fmtGHS(row.gross) : <span className="text-muted-foreground">—</span>}
+                          {/* Both sources present: show the split, so a figure that
+                              looks wrong can be traced without opening the database. */}
+                          {row.entryGross > 0 && row.ticketGross > 0 && (
+                            <div className="text-[10px] font-normal text-muted-foreground whitespace-nowrap">
+                              {row.entryGross.toFixed(2)} typed · {row.ticketGross.toFixed(2)} POS
+                            </div>
+                          )}
+                          {row.entryGross === 0 && row.ticketCount > 0 && (
+                            <div className="text-[10px] font-normal text-muted-foreground whitespace-nowrap">
+                              {row.ticketCount} POS ticket{row.ticketCount !== 1 ? "s" : ""}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm text-right font-mono text-destructive">
                           {row.wins > 0 ? fmtGHS(row.wins) : <span className="text-muted-foreground">—</span>}
+                          {row.entryWins > 0 && row.ticketWins > 0 && (
+                            <div className="text-[10px] font-normal text-muted-foreground whitespace-nowrap">
+                              {row.entryWins.toFixed(2)} typed · {row.ticketWins.toFixed(2)} POS
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(comm)}</TableCell>
                         <TableCell className="text-sm text-right font-mono">{fmtGHS(net)}</TableCell>
