@@ -2239,6 +2239,117 @@ export const ListBookletAgentBalancesResponse = zod.array(ListBookletAgentBalanc
 
 
 /**
+ * @summary List POS terminals with current holder and operational status
+ */
+export const ListTerminalsQueryParams = zod.object({
+  "activeWindowMinutes": zod.coerce.number().optional().describe('How recently the assigned writer must have sold for the terminal to count as active. Defaults to 60.')
+})
+
+export const ListTerminalsResponseItem = zod.object({
+  "id": zod.string(),
+  "serialNumber": zod.string(),
+  "brand": zod.string(),
+  "model": zod.string(),
+  "imei": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "registeredAt": zod.string(),
+  "assignmentId": zod.string().nullish(),
+  "writerId": zod.string().nullish(),
+  "writerCode": zod.string().nullish(),
+  "writerName": zod.string().nullish(),
+  "writerPhone": zod.string().nullish(),
+  "agentId": zod.string().nullish(),
+  "agentCode": zod.string().nullish(),
+  "agencyName": zod.string().nullish(),
+  "assignedAt": zod.string().nullish(),
+  "lastSaleAt": zod.string().nullish(),
+  "salesToday": zod.number().optional(),
+  "isActive": zod.boolean()
+})
+export const ListTerminalsResponse = zod.array(ListTerminalsResponseItem)
+
+
+/**
+ * @summary Register a POS terminal
+ */
+export const CreateTerminalBody = zod.object({
+  "serialNumber": zod.string(),
+  "brand": zod.string(),
+  "model": zod.string(),
+  "imei": zod.string(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Assign a terminal to a writer, closing any previous holding
+ */
+export const AssignTerminalBody = zod.object({
+  "terminalId": zod.string(),
+  "writerId": zod.string(),
+  "notes": zod.string().optional()
+})
+
+
+/**
+ * @summary Terminal custody history
+ */
+export const ListTerminalAssignmentsQueryParams = zod.object({
+  "terminalId": zod.coerce.string().optional()
+})
+
+export const ListTerminalAssignmentsResponseItem = zod.object({
+  "id": zod.string(),
+  "terminalId": zod.string(),
+  "terminalSerialNumber": zod.string(),
+  "terminalBrand": zod.string().nullish(),
+  "terminalModel": zod.string().nullish(),
+  "writerId": zod.string(),
+  "writerCode": zod.string(),
+  "writerName": zod.string(),
+  "writerPhone": zod.string().nullish(),
+  "agencyName": zod.string().nullish(),
+  "assignedAt": zod.string(),
+  "returnedAt": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "assignedBy": zod.string(),
+  "createdAt": zod.string()
+})
+export const ListTerminalAssignmentsResponse = zod.array(ListTerminalAssignmentsResponseItem)
+
+
+/**
+ * @summary Record a terminal as handed back
+ */
+export const ReturnTerminalAssignmentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ReturnTerminalAssignmentBody = zod.object({
+  "notes": zod.string().optional()
+})
+
+export const ReturnTerminalAssignmentResponse = zod.object({
+  "id": zod.string(),
+  "terminalId": zod.string(),
+  "terminalSerialNumber": zod.string(),
+  "terminalBrand": zod.string().nullish(),
+  "terminalModel": zod.string().nullish(),
+  "writerId": zod.string(),
+  "writerCode": zod.string(),
+  "writerName": zod.string(),
+  "writerPhone": zod.string().nullish(),
+  "agencyName": zod.string().nullish(),
+  "assignedAt": zod.string(),
+  "returnedAt": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "assignedBy": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary List all registered padlocks
  */
 export const ListPadlocksResponseItem = zod.object({

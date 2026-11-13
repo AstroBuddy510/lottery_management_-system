@@ -1,7 +1,8 @@
-import { pgTable, uuid, date, decimal, varchar, timestamp, integer, text } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, uuid, date, decimal, varchar, timestamp, integer, text, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { agentsTable } from "./agents";
+import { agentsTable, writersTable } from "./agents";
 import { usersTable } from "./users";
 
 // Booklet printing expenses/restock
@@ -69,6 +70,101 @@ export const padlockAssignmentsTable = pgTable("padlock_assignments", {
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+
+/**
+ * POS terminal registry.
+ *
+ * A terminal is a physical device, identified three ways: the serial number on
+ * the case, the IMEI burned into the modem, and the brand/model that says what
+ * it is. Serial and IMEI are both unique because both are meant to identify one
+ * device in the world, and a duplicate of either means somebody mistyped or the
+ * same unit was registered twice - which is the failure that makes an inventory
+ * worthless.
+ *
+ * registeredAt is set by the database, not the client. The date a device
+ * entered the estate is an audit fact; it is not something a form should be
+ * able to backdate.
+ */
+export const posTerminalsTable = pgTable("pos_terminals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  serialNumber: varchar("serial_number", { length: 100 }).notNull().unique(),
+  brand: varchar("brand", { length: 100 }).notNull(),
+  model: varchar("model", { length: 100 }).notNull(),
+  /** 15 digits on nearly every device; the column is wider so a 16/17-digit IMEISV still fits. */
+  imei: varchar("imei", { length: 20 }).notNull().unique(),
+  /** "available", "assigned", "damaged", "lost", "retired" - mirrors padlocks. */
+  status: varchar("status", { length: 50 }).notNull().default("available"),
+  notes: text("notes"),
+  registeredAt: timestamp("registered_at", { withTimezone: true }).notNull().defaultNow(),
+  registeredBy: uuid("registered_by").notNull().references(() => usersTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+},
+  (table) => [
+    index("pos_terminals_status_idx").on(table.status),
+  ],
+);
+
+/**
+ * Which writer holds which terminal, and who held it before.
+ *
+ * Append-and-close rather than overwrite: reassigning a device stamps
+ * returnedAt on the old row and inserts a new one, so "who had this terminal in
+ * September" stays answerable. A current holding is the row whose returnedAt is
+ * still null.
+ *
+ * The two partial unique indexes are what actually enforce "one terminal per
+ * writer". Checking that in the route is not enough - two assignment requests
+ * arriving together would both read "no open assignment" and both insert. The
+ * same reasoning applies in reverse: a device cannot be in two writers' hands
+ * at once, so the terminal is constrained too. Postgres rejects the second
+ * writer rather than the application hoping it never happens.
+ */
+export const terminalAssignmentsTable = pgTable("terminal_assignments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  terminalId: uuid("terminal_id").notNull().references(() => posTerminalsTable.id),
+  writerId: uuid("writer_id").notNull().references(() => writersTable.id),
+  assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+  returnedAt: timestamp("returned_at", { withTimezone: true }),
+  notes: text("notes"),
+  assignedBy: uuid("assigned_by").notNull().references(() => usersTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+},
+  (table) => [
+    uniqueIndex("terminal_assignments_one_open_per_writer")
+      .on(table.writerId)
+      .where(sql`${table.returnedAt} is null`),
+    uniqueIndex("terminal_assignments_one_open_per_terminal")
+      .on(table.terminalId)
+      .where(sql`${table.returnedAt} is null`),
+    index("terminal_assignments_terminal_idx").on(table.terminalId, table.assignedAt),
+    index("terminal_assignments_writer_idx").on(table.writerId, table.assignedAt),
+  ],
+);
+
+export const insertPosTerminalSchema = createInsertSchema(posTerminalsTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  registeredAt: true,
+});
+export type InsertPosTerminal = z.infer<typeof insertPosTerminalSchema>;
+export type PosTerminal = typeof posTerminalsTable.$inferSelect;
+
+export const insertTerminalAssignmentSchema = createInsertSchema(terminalAssignmentsTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertTerminalAssignment = z.infer<typeof insertTerminalAssignmentSchema>;
+export type TerminalAssignment = typeof terminalAssignmentsTable.$inferSelect;
 
 export const insertBookletBatchSchema = createInsertSchema(bookletBatchesTable).omit({
   id: true,

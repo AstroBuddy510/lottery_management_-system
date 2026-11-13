@@ -82,6 +82,8 @@ import type {
   ListReserveReceiptsParams,
   ListSalaryPaymentsParams,
   ListSalesParams,
+  ListTerminalAssignmentsParams,
+  ListTerminalsParams,
   ListUsersParams,
   ListWinsEntriesParams,
   ListWritersParams,
@@ -103,6 +105,7 @@ import type {
   PayrollCalendarEntry,
   PayrollSummary,
   PinRegenResponse,
+  PosTerminal,
   RecurringExpense,
   RefreshInput,
   ReserveAllocation,
@@ -115,6 +118,11 @@ import type {
   SalesLogInput,
   SystemSettings,
   SystemSettingsInput,
+  TerminalAssignInput,
+  TerminalAssignmentRecord,
+  TerminalInput,
+  TerminalReturnInput,
+  TerminalWithStatus,
   TimeWindow,
   TimeWindowInput,
   TimeWindowUpdate,
@@ -7865,6 +7873,388 @@ export function useListBookletAgentBalances<TData = Awaited<ReturnType<typeof li
 
 
 
+
+export const getListTerminalsUrl = (params?: ListTerminalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/inventory/terminals?${stringifiedParams}` : `/api/inventory/terminals`
+}
+
+/**
+ * @summary List POS terminals with current holder and operational status
+ */
+export const listTerminals = async (params?: ListTerminalsParams, options?: RequestInit): Promise<TerminalWithStatus[]> => {
+
+  return customFetch<TerminalWithStatus[]>(getListTerminalsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTerminalsQueryKey = (params?: ListTerminalsParams,) => {
+    return [
+    `/api/inventory/terminals`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTerminalsQueryOptions = <TData = Awaited<ReturnType<typeof listTerminals>>, TError = ErrorType<unknown>>(params?: ListTerminalsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTerminals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTerminalsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTerminals>>> = ({ signal }) => listTerminals(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTerminals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTerminalsQueryResult = NonNullable<Awaited<ReturnType<typeof listTerminals>>>
+export type ListTerminalsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List POS terminals with current holder and operational status
+ */
+
+export function useListTerminals<TData = Awaited<ReturnType<typeof listTerminals>>, TError = ErrorType<unknown>>(
+ params?: ListTerminalsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTerminals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTerminalsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateTerminalUrl = () => {
+
+
+
+
+  return `/api/inventory/terminals`
+}
+
+/**
+ * @summary Register a POS terminal
+ */
+export const createTerminal = async (terminalInput: TerminalInput, options?: RequestInit): Promise<PosTerminal> => {
+
+  return customFetch<PosTerminal>(getCreateTerminalUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      terminalInput,)
+  }
+);}
+
+
+
+
+export const getCreateTerminalMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTerminal>>, TError,{data: BodyType<TerminalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTerminal>>, TError,{data: BodyType<TerminalInput>}, TContext> => {
+
+const mutationKey = ['createTerminal'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTerminal>>, {data: BodyType<TerminalInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTerminal(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTerminalMutationResult = NonNullable<Awaited<ReturnType<typeof createTerminal>>>
+    export type CreateTerminalMutationBody = BodyType<TerminalInput>
+    export type CreateTerminalMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Register a POS terminal
+ */
+export const useCreateTerminal = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTerminal>>, TError,{data: BodyType<TerminalInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTerminal>>,
+        TError,
+        {data: BodyType<TerminalInput>},
+        TContext
+      > => {
+      return useMutation(getCreateTerminalMutationOptions(options));
+    }
+
+export const getAssignTerminalUrl = () => {
+
+
+
+
+  return `/api/inventory/terminals/assign`
+}
+
+/**
+ * @summary Assign a terminal to a writer, closing any previous holding
+ */
+export const assignTerminal = async (terminalAssignInput: TerminalAssignInput, options?: RequestInit): Promise<TerminalAssignmentRecord> => {
+
+  return customFetch<TerminalAssignmentRecord>(getAssignTerminalUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      terminalAssignInput,)
+  }
+);}
+
+
+
+
+export const getAssignTerminalMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignTerminal>>, TError,{data: BodyType<TerminalAssignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignTerminal>>, TError,{data: BodyType<TerminalAssignInput>}, TContext> => {
+
+const mutationKey = ['assignTerminal'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignTerminal>>, {data: BodyType<TerminalAssignInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  assignTerminal(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignTerminalMutationResult = NonNullable<Awaited<ReturnType<typeof assignTerminal>>>
+    export type AssignTerminalMutationBody = BodyType<TerminalAssignInput>
+    export type AssignTerminalMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Assign a terminal to a writer, closing any previous holding
+ */
+export const useAssignTerminal = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignTerminal>>, TError,{data: BodyType<TerminalAssignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignTerminal>>,
+        TError,
+        {data: BodyType<TerminalAssignInput>},
+        TContext
+      > => {
+      return useMutation(getAssignTerminalMutationOptions(options));
+    }
+
+export const getListTerminalAssignmentsUrl = (params?: ListTerminalAssignmentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/inventory/terminal-assignments?${stringifiedParams}` : `/api/inventory/terminal-assignments`
+}
+
+/**
+ * @summary Terminal custody history
+ */
+export const listTerminalAssignments = async (params?: ListTerminalAssignmentsParams, options?: RequestInit): Promise<TerminalAssignmentRecord[]> => {
+
+  return customFetch<TerminalAssignmentRecord[]>(getListTerminalAssignmentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTerminalAssignmentsQueryKey = (params?: ListTerminalAssignmentsParams,) => {
+    return [
+    `/api/inventory/terminal-assignments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListTerminalAssignmentsQueryOptions = <TData = Awaited<ReturnType<typeof listTerminalAssignments>>, TError = ErrorType<unknown>>(params?: ListTerminalAssignmentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTerminalAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTerminalAssignmentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTerminalAssignments>>> = ({ signal }) => listTerminalAssignments(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTerminalAssignments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTerminalAssignmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listTerminalAssignments>>>
+export type ListTerminalAssignmentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Terminal custody history
+ */
+
+export function useListTerminalAssignments<TData = Awaited<ReturnType<typeof listTerminalAssignments>>, TError = ErrorType<unknown>>(
+ params?: ListTerminalAssignmentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTerminalAssignments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTerminalAssignmentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getReturnTerminalAssignmentUrl = (id: string,) => {
+
+
+
+
+  return `/api/inventory/terminal-assignments/${id}/return`
+}
+
+/**
+ * @summary Record a terminal as handed back
+ */
+export const returnTerminalAssignment = async (id: string,
+    terminalReturnInput: TerminalReturnInput, options?: RequestInit): Promise<TerminalAssignmentRecord> => {
+
+  return customFetch<TerminalAssignmentRecord>(getReturnTerminalAssignmentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      terminalReturnInput,)
+  }
+);}
+
+
+
+
+export const getReturnTerminalAssignmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof returnTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalReturnInput>}, TContext> => {
+
+const mutationKey = ['returnTerminalAssignment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof returnTerminalAssignment>>, {id: string;data: BodyType<TerminalReturnInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  returnTerminalAssignment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReturnTerminalAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof returnTerminalAssignment>>>
+    export type ReturnTerminalAssignmentMutationBody = BodyType<TerminalReturnInput>
+    export type ReturnTerminalAssignmentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record a terminal as handed back
+ */
+export const useReturnTerminalAssignment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof returnTerminalAssignment>>,
+        TError,
+        {id: string;data: BodyType<TerminalReturnInput>},
+        TContext
+      > => {
+      return useMutation(getReturnTerminalAssignmentMutationOptions(options));
+    }
 
 export const getListPadlocksUrl = () => {
 

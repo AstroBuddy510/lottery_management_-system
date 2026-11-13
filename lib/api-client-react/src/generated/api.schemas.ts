@@ -1463,6 +1463,96 @@ export interface Padlock {
   createdAt: string;
 }
 
+export interface PosTerminal {
+  id: string;
+  serialNumber: string;
+  brand: string;
+  model: string;
+  imei: string;
+  status: string;
+  /** @nullable */
+  notes?: string | null;
+  registeredAt: string;
+  registeredBy: string;
+  createdAt: string;
+}
+
+export interface TerminalWithStatus {
+  id: string;
+  serialNumber: string;
+  brand: string;
+  model: string;
+  imei: string;
+  status: string;
+  /** @nullable */
+  notes?: string | null;
+  registeredAt: string;
+  /** @nullable */
+  assignmentId?: string | null;
+  /** @nullable */
+  writerId?: string | null;
+  /** @nullable */
+  writerCode?: string | null;
+  /** @nullable */
+  writerName?: string | null;
+  /** @nullable */
+  writerPhone?: string | null;
+  /** @nullable */
+  agentId?: string | null;
+  /** @nullable */
+  agentCode?: string | null;
+  /** @nullable */
+  agencyName?: string | null;
+  /** @nullable */
+  assignedAt?: string | null;
+  /** @nullable */
+  lastSaleAt?: string | null;
+  salesToday?: number;
+  isActive: boolean;
+}
+
+export interface TerminalInput {
+  serialNumber: string;
+  brand: string;
+  model: string;
+  imei: string;
+  notes?: string;
+}
+
+export interface TerminalAssignInput {
+  terminalId: string;
+  writerId: string;
+  notes?: string;
+}
+
+export interface TerminalReturnInput {
+  notes?: string;
+}
+
+export interface TerminalAssignmentRecord {
+  id: string;
+  terminalId: string;
+  terminalSerialNumber: string;
+  /** @nullable */
+  terminalBrand?: string | null;
+  /** @nullable */
+  terminalModel?: string | null;
+  writerId: string;
+  writerCode: string;
+  writerName: string;
+  /** @nullable */
+  writerPhone?: string | null;
+  /** @nullable */
+  agencyName?: string | null;
+  assignedAt: string;
+  /** @nullable */
+  returnedAt?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  assignedBy: string;
+  createdAt: string;
+}
+
 export interface PadlockInput {
   serialNumber: string;
   brandName: string;
@@ -1652,5 +1742,16 @@ dateTo?: string;
 export type DeleteReadNotifications200 = {
   success?: boolean;
   deletedCount?: number;
+};
+
+export type ListTerminalsParams = {
+/**
+ * How recently the assigned writer must have sold for the terminal to count as active. Defaults to 60.
+ */
+activeWindowMinutes?: number;
+};
+
+export type ListTerminalAssignmentsParams = {
+terminalId?: string;
 };
 

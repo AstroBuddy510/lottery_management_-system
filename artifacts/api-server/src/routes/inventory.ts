@@ -5,12 +5,15 @@ import {
   bookletAllocationsTable,
   padlocksTable,
   padlockAssignmentsTable,
+  posTerminalsTable,
+  terminalAssignmentsTable,
+  ticketsTable,
   agentsTable,
   writersTable,
   grossEntriesTable,
   usersTable,
 } from "@workspace/db";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, sql, desc, isNull, inArray } from "drizzle-orm";
 import {
   CreateBookletBatchBody,
   CreateBookletAllocationBody,
@@ -18,8 +21,12 @@ import {
   AssignPadlockBody,
   ReturnPadlockAssignmentBody,
   UpdatePadlockAssignmentBody,
+  CreateTerminalBody,
+  AssignTerminalBody,
+  ReturnTerminalAssignmentBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { uniqueViolation } from "../lib/pg-errors";
 
 const router = Router();
 
@@ -705,6 +712,426 @@ router.patch(
       res.status(500).json({ error: "Failed to update padlock assignment" });
     }
   }
+);
+
+// ─── POS TERMINAL ENDPOINTS ───
+
+/**
+ * IMEI shape check.
+ *
+ * Fifteen digits is the standard; a few devices report a 16- or 17-digit
+ * IMEISV. Deliberately NOT a Luhn check: the check digit is right on most
+ * devices and wrong on enough cheap ones that rejecting on it would block
+ * legitimate stock, and a clerk who cannot register a device they are holding
+ * will write it down somewhere else instead. Length and digits-only catch the
+ * realistic typo - a short paste or a serial pasted into the wrong field.
+ */
+const IMEI_SHAPE = /^\d{14,17}$/;
+
+/** Terminals a writer can be given, plus who holds what, plus whether it is selling. */
+router.get(
+  "/inventory/terminals",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (req, res) => {
+    try {
+      const rawWindow = Number(req.query["activeWindowMinutes"]);
+      // Clamped: a caller asking for 0 would mark everything idle, and a huge
+      // window would mark a terminal untouched since August "active".
+      const windowMinutes =
+        Number.isFinite(rawWindow) && rawWindow > 0 ? Math.min(Math.trunc(rawWindow), 1440) : 60;
+
+      // Current holder only: the open assignment is the one with no returned_at.
+      const rows = await db
+        .select({
+          id: posTerminalsTable.id,
+          serialNumber: posTerminalsTable.serialNumber,
+          brand: posTerminalsTable.brand,
+          model: posTerminalsTable.model,
+          imei: posTerminalsTable.imei,
+          status: posTerminalsTable.status,
+          notes: posTerminalsTable.notes,
+          registeredAt: posTerminalsTable.registeredAt,
+          assignmentId: terminalAssignmentsTable.id,
+          assignedAt: terminalAssignmentsTable.assignedAt,
+          writerId: writersTable.id,
+          writerCode: writersTable.fullCode,
+          writerName: writersTable.fullName,
+          writerPhone: writersTable.phone,
+          agentId: agentsTable.id,
+          agentCode: agentsTable.fullCode,
+          agencyName: agentsTable.agencyName,
+        })
+        .from(posTerminalsTable)
+        .leftJoin(
+          terminalAssignmentsTable,
+          and(
+            eq(terminalAssignmentsTable.terminalId, posTerminalsTable.id),
+            isNull(terminalAssignmentsTable.returnedAt),
+          ),
+        )
+        .leftJoin(writersTable, eq(terminalAssignmentsTable.writerId, writersTable.id))
+        .leftJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+        .orderBy(desc(posTerminalsTable.registeredAt));
+
+      // Operational status comes from sales, because a ticket carries a writer
+      // and not a device - there is no heartbeat to read. One grouped query for
+      // every holder rather than one per terminal.
+      const holderIds = rows.map((r) => r.writerId).filter((id): id is string => !!id);
+
+      const activity = new Map<string, { lastSaleAt: Date | null; salesToday: number }>();
+      if (holderIds.length > 0) {
+        const sales = await db
+          .select({
+            writerId: ticketsTable.writerId,
+            lastSaleAt: sql<Date | null>`max(${ticketsTable.createdAt})`,
+            salesToday: sql<number>`count(*) filter (where date(${ticketsTable.createdAt}) = current_date)::int`,
+          })
+          .from(ticketsTable)
+          .where(
+            and(
+              inArray(ticketsTable.writerId, holderIds),
+              sql`${ticketsTable.status} not in ('cancelled', 'void')`,
+            ),
+          )
+          .groupBy(ticketsTable.writerId);
+        for (const r of sales) {
+          activity.set(r.writerId, {
+            lastSaleAt: r.lastSaleAt ? new Date(r.lastSaleAt) : null,
+            salesToday: r.salesToday ?? 0,
+          });
+        }
+      }
+
+      const cutoff = Date.now() - windowMinutes * 60_000;
+
+      res.json(
+        rows.map((r) => {
+          const act = r.writerId ? activity.get(r.writerId) : undefined;
+          const lastSaleAt = act?.lastSaleAt ?? null;
+          return {
+            ...r,
+            lastSaleAt,
+            salesToday: act?.salesToday ?? 0,
+            // An unheld terminal is not "inactive", it is in stock. The UI
+            // shows that as its own state rather than colouring it red, so red
+            // keeps meaning the one thing worth acting on: issued, and silent.
+            isActive: !!r.writerId && !!lastSaleAt && lastSaleAt.getTime() >= cutoff,
+          };
+        }),
+      );
+    } catch (error) {
+      console.error("Error listing terminals:", error);
+      res.status(500).json({ error: "Failed to load terminals" });
+    }
+  },
+);
+
+router.post(
+  "/inventory/terminals",
+  requireAuth,
+  requireRole("director", "administrator"),
+  async (req, res) => {
+    const parse = CreateTerminalBody.safeParse(req.body);
+    if (!parse.success) {
+      res.status(400).json({ error: "Invalid request body", details: parse.error.format() });
+      return;
+    }
+
+    const serialNumber = parse.data.serialNumber.trim();
+    const brand = parse.data.brand.trim();
+    const model = parse.data.model.trim();
+    const imei = parse.data.imei.replace(/[\s-]/g, "");
+
+    if (!serialNumber || !brand || !model) {
+      res.status(400).json({ error: "Serial number, brand and model are all required" });
+      return;
+    }
+    if (!IMEI_SHAPE.test(imei)) {
+      res.status(400).json({ error: "IMEI must be 14 to 17 digits, numbers only" });
+      return;
+    }
+
+    try {
+      const [created] = await db
+        .insert(posTerminalsTable)
+        .values({
+          serialNumber,
+          brand,
+          model,
+          imei,
+          notes: parse.data.notes?.trim() || null,
+          registeredBy: req.user!.userId,
+        })
+        .returning();
+      res.status(201).json(created);
+    } catch (error) {
+      // Both columns are unique, and saying which one collided is the
+      // difference between a clerk fixing a typo and re-entering everything.
+      // The constraint name comes from the driver error underneath Drizzle's
+      // wrapper; see lib/pg-errors for why the wrapper's own message must not
+      // be sniffed for column names.
+      const violated = uniqueViolation(error);
+      if (violated === "pos_terminals_serial_number_unique") {
+        res.status(409).json({ error: `Serial number ${serialNumber} is already registered` });
+        return;
+      }
+      if (violated === "pos_terminals_imei_unique") {
+        res.status(409).json({ error: `IMEI ${imei} is already registered` });
+        return;
+      }
+      console.error("Error registering terminal:", error);
+      res.status(500).json({ error: "Failed to register terminal" });
+    }
+  },
+);
+
+/**
+ * Hand a terminal to a writer.
+ *
+ * Closing the writer's previous holding and the terminal's previous holding
+ * happens in the same transaction as the insert. Separately, the two partial
+ * unique indexes mean a concurrent second request fails rather than creating a
+ * device that is in two places.
+ */
+router.post(
+  "/inventory/terminals/assign",
+  requireAuth,
+  requireRole("director", "administrator"),
+  async (req, res) => {
+    const parse = AssignTerminalBody.safeParse(req.body);
+    if (!parse.success) {
+      res.status(400).json({ error: "Invalid request body", details: parse.error.format() });
+      return;
+    }
+    const { terminalId, writerId } = parse.data;
+
+    try {
+      const [terminal] = await db
+        .select()
+        .from(posTerminalsTable)
+        .where(eq(posTerminalsTable.id, terminalId))
+        .limit(1);
+      if (!terminal) {
+        res.status(404).json({ error: "Terminal not found" });
+        return;
+      }
+      if (terminal.status === "lost" || terminal.status === "retired") {
+        res.status(409).json({ error: `Terminal ${terminal.serialNumber} is marked ${terminal.status}` });
+        return;
+      }
+
+      const [writer] = await db
+        .select({ id: writersTable.id, isActive: writersTable.isActive, fullCode: writersTable.fullCode })
+        .from(writersTable)
+        .where(eq(writersTable.id, writerId))
+        .limit(1);
+      if (!writer) {
+        res.status(404).json({ error: "Writer not found" });
+        return;
+      }
+      if (!writer.isActive) {
+        res.status(409).json({ error: `Writer ${writer.fullCode} is not active` });
+        return;
+      }
+
+      const assignmentId = await db.transaction(async (tx) => {
+        const now = new Date();
+
+        /*
+         * Lock the writer row, then the terminal row, always in that order.
+         *
+         * Without this the transaction took its locks in whatever order its
+         * statements happened to touch rows - assignments by writer, then by
+         * terminal, then pos_terminals - so two concurrent assignments sharing
+         * a writer or a device could each hold what the other needed next. A
+         * 20-request storm reliably produced SQLSTATE 40P01, deadlock
+         * detected, and the loser got a 500. Acquiring both rows up front in a
+         * fixed order means two conflicting assignments queue instead.
+         */
+        await tx.execute(sql`select 1 from ${writersTable} where ${writersTable.id} = ${writerId} for update`);
+        await tx.execute(sql`select 1 from ${posTerminalsTable} where ${posTerminalsTable.id} = ${terminalId} for update`);
+
+        // Whatever this writer was holding goes back, and we keep the id so the
+        // device can be put back in stock without having to guess which it was.
+        const freedByWriter = await tx
+          .update(terminalAssignmentsTable)
+          .set({ returnedAt: now })
+          .where(
+            and(
+              eq(terminalAssignmentsTable.writerId, writerId),
+              isNull(terminalAssignmentsTable.returnedAt),
+            ),
+          )
+          .returning({ terminalId: terminalAssignmentsTable.terminalId });
+
+        // And whoever was holding this terminal gives it up.
+        await tx
+          .update(terminalAssignmentsTable)
+          .set({ returnedAt: now })
+          .where(
+            and(
+              eq(terminalAssignmentsTable.terminalId, terminalId),
+              isNull(terminalAssignmentsTable.returnedAt),
+            ),
+          );
+
+        // Devices the writer just gave up return to stock. Taken from
+        // RETURNING rather than re-derived: an earlier version matched rows on
+        // returned_at equalling this statement's own timestamp, which is both
+        // fragile and part of what made the lock order unpredictable.
+        const freedIds = freedByWriter.map((r) => r.terminalId).filter((id) => id !== terminalId);
+        if (freedIds.length > 0) {
+          await tx
+            .update(posTerminalsTable)
+            .set({ status: "available" })
+            .where(inArray(posTerminalsTable.id, freedIds));
+        }
+
+        const [inserted] = await tx
+          .insert(terminalAssignmentsTable)
+          .values({
+            terminalId,
+            writerId,
+            notes: parse.data.notes?.trim() || null,
+            assignedBy: req.user!.userId,
+          })
+          .returning({ id: terminalAssignmentsTable.id });
+
+        await tx
+          .update(posTerminalsTable)
+          .set({ status: "assigned" })
+          .where(eq(posTerminalsTable.id, terminalId));
+
+        return inserted!.id;
+      });
+
+      const [record] = await db
+        .select(terminalAssignmentSelection)
+        .from(terminalAssignmentsTable)
+        .innerJoin(posTerminalsTable, eq(terminalAssignmentsTable.terminalId, posTerminalsTable.id))
+        .innerJoin(writersTable, eq(terminalAssignmentsTable.writerId, writersTable.id))
+        .leftJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+        .where(eq(terminalAssignmentsTable.id, assignmentId))
+        .limit(1);
+
+      res.status(201).json(record);
+    } catch (error) {
+      // The two partial unique indexes are what catch a concurrent assignment.
+      const violated = uniqueViolation(error);
+      if (violated === "terminal_assignments_one_open_per_writer") {
+        res.status(409).json({ error: "That writer was given a terminal by someone else just now" });
+        return;
+      }
+      if (violated === "terminal_assignments_one_open_per_terminal") {
+        res.status(409).json({ error: "That terminal was assigned by someone else just now" });
+        return;
+      }
+      console.error("Error assigning terminal:", error);
+      res.status(500).json({ error: "Failed to assign terminal" });
+    }
+  },
+);
+
+/** Columns every assignment response carries, so the shapes cannot drift apart. */
+const terminalAssignmentSelection = {
+  id: terminalAssignmentsTable.id,
+  terminalId: terminalAssignmentsTable.terminalId,
+  terminalSerialNumber: posTerminalsTable.serialNumber,
+  terminalBrand: posTerminalsTable.brand,
+  terminalModel: posTerminalsTable.model,
+  writerId: terminalAssignmentsTable.writerId,
+  writerCode: writersTable.fullCode,
+  writerName: writersTable.fullName,
+  writerPhone: writersTable.phone,
+  agencyName: agentsTable.agencyName,
+  assignedAt: terminalAssignmentsTable.assignedAt,
+  returnedAt: terminalAssignmentsTable.returnedAt,
+  notes: terminalAssignmentsTable.notes,
+  assignedBy: terminalAssignmentsTable.assignedBy,
+  createdAt: terminalAssignmentsTable.createdAt,
+};
+
+router.get(
+  "/inventory/terminal-assignments",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (req, res) => {
+    try {
+      const terminalId = typeof req.query["terminalId"] === "string" ? req.query["terminalId"] : undefined;
+      const rows = await db
+        .select(terminalAssignmentSelection)
+        .from(terminalAssignmentsTable)
+        .innerJoin(posTerminalsTable, eq(terminalAssignmentsTable.terminalId, posTerminalsTable.id))
+        .innerJoin(writersTable, eq(terminalAssignmentsTable.writerId, writersTable.id))
+        .leftJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+        .where(terminalId ? eq(terminalAssignmentsTable.terminalId, terminalId) : undefined)
+        .orderBy(desc(terminalAssignmentsTable.assignedAt));
+      res.json(rows);
+    } catch (error) {
+      console.error("Error listing terminal assignments:", error);
+      res.status(500).json({ error: "Failed to load terminal assignments" });
+    }
+  },
+);
+
+router.post(
+  "/inventory/terminal-assignments/:id/return",
+  requireAuth,
+  requireRole("director", "administrator"),
+  async (req, res) => {
+    const id = req.params["id"] as string;
+    const parse = ReturnTerminalAssignmentBody.safeParse(req.body ?? {});
+    if (!parse.success) {
+      res.status(400).json({ error: "Invalid request body", details: parse.error.format() });
+      return;
+    }
+
+    try {
+      const [existing] = await db
+        .select()
+        .from(terminalAssignmentsTable)
+        .where(eq(terminalAssignmentsTable.id, id))
+        .limit(1);
+      if (!existing) {
+        res.status(404).json({ error: "Terminal assignment not found" });
+        return;
+      }
+      if (existing.returnedAt) {
+        res.status(409).json({ error: "That terminal has already been handed back" });
+        return;
+      }
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(terminalAssignmentsTable)
+          .set({
+            returnedAt: new Date(),
+            // Keep the note written at assignment if no new one is given.
+            notes: parse.data.notes?.trim() || existing.notes,
+          })
+          .where(eq(terminalAssignmentsTable.id, id));
+        await tx
+          .update(posTerminalsTable)
+          .set({ status: "available" })
+          .where(eq(posTerminalsTable.id, existing.terminalId));
+      });
+
+      const [record] = await db
+        .select(terminalAssignmentSelection)
+        .from(terminalAssignmentsTable)
+        .innerJoin(posTerminalsTable, eq(terminalAssignmentsTable.terminalId, posTerminalsTable.id))
+        .innerJoin(writersTable, eq(terminalAssignmentsTable.writerId, writersTable.id))
+        .leftJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+        .where(eq(terminalAssignmentsTable.id, id))
+        .limit(1);
+
+      res.json(record);
+    } catch (error) {
+      console.error("Error returning terminal:", error);
+      res.status(500).json({ error: "Failed to record terminal return" });
+    }
+  },
 );
 
 export default router;

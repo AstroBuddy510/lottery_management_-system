@@ -2290,6 +2290,122 @@ paths:
                 items:
                   $ref: "#/components/schemas/BookletAgentBalance"
 
+  /inventory/terminals:
+    get:
+      operationId: listTerminals
+      tags: [inventory]
+      summary: List POS terminals with current holder and operational status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: activeWindowMinutes
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: >-
+            How recently the assigned writer must have sold for the terminal to
+            count as active. Defaults to 60.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TerminalWithStatus"
+    post:
+      operationId: createTerminal
+      tags: [inventory]
+      summary: Register a POS terminal
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerminalInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PosTerminal"
+
+  /inventory/terminals/assign:
+    post:
+      operationId: assignTerminal
+      tags: [inventory]
+      summary: Assign a terminal to a writer, closing any previous holding
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerminalAssignInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalAssignmentRecord"
+
+  /inventory/terminal-assignments:
+    get:
+      operationId: listTerminalAssignments
+      tags: [inventory]
+      summary: Terminal custody history
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: terminalId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TerminalAssignmentRecord"
+
+  /inventory/terminal-assignments/{id}/return:
+    post:
+      operationId: returnTerminalAssignment
+      tags: [inventory]
+      summary: Record a terminal as handed back
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerminalReturnInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalAssignmentRecord"
+
   /inventory/padlocks:
     get:
       operationId: listPadlocks
@@ -4292,6 +4408,143 @@ components:
         status:
           type: string
         condition:
+          type: string
+        createdAt:
+          type: string
+
+    PosTerminal:
+      type: object
+      required: [id, serialNumber, brand, model, imei, status, registeredAt, registeredBy, createdAt]
+      properties:
+        id:
+          type: string
+        serialNumber:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        imei:
+          type: string
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        registeredAt:
+          type: string
+        registeredBy:
+          type: string
+        createdAt:
+          type: string
+
+    TerminalWithStatus:
+      type: object
+      required: [id, serialNumber, brand, model, imei, status, registeredAt, isActive]
+      properties:
+        id:
+          type: string
+        serialNumber:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        imei:
+          type: string
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        registeredAt:
+          type: string
+        assignmentId:
+          type: ["string", "null"]
+        writerId:
+          type: ["string", "null"]
+        writerCode:
+          type: ["string", "null"]
+        writerName:
+          type: ["string", "null"]
+        writerPhone:
+          type: ["string", "null"]
+        agentId:
+          type: ["string", "null"]
+        agentCode:
+          type: ["string", "null"]
+        agencyName:
+          type: ["string", "null"]
+        assignedAt:
+          type: ["string", "null"]
+        lastSaleAt:
+          type: ["string", "null"]
+        salesToday:
+          type: integer
+        isActive:
+          type: boolean
+
+    TerminalInput:
+      type: object
+      required: [serialNumber, brand, model, imei]
+      properties:
+        serialNumber:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        imei:
+          type: string
+        notes:
+          type: string
+
+    TerminalAssignInput:
+      type: object
+      required: [terminalId, writerId]
+      properties:
+        terminalId:
+          type: string
+        writerId:
+          type: string
+        notes:
+          type: string
+
+    TerminalReturnInput:
+      type: object
+      properties:
+        notes:
+          type: string
+
+    TerminalAssignmentRecord:
+      type: object
+      required: [id, terminalId, terminalSerialNumber, writerId, writerCode, writerName, assignedAt, assignedBy, createdAt]
+      properties:
+        id:
+          type: string
+        terminalId:
+          type: string
+        terminalSerialNumber:
+          type: string
+        terminalBrand:
+          type: ["string", "null"]
+        terminalModel:
+          type: ["string", "null"]
+        writerId:
+          type: string
+        writerCode:
+          type: string
+        writerName:
+          type: string
+        writerPhone:
+          type: ["string", "null"]
+        agencyName:
+          type: ["string", "null"]
+        assignedAt:
+          type: string
+        returnedAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        assignedBy:
           type: string
         createdAt:
           type: string

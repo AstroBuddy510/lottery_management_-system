@@ -16,6 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { generatePadlockAssignmentsPDF } from "@/lib/pdf-generator";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
+import { TerminalsManager } from "@/components/terminals-manager";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Package,
   Lock,
+  Smartphone,
   Key,
   Edit,
   RefreshCw,
@@ -67,8 +69,11 @@ export function Inventory() {
   const { user } = useAuth();
   const { agentList } = useWriterLookup();
   const isCashier = user?.role === "cashier" || user?.role === "administrator";
+  // Terminal registration and assignment are director/administrator on the
+  // server; showing a cashier the buttons would only produce a 403.
+  const canManageTerminals = user?.role === "director" || user?.role === "administrator";
 
-  const [activeTab, setActiveTab] = useState<"overview" | "booklets" | "padlocks">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "booklets" | "padlocks" | "terminals">("overview");
   const [bookletSubTab, setBookletSubTab] = useState<"batches" | "allocations" | "balances">("batches");
   const [padlockSubTab, setPadlockSubTab] = useState<"registry" | "assignments">("registry");
 
@@ -497,6 +502,7 @@ export function Inventory() {
             { id: "overview", label: "Overview", icon: <BarChart2 className="w-3.5 h-3.5" /> },
             { id: "booklets", label: "Booklets", icon: <FileSpreadsheet className="w-3.5 h-3.5" /> },
             { id: "padlocks", label: "Digital Padlocks", icon: <Lock className="w-3.5 h-3.5" /> },
+            { id: "terminals", label: "Terminals Management", icon: <Smartphone className="w-3.5 h-3.5" /> },
           ].map(tab => (
             <button
               key={tab.id}
@@ -940,6 +946,18 @@ export function Inventory() {
         )}
 
         {/* ─── TAB: PADLOCKS ─── */}
+        {activeTab === "terminals" && (
+          <motion.div
+            key="terminals"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.3 }}
+          >
+            <TerminalsManager canManage={canManageTerminals} />
+          </motion.div>
+        )}
+
         {activeTab === "padlocks" && (
           <motion.div
             key="padlocks"
