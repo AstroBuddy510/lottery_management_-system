@@ -13,6 +13,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Map as PigeonMapBase, Overlay, type MapProps } from "pigeon-maps";
+import { tileProvider, hasTileKey, TILE_ATTRIBUTION } from "@/lib/map-tiles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -41,7 +42,12 @@ import {
   AlertCircle
 } from "lucide-react";
 
-type PigeonMapProps = MapProps & { height?: number; attribution?: boolean; children?: React.ReactNode };
+type PigeonMapProps = MapProps & {
+  height?: number;
+  attribution?: React.ReactNode | false;
+  provider?: (x: number, y: number, z: number, dpr?: number) => string;
+  children?: React.ReactNode;
+};
 // Wrap to avoid TS confusing pigeon-maps Map with the global JS Map constructor
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function PigeonMap(props: PigeonMapProps) { return React.createElement(PigeonMapBase as any, props); }
@@ -787,11 +793,33 @@ function MapView({
         </div>
       )}
 
+      {/* No key, no tiles. Say so, rather than rendering 520px of grey and
+          letting someone spend an afternoon on it - which is exactly what the
+          CSP and the OSM block each cost once already. */}
+      {!hasTileKey() ? (
+        <div
+          className="rounded-2xl border border-amber-200 bg-amber-50/60 flex items-center justify-center text-center px-6"
+          style={{ height: 520 }}
+        >
+          <div className="max-w-md space-y-2">
+            <p className="text-sm font-semibold text-amber-800">Map tiles are not configured</p>
+            <p className="text-xs text-amber-700">
+              VITE_MAPTILER_KEY is not set for this deployment, so there is no tile
+              source to draw. The {mapped.length} mapped {mapped.length === 1 ? "agency is" : "agencies are"} listed below and
+              their coordinates are fine - only the basemap is missing.
+            </p>
+            <p className="text-[11px] text-amber-600">
+              Set it in Vercel &rarr; Project &rarr; Settings &rarr; Environment Variables, then redeploy.
+            </p>
+          </div>
+        </div>
+      ) : (
       <div className="relative rounded-2xl overflow-hidden border shadow-sm" style={{ height: 520 }}>
         <PigeonMap
           center={center}
           zoom={zoom}
-          attribution={false}
+          provider={tileProvider}
+          attribution={<span className="text-[10px] text-slate-500">{TILE_ATTRIBUTION}</span>}
           onBoundsChanged={({ center: c, zoom: z }) => { setCenter(c as [number, number]); setZoom(z); }}
         >
           {mapped.map(a => {
@@ -833,6 +861,7 @@ function MapView({
           </button>
         )}
       </div>
+      )}
 
       {/* Legend */}
       <div className="flex items-center gap-6 px-1">

@@ -1,4 +1,4 @@
-const CACHE_NAME = "vs2000-cache-v3";
+const CACHE_NAME = "vs2000-cache-v4";
 const PRECACHE_ASSETS = [
   "/manifest.json",
   "/favicon-v3.ico",
@@ -40,6 +40,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Cross-origin requests are handled by the browser, not by us.
+  //
+  // This handler used to intercept everything. Map tiles are cross-origin
+  // images, so every tile went through the cache-first branch below, missed
+  // (nothing cross-origin is ever cached there - see the type === "basic"
+  // test), and was re-fetched through the worker. The round trip gained
+  // nothing and lost two things: the browser's own HTTP cache, which would
+  // have honoured the tile server's Cache-Control, and a plain network error
+  // when fetch rejects, because a rejected respondWith surfaces as a failed
+  // resource with no useful diagnosis. Serving tiles uncached on every pan is
+  // also the behaviour a tile provider reads as scraping.
+  if (new URL(request.url).origin !== self.location.origin) {
+    return;
+  }
+
   // Navigation requests (HTML pages): always network-first
   // This ensures users always get the latest index.html with correct asset hashes
   if (request.mode === "navigate") {
@@ -65,15 +80,24 @@ self.addEventListener("fetch", (event) => {
       if (cachedResponse) {
         return cachedResponse;
       }
-      return fetch(request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
+      return fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch((err) => {
+          // Without this, a failed fetch rejects respondWith and the browser
+          // reports an opaque failure that names neither the URL nor the cause.
+          return caches.match(request).then((cached) => {
+            if (cached) return cached;
+            return new Response("", { status: 504, statusText: "Offline: " + String(err) });
           });
-        }
-        return networkResponse;
-      });
+        });
     })
   );
 });
