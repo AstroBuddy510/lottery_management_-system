@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useListTerminals,
   useCreateTerminal,
@@ -121,7 +121,7 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
   const returnAssignment = useReturnTerminalAssignment();
 
   const [form, setForm] = useState({ serialNumber: "", brand: "", model: "", imei: "", notes: "" });
-  const [assignForm, setAssignForm] = useState({ terminalId: "", writerId: "", notes: "" });
+  const [assignForm, setAssignForm] = useState({ terminalId: "", agentId: "", writerId: "", notes: "" });
 
   /** Only unheld, usable devices can be handed out. */
   const assignable = useMemo(
@@ -130,19 +130,67 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
   );
 
   /**
-   * The writer picked in the assignment dialog, resolved to their full record.
-   * This is what fills the read-only details below the picker - the operator
-   * confirms a name and an agency rather than trusting that they chose the
-   * right row out of seventy-odd codes.
+   * Writers who already hold a device.
+   *
+   * The writer picker lists only unassigned writers, so swapping a device is
+   * two deliberate steps - Return the old terminal, then assign the new one -
+   * rather than one action that quietly pulls a terminal out of someone's
+   * hands as a side effect.
+   */
+  const heldWriterIds = useMemo(
+    () => new Set(list.filter(t => t.writerId).map(t => t.writerId as string)),
+    [list],
+  );
+
+  const selectedAgent = useMemo(
+    () => agentList.find(a => a.id === assignForm.agentId),
+    [agentList, assignForm.agentId],
+  );
+
+  /**
+   * The chosen agent's roster, split three ways.
+   *
+   * Only `eligible` is offered. The other two exist so an empty picker can say
+   * which of the two reasons emptied it, instead of leaving an operator
+   * staring at "no writers" for an agency they know has six.
+   *
+   * Inactive writers are excluded because the server refuses them with a 409 -
+   * offering a choice that is guaranteed to fail is worse than not offering it.
+   */
+  const agentRoster = useMemo(() => {
+    const empty = { eligible: [] as typeof allWriters, held: [] as typeof allWriters, inactive: [] as typeof allWriters };
+    if (!assignForm.agentId) return empty;
+    const mine = allWriters.filter(w => w.agentId === assignForm.agentId);
+    return {
+      eligible: mine
+        .filter(w => w.isActive && !heldWriterIds.has(w.id))
+        .sort((a, b) => a.fullCode.localeCompare(b.fullCode)),
+      held: mine.filter(w => w.isActive && heldWriterIds.has(w.id)),
+      inactive: mine.filter(w => !w.isActive),
+    };
+  }, [allWriters, assignForm.agentId, heldWriterIds]);
+
+  /**
+   * The writer picked in the dialog, resolved to their full record. This fills
+   * the read-only details below the picker - the operator confirms a name
+   * rather than trusting they chose the right row out of seventy-odd codes.
    */
   const selectedWriter = useMemo(
-    () => allWriters.find(w => w.id === assignForm.writerId),
-    [allWriters, assignForm.writerId],
+    () => agentRoster.eligible.find(w => w.id === assignForm.writerId),
+    [agentRoster, assignForm.writerId],
   );
-  const selectedWriterAgency = useMemo(
-    () => agentList.find(a => a.id === selectedWriter?.agentId),
-    [agentList, selectedWriter],
-  );
+
+  /*
+   * The table refreshes every 30 seconds, so a writer chosen here can stop
+   * being eligible while the dialog is open - someone else hands them a
+   * terminal. Drop the stale choice rather than submitting an assignment the
+   * operator can no longer see the basis for.
+   */
+  useEffect(() => {
+    if (assignForm.writerId && !agentRoster.eligible.some(w => w.id === assignForm.writerId)) {
+      setAssignForm(f => ({ ...f, writerId: "" }));
+    }
+  }, [agentRoster, assignForm.writerId]);
 
   const activeCount = list.filter(t => t.writerId && t.isActive).length;
   const inactiveCount = list.filter(t => t.writerId && !t.isActive).length;
@@ -191,7 +239,7 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
         },
       });
       toast.success(`Terminal assigned to ${selectedWriter?.fullCode ?? "writer"}`);
-      setAssignForm({ terminalId: "", writerId: "", notes: "" });
+      setAssignForm({ terminalId: "", agentId: "", writerId: "", notes: "" });
       setAssignOpen(false);
       invalidate();
     } catch (err: any) {
@@ -229,7 +277,17 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
 
         {canManage && (
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="rounded-xl text-xs font-bold uppercase" onClick={() => setAssignOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl text-xs font-bold uppercase"
+              onClick={() => {
+                // Start clean: an abandoned attempt must not leave a half-made
+                // selection behind for the next operator to submit by accident.
+                setAssignForm({ terminalId: "", agentId: "", writerId: "", notes: "" });
+                setAssignOpen(true);
+              }}
+            >
               <UserCheck className="w-4 h-4 mr-1.5" />
               Assign to Writer
             </Button>
@@ -462,8 +520,9 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
               <UserCheck className="w-4 h-4" /> Assign Terminal to Writer
             </DialogTitle>
             <DialogDescription>
-              A writer holds one terminal at a time. If they already have one, it is
-              returned to stock automatically and kept in the history.
+              Pick the terminal, then the agency, then one of that agency's writers.
+              A writer holds one terminal at a time, so only writers without one are
+              offered.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -483,20 +542,73 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
               </Select>
             </div>
 
+            {/* Step 2: agency. Choosing one clears any writer already picked,
+                so a stale selection from another agency cannot be submitted. */}
             <div className="space-y-1.5">
-              <Label htmlFor="assign-writer">Writer</Label>
-              <Select value={assignForm.writerId} onValueChange={v => setAssignForm({ ...assignForm, writerId: v })}>
-                <SelectTrigger id="assign-writer">
-                  <SelectValue placeholder="Choose a writer" />
+              <Label htmlFor="assign-agent">Agency</Label>
+              <Select
+                value={assignForm.agentId}
+                onValueChange={v => setAssignForm({ ...assignForm, agentId: v, writerId: "" })}
+              >
+                <SelectTrigger id="assign-agent">
+                  <SelectValue placeholder="Choose an agency" />
                 </SelectTrigger>
                 <SelectContent>
-                  {allWriters.map(w => (
+                  {agentList.map(a => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.fullCode} — {a.agencyName ?? a.user?.fullName ?? "Agency"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Step 3: writer, drawn only from the chosen agency and only from
+                those not already holding a device. */}
+            <div className="space-y-1.5">
+              <Label htmlFor="assign-writer">Writer</Label>
+              <Select
+                value={assignForm.writerId}
+                onValueChange={v => setAssignForm({ ...assignForm, writerId: v })}
+                disabled={!assignForm.agentId || agentRoster.eligible.length === 0}
+              >
+                <SelectTrigger id="assign-writer">
+                  <SelectValue
+                    placeholder={
+                      !assignForm.agentId
+                        ? "Choose an agency first"
+                        : agentRoster.eligible.length === 0
+                          ? "No writers available in this agency"
+                          : `Choose from ${agentRoster.eligible.length} available writer${agentRoster.eligible.length !== 1 ? "s" : ""}`
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {agentRoster.eligible.map(w => (
                     <SelectItem key={w.id} value={w.id}>
                       {w.fullCode} — {w.fullName}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Say why the list is short, rather than leaving an operator to
+                  wonder where an agency's writers went. */}
+              {assignForm.agentId && agentRoster.eligible.length === 0 && (
+                <p className="text-[11px] text-amber-700">
+                  {agentRoster.held.length > 0 && `All ${agentRoster.held.length} active writer${agentRoster.held.length !== 1 ? "s" : ""} in this agency already hold a terminal — return one first. `}
+                  {agentRoster.inactive.length > 0 && `${agentRoster.inactive.length} inactive writer${agentRoster.inactive.length !== 1 ? "s are" : " is"} not eligible. `}
+                  {agentRoster.held.length === 0 && agentRoster.inactive.length === 0 && "This agency has no writers registered."}
+                </p>
+              )}
+              {assignForm.agentId && agentRoster.eligible.length > 0 && (agentRoster.held.length > 0 || agentRoster.inactive.length > 0) && (
+                <p className="text-[11px] text-muted-foreground">
+                  Not shown: {[
+                    agentRoster.held.length > 0 ? `${agentRoster.held.length} already holding a terminal` : null,
+                    agentRoster.inactive.length > 0 ? `${agentRoster.inactive.length} inactive` : null,
+                  ].filter(Boolean).join(", ")}.
+                </p>
+              )}
             </div>
 
             {/* Auto-populated from the chosen writer, read-only on purpose:
@@ -512,20 +624,10 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                   <span className="text-muted-foreground">Phone</span>
                   <span className="font-mono">{selectedWriter.phone ?? "not set"}</span>
                   <span className="text-muted-foreground">Agency</span>
-                  <span>{selectedWriterAgency?.agencyName ?? selectedWriterAgency?.fullCode ?? "—"}</span>
+                  <span>{selectedAgent?.agencyName ?? selectedAgent?.fullCode ?? "—"}</span>
                   <span className="text-muted-foreground">Model</span>
                   <span className="capitalize">{selectedWriter.operationModel}</span>
                 </div>
-                {(() => {
-                  const held = list.find(t => t.writerId === selectedWriter.id);
-                  if (!held) return null;
-                  return (
-                    <p className="text-[11px] text-amber-700 pt-1">
-                      Currently holds {held.serialNumber} ({held.brand} {held.model}) — that will be
-                      returned to stock.
-                    </p>
-                  );
-                })()}
               </div>
             )}
 
