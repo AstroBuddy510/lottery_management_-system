@@ -8,7 +8,10 @@ import {
   useListPayments, 
   Payment,
   getListPaymentsQueryKey,
-  useListPadlockAssignments
+  useListPadlockAssignments,
+  useListTerminals,
+  getListTerminalsQueryKey,
+  type TerminalWithStatus,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -912,9 +915,202 @@ function MapView({
   );
 }
 
+/* ─── terminal map ────────────────────────────────────────────────────────── */
+
+/**
+ * One assigned terminal, pinned where its writer works.
+ *
+ * Labelled with the writer's code rather than the serial number: the code is
+ * what a supervisor knows a person by, and it is short enough to read at a
+ * glance on a crowded map. The serial is in the tooltip for whoever needs it.
+ *
+ * Green means the writer has sold within the active window; red means the
+ * device is issued and silent. Colour is never the only signal - the dot
+ * carries a shape too and the title spells the state out - because a red/green
+ * pair is the most common form of colour blindness.
+ */
+function TerminalPin({ terminal }: { terminal: TerminalWithStatus }) {
+  const active = terminal.isActive;
+  const ring = active ? "#22c55e" : "#ef4444";
+  return (
+    <div
+      title={`${terminal.writerCode} — ${terminal.writerName}\n${terminal.serialNumber} (${terminal.brand} ${terminal.model})\n${active ? "Active" : "Inactive"}${terminal.writerLocation ? `\n${terminal.writerLocation}` : ""}`}
+      style={{ transform: "translate(-50%, -100%)", display: "inline-flex", flexDirection: "column", alignItems: "center" }}
+    >
+      <div
+        className="flex items-center gap-1.5 bg-white rounded-xl shadow-lg border px-2 py-1 whitespace-nowrap"
+        style={{ borderColor: ring, borderWidth: 2 }}
+      >
+        <span
+          className="inline-block rounded-full flex-shrink-0"
+          style={{ width: 8, height: 8, background: ring }}
+          aria-hidden="true"
+        />
+        <span className="font-mono text-[11px] font-bold text-slate-800">{terminal.writerCode}</span>
+        <span className="text-[9px] font-semibold uppercase" style={{ color: ring }}>
+          {active ? "Active" : "Idle"}
+        </span>
+      </div>
+      {/* Stem, so the bubble clearly points at a place rather than floating. */}
+      <div style={{ width: 2, height: 8, background: ring }} aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
+ * Where the company's assigned hardware physically is.
+ *
+ * Only terminals that are both assigned and whose writer has coordinates can
+ * be drawn. Everything excluded is counted and named underneath, because a map
+ * that quietly omits half the estate is worse than one that admits it: a
+ * supervisor needs to know whether "six pins" means six terminals or six of
+ * nineteen.
+ */
+function TerminalMapView() {
+  const params = { activeWindowMinutes: 60 };
+  const { data, isLoading, error } = useListTerminals(params, {
+    query: { queryKey: getListTerminalsQueryKey(params), refetchInterval: 30_000, refetchOnWindowFocus: true },
+  });
+  const terminals: TerminalWithStatus[] = Array.isArray(data) ? data : [];
+
+  const mapped = useMemo(
+    () => terminals.filter(t => t.writerId && t.writerLat && t.writerLng),
+    [terminals],
+  );
+  const assignedNoCoords = useMemo(
+    () => terminals.filter(t => t.writerId && (!t.writerLat || !t.writerLng)),
+    [terminals],
+  );
+  const inStock = useMemo(() => terminals.filter(t => !t.writerId), [terminals]);
+
+  const boundsKey = mapped.map(t => `${t.id}:${t.writerLat},${t.writerLng}`).join("|");
+  const computeFit = useCallback(
+    () => fitBounds(mapped.map(t => parseFloat(t.writerLat!)), mapped.map(t => parseFloat(t.writerLng!))),
+    [boundsKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const [center, setCenter] = useState<[number, number]>(() => computeFit().center);
+  const [zoom, setZoom] = useState<number>(() => computeFit().zoom);
+  useEffect(() => {
+    const fit = computeFit();
+    setCenter(fit.center);
+    setZoom(fit.zoom);
+  }, [boundsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const activeCount = mapped.filter(t => t.isActive).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4 flex-wrap px-1">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+          {activeCount} active
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
+          {mapped.length - activeCount} idle
+        </span>
+        <span className="text-xs text-muted-foreground">
+          Active = the holding writer sold within the last 60 minutes. Refreshes every 30s.
+        </span>
+      </div>
+
+      {(assignedNoCoords.length > 0 || inStock.length > 0) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-800">
+          Not on the map:{" "}
+          {[
+            assignedNoCoords.length > 0
+              ? `${assignedNoCoords.length} assigned terminal${assignedNoCoords.length !== 1 ? "s" : ""} whose writer has no location set (${assignedNoCoords.map(t => t.writerCode).filter(Boolean).join(", ")})`
+              : null,
+            inStock.length > 0 ? `${inStock.length} in stock` : null,
+          ].filter(Boolean).join("; ")}
+          .
+        </div>
+      )}
+
+      <div className="relative rounded-2xl overflow-hidden border shadow-sm bg-slate-100" style={{ height: 520 }}>
+        {isLoading ? (
+          <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+            Loading terminals…
+          </div>
+        ) : error ? (
+          <div className="h-full flex items-center justify-center text-sm text-destructive">
+            Could not load terminals.
+          </div>
+        ) : !hasTileKey() ? (
+          /* Same guard as the agency map: without a tile key this would be
+             520px of grey with pins floating on it, which is the failure that
+             already cost two rounds of diagnosis once. */
+          <div className="h-full flex items-center justify-center text-center px-6">
+            <div className="max-w-md space-y-2">
+              <p className="text-sm font-semibold text-amber-800">Map tiles are not configured</p>
+              <p className="text-xs text-amber-700">
+                VITE_MAPTILER_KEY is not set for this deployment. The {mapped.length} mappable
+                terminal{mapped.length !== 1 ? "s are" : " is"} listed below with their coordinates;
+                only the basemap is missing.
+              </p>
+            </div>
+          </div>
+        ) : mapped.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-center px-6">
+            <div className="max-w-md space-y-2">
+              <p className="text-sm font-semibold text-slate-700">No terminals to map yet</p>
+              <p className="text-xs text-muted-foreground">
+                A terminal appears here once it is assigned to a writer who has a location set.
+                {inStock.length > 0 && ` ${inStock.length} terminal${inStock.length !== 1 ? "s are" : " is"} in stock, unassigned.`}
+                {assignedNoCoords.length > 0 && ` ${assignedNoCoords.length} assigned terminal${assignedNoCoords.length !== 1 ? "s need" : " needs"} a writer location.`}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <PigeonMap
+            center={center}
+            zoom={zoom}
+            provider={tileProvider}
+            attribution={<span className="text-[10px] text-slate-500">{TILE_ATTRIBUTION}</span>}
+            onBoundsChanged={({ center: c, zoom: z }) => { setCenter(c as [number, number]); setZoom(z); }}
+          >
+            {mapped.map(t => (
+              <Overlay key={t.id} anchor={[parseFloat(t.writerLat!), parseFloat(t.writerLng!)] as [number, number]}>
+                <TerminalPin terminal={t} />
+              </Overlay>
+            ))}
+          </PigeonMap>
+        )}
+      </div>
+
+      {/* A readable fallback list. Useful when tiles are missing, and useful
+          anyway for anyone who wants the figures rather than the picture. */}
+      {mapped.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {mapped.map(t => (
+            <div
+              key={t.id}
+              className={`flex items-center gap-2.5 p-2.5 bg-white border border-l-4 rounded-xl ${t.isActive ? "border-l-emerald-500" : "border-l-red-500"}`}
+            >
+              <span
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ background: t.isActive ? "#22c55e" : "#ef4444" }}
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-bold font-mono text-slate-800 truncate">
+                  {t.writerCode} <span className="font-normal text-slate-400">{t.serialNumber}</span>
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {t.isActive ? "Active" : "Idle"} · {t.writerLocation ?? "location not set"}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── main page ───────────────────────────────────────────────────────────── */
 
-type ViewMode = "grid" | "list" | "map";
+type ViewMode = "grid" | "list" | "map" | "terminals";
 type FilterMode = "all" | "active-clear" | "active-debt" | "closed";
 type SortMode = "name-asc" | "name-desc" | "debt-desc" | "surplus-desc" | "recent";
 
@@ -1107,7 +1303,7 @@ export function AgencyDashboard() {
 
           {/* View toggle */}
           <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-1">
-            {([["grid", "Grid"], ["list", "List"], ["map", "Map"]] as [ViewMode, string][]).map(([v, label]) => (
+            {([["grid", "Grid"], ["list", "List"], ["map", "Map"], ["terminals", "Terminals"]] as [ViewMode, string][]).map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -1247,6 +1443,8 @@ export function AgencyDashboard() {
             <ListView agents={paginatedAgents} lastPaymentsMap={lastPaymentsMap} onSelect={setSelected} onPhotoClick={handlePhotoClick} />
             <Pagination page={page} totalPages={totalPages} onPage={setPage} />
           </>
+        ) : view === "terminals" ? (
+          <TerminalMapView />
         ) : (
           <MapView agents={filteredAndSorted} onSelect={setSelected} activeAssignmentsMap={activeAssignmentsMap} />
         )}

@@ -18,6 +18,30 @@ import { composeWriterFullCode, generatePin, hashPin } from "../lib/writer-onboa
 const ORG_PREFIX = "VS";
 const router = Router();
 
+/**
+ * Geocoded coordinates from the client, checked before they reach the map.
+ *
+ * Returns null when neither was supplied (a location that did not geocode),
+ * "invalid" when they are unusable, or the pair as strings for the numeric
+ * columns. Ghana sits near 0 degrees longitude, so a swapped pair looks
+ * plausible on casual inspection and only range checks catch it.
+ */
+function parseCoords(
+  lat: string | undefined,
+  lng: string | undefined,
+): { lat: string; lng: string } | null | "invalid" {
+  if (lat === undefined && lng === undefined) return null;
+  if (lat === undefined || lng === undefined) return "invalid";
+  if (lat.trim() === "" && lng.trim() === "") return null;
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return "invalid";
+  if (latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) return "invalid";
+  // 0,0 is the null island a failed geocode produces, not a place in Ghana.
+  if (latNum === 0 && lngNum === 0) return "invalid";
+  return { lat: latNum.toFixed(6), lng: lngNum.toFixed(6) };
+}
+
 function formatAgent(r: {
   id: string; userId: string; agentCode: string; fullCode: string;
   isActive: boolean; agencyName: string | null; location: string | null;
@@ -281,6 +305,29 @@ router.post(
       }
     }
     const { writerCode, fullName, phone, operationModel } = bodyResult.data;
+
+    /*
+     * Where the writer sells from. Required on creation, because the terminal
+     * map is only as useful as its coverage, and a field that is optional at
+     * the one moment someone is already typing the writer's details never gets
+     * filled in afterwards.
+     *
+     * Coordinates are geocoded client-side from this text and are optional: a
+     * place that does not geocode still gets recorded, it just cannot be
+     * mapped yet. They are validated rather than trusted - a swapped lat/lng
+     * or a stray zero puts a pin in the Gulf of Guinea, and silent nonsense on
+     * a map is worse than a blank.
+     */
+    const location = bodyResult.data.location.trim();
+    if (location.length < 3) {
+      res.status(400).json({ error: "Location is required" });
+      return;
+    }
+    const coords = parseCoords(bodyResult.data.lat, bodyResult.data.lng);
+    if (coords === "invalid") {
+      res.status(400).json({ error: "Latitude and longitude are out of range" });
+      return;
+    }
     const upperWriterCode = writerCode.toUpperCase();
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId)).limit(1);
     if (!agent) {
@@ -316,6 +363,8 @@ router.post(
         fullName,
         ...(phone ? { phone } : {}),
         ...(operationModel ? { operationModel } : {}),
+        location,
+        ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
         pinHash: await hashPin(pin),
         registrationSource: "agent",
         approvalStatus: "approved",
@@ -352,6 +401,25 @@ router.patch(
     const updates: Record<string, unknown> = {};
     if (bodyResult.data.fullName) updates.fullName = bodyResult.data.fullName;
     if (bodyResult.data.isActive !== undefined) updates.isActive = bodyResult.data.isActive;
+    // Lets the writers who predate the location field be filled in without
+    // forcing it on someone who only came here to toggle isActive.
+    if (bodyResult.data.location !== undefined) {
+      const trimmed = bodyResult.data.location.trim();
+      if (trimmed.length > 0 && trimmed.length < 3) {
+        res.status(400).json({ error: "Location is too short" });
+        return;
+      }
+      updates.location = trimmed || null;
+    }
+    if (bodyResult.data.lat !== undefined || bodyResult.data.lng !== undefined) {
+      const coords = parseCoords(bodyResult.data.lat, bodyResult.data.lng);
+      if (coords === "invalid") {
+        res.status(400).json({ error: "Latitude and longitude are out of range" });
+        return;
+      }
+      updates.lat = coords ? coords.lat : null;
+      updates.lng = coords ? coords.lng : null;
+    }
     const [writer] = await db
       .update(writersTable)
       .set(updates)

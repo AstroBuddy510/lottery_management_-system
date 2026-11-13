@@ -30,6 +30,22 @@ export const writersTable = pgTable("writers", {
   pinHash: text("pin_hash"),
   idType: varchar("id_type", { length: 30 }),
   idNumber: varchar("id_number", { length: 50 }),
+  /**
+   * Where this writer sells from.
+   *
+   * Nullable in the database although the creation form requires it: 74
+   * writers predate the field, and a NOT NULL column would have meant either
+   * refusing to load them or inventing coordinates for them. They read as "no
+   * location set" and are absent from the terminal map until someone edits
+   * them, which is honest about what is known.
+   *
+   * `location` is the text an agent typed; lat/lng are geocoded from it. The
+   * text is kept because it is what a human recognises and what can be
+   * re-geocoded later if the coordinates turn out wrong.
+   */
+  location: varchar("location", { length: 200 }),
+  lat: numeric("lat", { precision: 9, scale: 6 }),
+  lng: numeric("lng", { precision: 9, scale: 6 }),
   operationModel: varchar("operation_model", { length: 10 }).notNull().default("postpaid"),
   registrationSource: varchar("registration_source", { length: 20 }).notNull().default("agent"),
   approvalStatus: varchar("approval_status", { length: 20 }).notNull().default("approved"),
@@ -50,6 +66,12 @@ export const writersTable = pgTable("writers", {
     index("writers_red_flagged_idx")
       .on(table.isRedFlagged)
       .where(sql`${table.isRedFlagged}`),
+    // The terminal map asks for "writers with coordinates" and nothing else.
+    // Declared here as well as in the migration because drizzle-kit push drops
+    // indexes the schema does not know about.
+    index("writers_located_idx")
+      .on(table.agentId)
+      .where(sql`${table.lat} is not null and ${table.lng} is not null`),
   ],
 );
 

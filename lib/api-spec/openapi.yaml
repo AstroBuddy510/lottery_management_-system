@@ -2940,6 +2940,12 @@ components:
         approvalStatus:
           type: ["string", "null"]
           enum: [pending, approved, rejected, null]
+        location:
+          type: ["string", "null"]
+        lat:
+          type: ["string", "null"]
+        lng:
+          type: ["string", "null"]
         # Plaintext PIN, returned ONCE at creation/approval and never stored
         # or returned again. Absent on every other response.
         pin:
@@ -2947,7 +2953,7 @@ components:
 
     WriterInput:
       type: object
-      required: [writerCode, fullName]
+      required: [writerCode, fullName, location]
       properties:
         writerCode:
           type: string
@@ -2962,6 +2968,14 @@ components:
         operationModel:
           type: string
           enum: [prepaid, postpaid]
+        location:
+          type: string
+          minLength: 3
+          maxLength: 200
+        lat:
+          type: string
+        lng:
+          type: string
 
     WriterUpdate:
       type: object
@@ -2970,6 +2984,13 @@ components:
           type: string
         isActive:
           type: boolean
+        location:
+          type: string
+          maxLength: 200
+        lat:
+          type: string
+        lng:
+          type: string
 
     SystemSettings:
       type: object
@@ -4466,6 +4487,12 @@ components:
         writerName:
           type: ["string", "null"]
         writerPhone:
+          type: ["string", "null"]
+        writerLocation:
+          type: ["string", "null"]
+        writerLat:
+          type: ["string", "null"]
+        writerLng:
           type: ["string", "null"]
         agentId:
           type: ["string", "null"]

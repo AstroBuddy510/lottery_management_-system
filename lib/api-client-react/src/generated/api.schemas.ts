@@ -395,6 +395,12 @@ export interface Writer {
   /** @nullable */
   approvalStatus?: WriterApprovalStatus;
   /** @nullable */
+  location?: string | null;
+  /** @nullable */
+  lat?: string | null;
+  /** @nullable */
+  lng?: string | null;
+  /** @nullable */
   pin?: string | null;
 }
 
@@ -419,11 +425,22 @@ export interface WriterInput {
      */
   phone?: string;
   operationModel?: WriterInputOperationModel;
+  /**
+     * @minLength 3
+     * @maxLength 200
+     */
+  location: string;
+  lat?: string;
+  lng?: string;
 }
 
 export interface WriterUpdate {
   fullName?: string;
   isActive?: boolean;
+  /** @maxLength 200 */
+  location?: string;
+  lat?: string;
+  lng?: string;
 }
 
 export interface SystemSettings {
@@ -1497,6 +1514,12 @@ export interface TerminalWithStatus {
   writerName?: string | null;
   /** @nullable */
   writerPhone?: string | null;
+  /** @nullable */
+  writerLocation?: string | null;
+  /** @nullable */
+  writerLat?: string | null;
+  /** @nullable */
+  writerLng?: string | null;
   /** @nullable */
   agentId?: string | null;
   /** @nullable */

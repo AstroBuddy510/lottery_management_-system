@@ -247,6 +247,17 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
     }
   };
 
+  /**
+   * Open the assignment dialog, optionally with the terminal already chosen.
+   *
+   * Always resets first: an abandoned attempt must not leave a half-made
+   * selection behind for the next operator to submit by accident.
+   */
+  const openAssignFor = (terminalId: string) => {
+    setAssignForm({ terminalId, agentId: "", writerId: "", notes: "" });
+    setAssignOpen(true);
+  };
+
   const handleReturn = async (assignmentId: string, serial: string) => {
     try {
       await returnAssignment.mutateAsync({ id: assignmentId, data: {} });
@@ -281,12 +292,7 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
               size="sm"
               variant="outline"
               className="rounded-xl text-xs font-bold uppercase"
-              onClick={() => {
-                // Start clean: an abandoned attempt must not leave a half-made
-                // selection behind for the next operator to submit by accident.
-                setAssignForm({ terminalId: "", agentId: "", writerId: "", notes: "" });
-                setAssignOpen(true);
-              }}
+              onClick={() => openAssignFor("")}
             >
               <UserCheck className="w-4 h-4 mr-1.5" />
               Assign to Writer
@@ -377,7 +383,7 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                   <TableCell className="text-xs text-muted-foreground">{fmtDate(t.registeredAt)}</TableCell>
                   {canManage && (
                     <TableCell className="text-right">
-                      {t.assignmentId && (
+                      {t.assignmentId ? (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -386,6 +392,21 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                         >
                           <RotateCcw className="w-3 h-3 mr-1" />
                           Return
+                        </Button>
+                      ) : t.status === "lost" || t.status === "retired" ? (
+                        <span className="text-[11px] text-muted-foreground capitalize">{t.status}</span>
+                      ) : (
+                        /* Assign from the row itself. Reaching the dialog from
+                           the toolbar meant finding the same serial again in a
+                           dropdown, having just read it off this line. */
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-[11px]"
+                          onClick={() => openAssignFor(t.id)}
+                        >
+                          <UserCheck className="w-3 h-3 mr-1" />
+                          Assign
                         </Button>
                       )}
                     </TableCell>

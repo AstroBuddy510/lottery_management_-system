@@ -588,6 +588,9 @@ export const ListWritersResponseItem = zod.object({
   "phone": zod.string().nullish(),
   "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
   "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
   "pin": zod.string().nullish()
 })
 export const ListWritersResponse = zod.array(ListWritersResponseItem)
@@ -605,13 +608,19 @@ export const createWriterBodyWriterCodeMax = 6;
 
 export const createWriterBodyPhoneMax = 20;
 
+export const createWriterBodyLocationMin = 3;
+export const createWriterBodyLocationMax = 200;
+
 
 
 export const CreateWriterBody = zod.object({
   "writerCode": zod.string().min(createWriterBodyWriterCodeMin).max(createWriterBodyWriterCodeMax),
   "fullName": zod.string(),
   "phone": zod.string().min(1).max(createWriterBodyPhoneMax).optional(),
-  "operationModel": zod.enum(['prepaid', 'postpaid']).optional()
+  "operationModel": zod.enum(['prepaid', 'postpaid']).optional(),
+  "location": zod.string().min(createWriterBodyLocationMin).max(createWriterBodyLocationMax),
+  "lat": zod.string().optional(),
+  "lng": zod.string().optional()
 })
 
 
@@ -622,9 +631,16 @@ export const UpdateWriterParams = zod.object({
   "id": zod.coerce.string()
 })
 
+export const updateWriterBodyLocationMax = 200;
+
+
+
 export const UpdateWriterBody = zod.object({
   "fullName": zod.string().optional(),
-  "isActive": zod.boolean().optional()
+  "isActive": zod.boolean().optional(),
+  "location": zod.string().max(updateWriterBodyLocationMax).optional(),
+  "lat": zod.string().optional(),
+  "lng": zod.string().optional()
 })
 
 export const UpdateWriterResponse = zod.object({
@@ -638,6 +654,9 @@ export const UpdateWriterResponse = zod.object({
   "phone": zod.string().nullish(),
   "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
   "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
   "pin": zod.string().nullish()
 })
 
@@ -1729,6 +1748,9 @@ export const GetWriterReportResponse = zod.object({
   "phone": zod.string().nullish(),
   "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
   "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
   "pin": zod.string().nullish()
 }),
   "totals": zod.object({
@@ -1809,6 +1831,9 @@ export const GetAgentReportResponse = zod.object({
   "phone": zod.string().nullish(),
   "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
   "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
   "pin": zod.string().nullish()
 }),
   "totals": zod.object({
@@ -2259,6 +2284,9 @@ export const ListTerminalsResponseItem = zod.object({
   "writerCode": zod.string().nullish(),
   "writerName": zod.string().nullish(),
   "writerPhone": zod.string().nullish(),
+  "writerLocation": zod.string().nullish(),
+  "writerLat": zod.string().nullish(),
+  "writerLng": zod.string().nullish(),
   "agentId": zod.string().nullish(),
   "agentCode": zod.string().nullish(),
   "agencyName": zod.string().nullish(),

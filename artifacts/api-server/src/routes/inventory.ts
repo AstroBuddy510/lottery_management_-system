@@ -758,6 +758,11 @@ router.get(
           writerCode: writersTable.fullCode,
           writerName: writersTable.fullName,
           writerPhone: writersTable.phone,
+          // Carried here so the terminal map has a position without a second
+          // round trip: the pin belongs where the writer works.
+          writerLocation: writersTable.location,
+          writerLat: writersTable.lat,
+          writerLng: writersTable.lng,
           agentId: agentsTable.id,
           agentCode: agentsTable.fullCode,
           agencyName: agentsTable.agencyName,
