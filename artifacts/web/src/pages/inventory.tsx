@@ -1578,7 +1578,7 @@ export function Inventory() {
                 }}
               >
                 <SelectTrigger className="rounded-xl border-border bg-muted/20 font-mono">
-                  <SelectValue placeholder="Choose a specific padlock... (Optional, defaults to Random)" />
+                  <SelectValue placeholder="Choose a padlock, or pick at random" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_random" className="font-sans italic">Select randomly from available</SelectItem>
