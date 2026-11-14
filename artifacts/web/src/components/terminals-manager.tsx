@@ -5,6 +5,7 @@ import {
   useAssignTerminal,
   useListTerminalAssignments,
   useUnassignTerminalAssignment,
+  useMarkTerminalReady,
   getListTerminalsQueryKey,
   getListTerminalAssignmentsQueryKey,
   type TerminalWithStatus,
@@ -24,7 +25,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Plus, Smartphone, UserCheck, LinkIcon, Wrench, MapPin } from "lucide-react";
+import { Plus, Smartphone, UserCheck, LinkIcon, Wrench, MapPin, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
 
 /**
@@ -176,6 +177,7 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
   const createTerminal = useCreateTerminal();
   const assignTerminal = useAssignTerminal();
   const unassignTerminal = useUnassignTerminalAssignment();
+  const markReady = useMarkTerminalReady();
 
   const [form, setForm] = useState({ serialNumber: "", brand: "", model: "", imei: "", notes: "" });
   const [assignForm, setAssignForm] = useState({ terminalId: "", agentId: "", writerId: "", notes: "" });
@@ -331,6 +333,16 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
   const [unassignCondition, setUnassignCondition] = useState<"working" | "faulty">("working");
   const [unassignNotes, setUnassignNotes] = useState("");
 
+  const handleMarkReady = async (t: TerminalWithStatus) => {
+    try {
+      await markReady.mutateAsync({ id: t.id });
+      toast.success(`${t.serialNumber} is back in stock`);
+      invalidate();
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? "Failed to update terminal");
+    }
+  };
+
   const submitUnassign = async () => {
     if (!unassigning?.assignmentId) return;
     try {
@@ -446,7 +458,10 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                         </div>
                       </>
                     ) : (
-                      <Badge variant="outline" className="text-[10px]">Unassigned</Badge>
+                      /* Plain text, not a Badge: the badge carried its own
+                         horizontal padding, so "Unassigned" started 11px to the
+                         right of every writer code in the same column. */
+                      <span className="text-muted-foreground">Unassigned</span>
                     )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">
@@ -460,6 +475,9 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                       focused on this pin rather than leaving someone to find one
                       code among dozens. */}
                   <TableCell className="text-xs">
+                    {/* Every row keeps the same leading icon slot, filled or
+                        empty, so the text starts at one x down the column
+                        instead of linked rows sitting 16px right of the rest. */}
                     {t.writerId && t.writerLat && t.writerLng ? (
                       <Link
                         href={`/agencies?view=terminals&focus=${t.id}`}
@@ -469,12 +487,16 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                         <MapPin className="w-3 h-3 flex-shrink-0" />
                         <span className="truncate max-w-[150px]">{t.writerLocation ?? "View on map"}</span>
                       </Link>
-                    ) : t.writerId ? (
-                      <span className="text-muted-foreground" title="This writer has no location set, so the terminal cannot be mapped">
-                        {t.writerLocation ?? "no location set"}
-                      </span>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span
+                        className="inline-flex items-center gap-1 text-muted-foreground"
+                        title={t.writerId ? "This writer has no location set, so the terminal cannot be mapped" : undefined}
+                      >
+                        <span className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
+                        <span className="truncate max-w-[150px]">
+                          {t.writerId ? (t.writerLocation ?? "no location set") : "—"}
+                        </span>
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{fmtDate(t.registeredAt)}</TableCell>
@@ -491,10 +513,20 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                           Unassign
                         </Button>
                       ) : t.status === "repair" ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-amber-700" title="Held back as faulty. Mark it repaired before it can be assigned again.">
-                          <Wrench className="w-3 h-3" />
-                          In repair
-                        </span>
+                        /* A unit in repair was a dead end: the status said it
+                           was held back and nothing in the table could release
+                           it. This is the way out. */
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-[11px] text-emerald-700 hover:text-emerald-800"
+                          onClick={() => handleMarkReady(t)}
+                          disabled={markReady.isPending}
+                          title="Repair finished — return this terminal to available stock"
+                        >
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          Mark ready
+                        </Button>
                       ) : t.status !== "available" ? (
                         <span className="text-[11px] text-muted-foreground capitalize">{t.status}</span>
                       ) : (

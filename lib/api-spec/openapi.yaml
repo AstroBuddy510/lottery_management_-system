@@ -2335,6 +2335,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/PosTerminal"
 
+  /inventory/terminals/{id}/ready:
+    post:
+      operationId: markTerminalReady
+      tags: [inventory]
+      summary: Return a repaired terminal to available stock
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PosTerminal"
+
   /inventory/terminals/assign:
     post:
       operationId: assignTerminal

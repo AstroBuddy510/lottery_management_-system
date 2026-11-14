@@ -892,6 +892,55 @@ router.post(
 );
 
 /**
+ * A repaired terminal goes back into stock.
+ *
+ * Deliberately narrow: it moves "repair" to "available" and nothing else.
+ * A general status setter would let "assigned" be written by hand, and that
+ * value is owned by the assignment transaction - the one place that also
+ * writes the assignment row and holds the locks that keep a device out of two
+ * writers' hands. Letting a second route set it would make the two disagree.
+ */
+router.post(
+  "/inventory/terminals/:id/ready",
+  requireAuth,
+  requireRole("director", "administrator"),
+  async (req, res) => {
+    const id = req.params["id"] as string;
+    try {
+      const [terminal] = await db
+        .select()
+        .from(posTerminalsTable)
+        .where(eq(posTerminalsTable.id, id))
+        .limit(1);
+      if (!terminal) {
+        res.status(404).json({ error: "Terminal not found" });
+        return;
+      }
+      if (terminal.status === "available") {
+        res.status(409).json({ error: `Terminal ${terminal.serialNumber} is already in stock` });
+        return;
+      }
+      if (terminal.status === "assigned") {
+        res.status(409).json({
+          error: `Terminal ${terminal.serialNumber} is with a writer — unassign it first`,
+        });
+        return;
+      }
+
+      const [updated] = await db
+        .update(posTerminalsTable)
+        .set({ status: "available" })
+        .where(eq(posTerminalsTable.id, id))
+        .returning();
+      res.json(updated);
+    } catch (error) {
+      console.error("Error marking terminal ready:", error);
+      res.status(500).json({ error: "Failed to update terminal" });
+    }
+  },
+);
+
+/**
  * Hand a terminal to a writer.
  *
  * Closing the writer's previous holding and the terminal's previous holding

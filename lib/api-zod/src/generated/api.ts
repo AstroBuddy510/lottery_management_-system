@@ -2311,6 +2311,27 @@ export const CreateTerminalBody = zod.object({
 
 
 /**
+ * @summary Return a repaired terminal to available stock
+ */
+export const MarkTerminalReadyParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const MarkTerminalReadyResponse = zod.object({
+  "id": zod.string(),
+  "serialNumber": zod.string(),
+  "brand": zod.string(),
+  "model": zod.string(),
+  "imei": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "registeredAt": zod.string(),
+  "registeredBy": zod.string(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary Assign a terminal to a writer, closing any previous holding
  */
 export const AssignTerminalBody = zod.object({

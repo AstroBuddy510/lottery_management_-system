@@ -8029,6 +8029,76 @@ export const useCreateTerminal = <TError = ErrorType<unknown>,
       return useMutation(getCreateTerminalMutationOptions(options));
     }
 
+export const getMarkTerminalReadyUrl = (id: string,) => {
+
+
+
+
+  return `/api/inventory/terminals/${id}/ready`
+}
+
+/**
+ * @summary Return a repaired terminal to available stock
+ */
+export const markTerminalReady = async (id: string, options?: RequestInit): Promise<PosTerminal> => {
+
+  return customFetch<PosTerminal>(getMarkTerminalReadyUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getMarkTerminalReadyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markTerminalReady>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markTerminalReady>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['markTerminalReady'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markTerminalReady>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  markTerminalReady(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkTerminalReadyMutationResult = NonNullable<Awaited<ReturnType<typeof markTerminalReady>>>
+
+    export type MarkTerminalReadyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Return a repaired terminal to available stock
+ */
+export const useMarkTerminalReady = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markTerminalReady>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markTerminalReady>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getMarkTerminalReadyMutationOptions(options));
+    }
+
 export const getAssignTerminalUrl = () => {
 
 

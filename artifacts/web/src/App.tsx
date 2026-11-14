@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth-provider";
 import { useAuth } from "@/lib/auth";
@@ -296,6 +297,16 @@ function App() {
           </AuthProvider>
         </WouterRouter>
         <Toaster />
+        {/*
+          Two toast systems are in use: the radix one above, driven by
+          useToast, and sonner, imported directly as `toast` by fourteen files
+          including Inventory, Sales, Games and the entry screens. Only the
+          first was ever mounted, so every sonner call in those files has been
+          silently discarded - including the error that tells you why a form
+          did not save. Registering a terminal with a serial already on file
+          looked exactly like the button doing nothing.
+        */}
+        <SonnerToaster />
       </TooltipProvider>
     </QueryClientProvider>
   );
