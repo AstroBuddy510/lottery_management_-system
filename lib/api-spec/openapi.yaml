@@ -687,6 +687,30 @@ paths:
         "404":
           description: No such writer
 
+  /agents/{agentId}/roster:
+    get:
+      operationId: getAgencyRoster
+      tags: [agents]
+      summary: One agency's writers and the devices they hold
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RosterEntry"
+
   /agents/{agentId}/debt-reductions:
     get:
       operationId: listAgentDebtReductions
@@ -2903,6 +2927,14 @@ components:
           type: ["string", "null"]
         createdAt:
           type: string
+        # Counts for the agency card's badges. Optional so an older client,
+        # and the agent-scoped endpoints that reuse this shape, stay valid.
+        writerCount:
+          type: integer
+        activeWriterCount:
+          type: integer
+        terminalCount:
+          type: integer
         user:
           type: object
           required: [id, fullName, phone, role, isActive]
@@ -3025,6 +3057,41 @@ components:
           type: string
         lng:
           type: string
+
+    RosterEntry:
+      type: object
+      required: [writerId, writerCode, fullCode, fullName, isActive]
+      properties:
+        writerId:
+          type: string
+        writerCode:
+          type: string
+        fullCode:
+          type: string
+        fullName:
+          type: string
+        isActive:
+          type: boolean
+        phone:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+        hasPin:
+          type: boolean
+        terminalId:
+          type: ["string", "null"]
+        serialNumber:
+          type: ["string", "null"]
+        brand:
+          type: ["string", "null"]
+        model:
+          type: ["string", "null"]
+        terminalStatus:
+          type: ["string", "null"]
+        assignedAt:
+          type: ["string", "null"]
+        lastSaleAt:
+          type: ["string", "null"]
 
     WriterProfile:
       type: object

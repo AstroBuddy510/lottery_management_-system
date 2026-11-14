@@ -432,6 +432,9 @@ export const ListAgentsResponseItem = zod.object({
   "outstandingDebt": zod.string(),
   "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
+  "writerCount": zod.number().optional(),
+  "activeWriterCount": zod.number().optional(),
+  "terminalCount": zod.number().optional(),
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
@@ -481,6 +484,9 @@ export const GetMyAgentResponse = zod.object({
   "outstandingDebt": zod.string(),
   "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
+  "writerCount": zod.number().optional(),
+  "activeWriterCount": zod.number().optional(),
+  "terminalCount": zod.number().optional(),
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
@@ -513,6 +519,9 @@ export const GetAgentResponse = zod.object({
   "outstandingDebt": zod.string(),
   "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
+  "writerCount": zod.number().optional(),
+  "activeWriterCount": zod.number().optional(),
+  "terminalCount": zod.number().optional(),
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
@@ -555,6 +564,9 @@ export const UpdateAgentResponse = zod.object({
   "outstandingDebt": zod.string(),
   "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
+  "writerCount": zod.number().optional(),
+  "activeWriterCount": zod.number().optional(),
+  "terminalCount": zod.number().optional(),
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
@@ -715,6 +727,33 @@ export const GetWriterProfileResponse = zod.object({
   "lastSaleAt": zod.string().nullish()
 })
 })
+
+
+/**
+ * @summary One agency's writers and the devices they hold
+ */
+export const GetAgencyRosterParams = zod.object({
+  "agentId": zod.coerce.string().uuid()
+})
+
+export const GetAgencyRosterResponseItem = zod.object({
+  "writerId": zod.string(),
+  "writerCode": zod.string(),
+  "fullCode": zod.string(),
+  "fullName": zod.string(),
+  "isActive": zod.boolean(),
+  "phone": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "hasPin": zod.boolean().optional(),
+  "terminalId": zod.string().nullish(),
+  "serialNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "terminalStatus": zod.string().nullish(),
+  "assignedAt": zod.string().nullish(),
+  "lastSaleAt": zod.string().nullish()
+})
+export const GetAgencyRosterResponse = zod.array(GetAgencyRosterResponseItem)
 
 
 /**
@@ -1857,6 +1896,9 @@ export const GetAgentReportResponse = zod.object({
   "outstandingDebt": zod.string(),
   "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
+  "writerCount": zod.number().optional(),
+  "activeWriterCount": zod.number().optional(),
+  "terminalCount": zod.number().optional(),
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),
@@ -1938,6 +1980,9 @@ export const GetOrgReportResponse = zod.object({
   "outstandingDebt": zod.string(),
   "debtSince": zod.string().nullish(),
   "createdAt": zod.string(),
+  "writerCount": zod.number().optional(),
+  "activeWriterCount": zod.number().optional(),
+  "terminalCount": zod.number().optional(),
   "user": zod.object({
   "id": zod.string(),
   "fullName": zod.string(),

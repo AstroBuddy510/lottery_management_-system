@@ -12,6 +12,9 @@ import {
   useListTerminals,
   getListTerminalsQueryKey,
   type TerminalWithStatus,
+  useGetAgencyRoster,
+  getGetAgencyRosterQueryKey,
+  type RosterEntry,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -47,7 +50,10 @@ import {
   Calendar,
   AlertCircle,
   Flame,
-  Smartphone
+  Smartphone,
+  Users,
+  KeyRound,
+  CircleSlash
 } from "lucide-react";
 
 type PigeonMapProps = MapProps & {
@@ -433,6 +439,163 @@ function LastPaymentBadge({ payment }: { payment?: Payment }) {
   );
 }
 
+/* ─── roster badges and their breakdown ───────────────────────────────────── */
+
+/**
+ * Headcount and devices, on the agency card.
+ *
+ * Two numbers a supervisor otherwise had to go and count: how many writers
+ * this agency runs, and how many of them are actually holding a device. The
+ * gap between the two is the point - six writers and two terminals is four
+ * people who cannot sell - so the badges sit side by side rather than in
+ * different corners of the card.
+ *
+ * Each badge is a button, not decoration. The card underneath opens the
+ * agency's financial detail, so these stop their click from reaching it.
+ */
+function RosterBadges({
+  agent, onOpen,
+}: {
+  agent: AgentWithUser & { writerCount?: number; activeWriterCount?: number; terminalCount?: number };
+  onOpen: (agent: AgentWithUser, tab: "writers" | "terminals") => void;
+}) {
+  const writers = agent.writerCount ?? 0;
+  const terminals = agent.terminalCount ?? 0;
+  const unequipped = Math.max(0, writers - terminals);
+
+  const badge = (
+    kind: "writers" | "terminals",
+    Icon: typeof Users,
+    count: number,
+    title: string,
+  ) => (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onOpen(agent, kind); }}
+      title={title}
+      aria-label={title}
+      className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+    >
+      <Icon className="w-3.5 h-3.5 text-slate-500" />
+      <span className="text-xs font-bold text-slate-700 tabular-nums">{count}</span>
+    </button>
+  );
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {badge("writers", Users, writers, `${writers} writer${writers === 1 ? "" : "s"} — click for the list`)}
+      {badge("terminals", Smartphone, terminals, `${terminals} terminal${terminals === 1 ? "" : "s"} issued — click for the list`)}
+      {/* Said in words rather than left as arithmetic between two badges. */}
+      {unequipped > 0 && (
+        <span
+          className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-1 rounded-lg"
+          title={`${unequipped} writer${unequipped === 1 ? " has" : "s have"} no terminal`}
+        >
+          {unequipped} without
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The window the rest of the dashboard uses for "active". */
+const ROSTER_ACTIVE_MINUTES = 60;
+
+function RosterDialog({
+  agent, tab, onClose, onOpenWriter,
+}: {
+  agent: AgentWithUser | null;
+  tab: "writers" | "terminals";
+  onClose: () => void;
+  onOpenWriter: (writerId: string) => void;
+}) {
+  const agentId = agent?.id ?? "";
+  const { data, isLoading } = useGetAgencyRoster(agentId, {
+    query: { queryKey: getGetAgencyRosterQueryKey(agentId), enabled: !!agentId },
+  });
+  const rows: RosterEntry[] = Array.isArray(data) ? data : [];
+  const withTerminal = rows.filter(r => !!r.terminalId);
+  const shown = tab === "terminals" ? withTerminal : rows;
+
+  const isActive = (r: RosterEntry) =>
+    !!r.lastSaleAt && Date.now() - new Date(r.lastSaleAt).getTime() < ROSTER_ACTIVE_MINUTES * 60_000;
+
+  return (
+    <Dialog open={!!agent} onOpenChange={open => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            {tab === "terminals" ? "Devices" : "Writers"} — {agent?.agencyName ?? agent?.user.fullName}
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-2">
+          <span className="font-mono">{agent?.fullCode}</span> ·{" "}
+          {rows.length} writer{rows.length === 1 ? "" : "s"} · {withTerminal.length} holding a device
+        </p>
+
+        <div className="max-h-[60vh] overflow-y-auto -mx-2 px-2">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
+          ) : shown.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              {tab === "terminals" ? "No devices issued to this agency yet." : "No writers under this agency yet."}
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {shown.map(r => (
+                <button
+                  key={r.writerId}
+                  type="button"
+                  onClick={() => onOpenWriter(r.writerId)}
+                  className="w-full text-left flex items-center gap-3 p-2.5 rounded-xl border hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: isActive(r) ? "#22c55e" : "#ef4444" }}
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-800 truncate">{r.fullName}</span>
+                      <code className="text-[10px] text-slate-400 font-mono">{r.fullCode}</code>
+                      {!r.isActive && (
+                        <span className="text-[9px] font-bold uppercase text-slate-500 bg-slate-100 px-1.5 py-px rounded">
+                          Disabled
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500 truncate">
+                      {r.location ?? "No location"}
+                      {r.phone ? ` · ${r.phone}` : ""}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    {r.terminalId ? (
+                      <>
+                        <div className="font-mono text-[11px] font-semibold text-slate-700">{r.serialNumber}</div>
+                        <div className="text-[10px] text-slate-400">{r.brand} {r.model}</div>
+                      </>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700">
+                        <CircleSlash className="w-3 h-3" /> No device
+                      </span>
+                    )}
+                    {!r.hasPin && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 mt-0.5">
+                        <KeyRound className="w-3 h-3" /> No PIN
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── grid view ───────────────────────────────────────────────────────────── */
 
 function GridView({
@@ -440,11 +603,13 @@ function GridView({
   lastPaymentsMap,
   onSelect,
   onPhotoClick,
+  onOpenRoster,
 }: {
   agents: AgentWithUser[];
   lastPaymentsMap: Record<string, Payment>;
   onSelect: (a: AgentWithUser) => void;
   onPhotoClick: (a: AgentWithUser) => void;
+  onOpenRoster: (a: AgentWithUser, tab: "writers" | "terminals") => void;
 }) {
   if (agents.length === 0) {
     return (
@@ -512,6 +677,11 @@ function GridView({
                   {a.location}
                 </div>
               )}
+
+              {/* Who works here and what they are holding. */}
+              <div className="mt-3">
+                <RosterBadges agent={a} onOpen={onOpenRoster} />
+              </div>
             </div>
 
             <div className="mt-4 space-y-3">
@@ -574,11 +744,13 @@ function ListView({
   lastPaymentsMap,
   onSelect,
   onPhotoClick,
+  onOpenRoster,
 }: {
   agents: AgentWithUser[];
   lastPaymentsMap: Record<string, Payment>;
   onSelect: (a: AgentWithUser) => void;
   onPhotoClick: (a: AgentWithUser) => void;
+  onOpenRoster: (a: AgentWithUser, tab: "writers" | "terminals") => void;
 }) {
   if (agents.length === 0) {
     return (
@@ -598,6 +770,7 @@ function ListView({
               <th className="px-6 py-4">Agency</th>
               <th className="px-6 py-4">Agent Name & Phone</th>
               <th className="px-6 py-4">Location</th>
+              <th className="px-6 py-4">Team</th>
               <th className="px-6 py-4">Last Transaction</th>
               <th className="px-6 py-4">Balance / Debt</th>
               <th className="px-6 py-4 text-right">Actions</th>
@@ -669,6 +842,11 @@ function ListView({
                     ) : (
                       <span className="text-slate-400 italic text-xs">No location</span>
                     )}
+                  </td>
+                  {/* Same two badges as the grid card, so switching view does
+                      not lose the headcount. */}
+                  <td className="px-6 py-4">
+                    <RosterBadges agent={a} onOpen={onOpenRoster} />
                   </td>
                   <td className="px-6 py-4">
                     <LastPaymentBadge payment={lastPayment} />
@@ -1436,6 +1614,9 @@ export function AgencyDashboard() {
   const [sortBy, setSortBy] = useState<SortMode>("name-asc");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AgentWithUser | null>(null);
+  const [, navigateTo] = useLocation();
+  /* Which agency's roster is open, and which of its two lists is showing. */
+  const [roster, setRoster] = useState<{ agent: AgentWithUser; tab: "writers" | "terminals" } | null>(null);
 
   const pageSize = 12;
   const isLoading = isAgentsLoading || isPaymentsLoading;
@@ -1716,12 +1897,24 @@ export function AgencyDashboard() {
           </div>
         ) : view === "grid" ? (
           <>
-            <GridView agents={paginatedAgents} lastPaymentsMap={lastPaymentsMap} onSelect={setSelected} onPhotoClick={handlePhotoClick} />
+            <GridView
+              agents={paginatedAgents}
+              lastPaymentsMap={lastPaymentsMap}
+              onSelect={setSelected}
+              onPhotoClick={handlePhotoClick}
+              onOpenRoster={(a, tab) => setRoster({ agent: a, tab })}
+            />
             <Pagination page={page} totalPages={totalPages} onPage={setPage} />
           </>
         ) : view === "list" ? (
           <>
-            <ListView agents={paginatedAgents} lastPaymentsMap={lastPaymentsMap} onSelect={setSelected} onPhotoClick={handlePhotoClick} />
+            <ListView
+              agents={paginatedAgents}
+              lastPaymentsMap={lastPaymentsMap}
+              onSelect={setSelected}
+              onPhotoClick={handlePhotoClick}
+              onOpenRoster={(a, tab) => setRoster({ agent: a, tab })}
+            />
             <Pagination page={page} totalPages={totalPages} onPage={setPage} />
           </>
         ) : view === "terminals" ? (
@@ -1742,6 +1935,12 @@ export function AgencyDashboard() {
 
       {/* Detail modal */}
       <AgencyDetailModal agent={selected} onClose={() => setSelected(null)} />
+      <RosterDialog
+        agent={roster?.agent ?? null}
+        tab={roster?.tab ?? "writers"}
+        onClose={() => setRoster(null)}
+        onOpenWriter={id => { setRoster(null); navigateTo(`/writers/${id}`); }}
+      />
     </div>
   );
 }

@@ -112,6 +112,7 @@ import type {
   ReserveDebt,
   ReserveReceipt,
   ReserveSummary,
+  RosterEntry,
   SalaryPaymentRecord,
   SalaryWalletInfo,
   SalesLog,
@@ -2371,6 +2372,83 @@ export function useGetWriterProfile<TData = Awaited<ReturnType<typeof getWriterP
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetWriterProfileQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetAgencyRosterUrl = (agentId: string,) => {
+
+
+
+
+  return `/api/agents/${agentId}/roster`
+}
+
+/**
+ * @summary One agency's writers and the devices they hold
+ */
+export const getAgencyRoster = async (agentId: string, options?: RequestInit): Promise<RosterEntry[]> => {
+
+  return customFetch<RosterEntry[]>(getGetAgencyRosterUrl(agentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgencyRosterQueryKey = (agentId: string,) => {
+    return [
+    `/api/agents/${agentId}/roster`
+    ] as const;
+    }
+
+
+export const getGetAgencyRosterQueryOptions = <TData = Awaited<ReturnType<typeof getAgencyRoster>>, TError = ErrorType<unknown>>(agentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgencyRoster>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgencyRosterQueryKey(agentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgencyRoster>>> = ({ signal }) => getAgencyRoster(agentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(agentId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgencyRoster>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAgencyRosterQueryResult = NonNullable<Awaited<ReturnType<typeof getAgencyRoster>>>
+export type GetAgencyRosterQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary One agency's writers and the devices they hold
+ */
+
+export function useGetAgencyRoster<TData = Awaited<ReturnType<typeof getAgencyRoster>>, TError = ErrorType<unknown>>(
+ agentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAgencyRoster>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAgencyRosterQueryOptions(agentId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

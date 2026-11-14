@@ -313,6 +313,9 @@ export interface AgentWithUser {
   /** @nullable */
   debtSince?: string | null;
   createdAt: string;
+  writerCount?: number;
+  activeWriterCount?: number;
+  terminalCount?: number;
   user: AgentWithUserUser;
 }
 
@@ -432,6 +435,33 @@ export interface WriterInput {
   location: string;
   lat?: string;
   lng?: string;
+}
+
+export interface RosterEntry {
+  writerId: string;
+  writerCode: string;
+  fullCode: string;
+  fullName: string;
+  isActive: boolean;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  location?: string | null;
+  hasPin?: boolean;
+  /** @nullable */
+  terminalId?: string | null;
+  /** @nullable */
+  serialNumber?: string | null;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  terminalStatus?: string | null;
+  /** @nullable */
+  assignedAt?: string | null;
+  /** @nullable */
+  lastSaleAt?: string | null;
 }
 
 export type WriterProfileAgency = {

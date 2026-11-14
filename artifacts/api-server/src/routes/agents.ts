@@ -3,7 +3,7 @@ import {
   db, agentsTable, writersTable, usersTable, agentDebtReductionsTable,
   posTerminalsTable, terminalAssignmentsTable, ticketsTable,
 } from "@workspace/db";
-import { eq, and, desc, isNull, sql } from "drizzle-orm";
+import { eq, and, desc, isNull, sql, inArray } from "drizzle-orm";
 import {
   CreateAgentBody,
   GetAgentParams,
@@ -15,6 +15,7 @@ import {
   UpdateWriterParams,
   UpdateWriterBody,
   GetWriterProfileParams,
+  GetAgencyRosterParams,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { composeWriterFullCode, generatePin, hashPin } from "../lib/writer-onboarding";
@@ -134,12 +135,137 @@ router.get(
   "/agents",
   requireAuth,
   requireRole("director", "administrator", "cashier", "gross_entry", "wins_entry"),
-  async (req, res) => {
+  async (_req, res) => {
     const rows = await db
       .select(AGENT_SELECT)
       .from(agentsTable)
       .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id));
-    res.json(rows.map(formatAgent));
+
+    /*
+     * Headcount and devices for the agency cards.
+     *
+     * Two grouped queries for the whole dashboard, not two per card. The
+     * cards are rendered from this one list, so asking per agency would mean
+     * 2N requests the moment the network grows past a handful of agencies -
+     * and the dashboard is the first screen anyone opens.
+     *
+     * A terminal belongs to an agency only through the writer currently
+     * holding it, so the device count is "open assignments under this
+     * agency's writers" and nothing else.
+     */
+    const writerCounts = await db
+      .select({
+        agentId: writersTable.agentId,
+        total: sql<number>`count(*)::int`,
+        active: sql<number>`count(*) filter (where ${writersTable.isActive})::int`,
+      })
+      .from(writersTable)
+      .groupBy(writersTable.agentId);
+
+    const terminalCounts = await db
+      .select({
+        agentId: writersTable.agentId,
+        total: sql<number>`count(*)::int`,
+      })
+      .from(terminalAssignmentsTable)
+      .innerJoin(writersTable, eq(writersTable.id, terminalAssignmentsTable.writerId))
+      .where(isNull(terminalAssignmentsTable.unassignedAt))
+      .groupBy(writersTable.agentId);
+
+    const writersBy = new Map(writerCounts.map((r) => [r.agentId, r]));
+    const terminalsBy = new Map(terminalCounts.map((r) => [r.agentId, r.total]));
+
+    res.json(
+      rows.map((r) => ({
+        ...formatAgent(r),
+        writerCount: writersBy.get(r.id)?.total ?? 0,
+        activeWriterCount: writersBy.get(r.id)?.active ?? 0,
+        terminalCount: terminalsBy.get(r.id) ?? 0,
+      })),
+    );
+  },
+);
+
+/**
+ * The breakdown behind an agency card's two badges.
+ *
+ * Writers and devices arrive together because they are one list: a terminal
+ * reaches an agency only through the writer holding it, so "who works here"
+ * and "what hardware is out there" are the same rows read two ways. Splitting
+ * them into two endpoints would have meant stitching them back together in
+ * the dialog and getting a writer with no device wrong.
+ */
+router.get(
+  "/agents/:agentId/roster",
+  requireAuth,
+  requireRole("director", "administrator", "cashier", "agent"),
+  async (req, res) => {
+    const parsed = GetAgencyRosterParams.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid params" });
+      return;
+    }
+    const agentId = parsed.data.agentId;
+
+    if (req.user!.role === "agent") {
+      const myAgent = await getAgentForUser(req.user!.userId);
+      if (!myAgent || myAgent.id !== agentId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    }
+
+    const rows = await db
+      .select({
+        writerId: writersTable.id,
+        writerCode: writersTable.writerCode,
+        fullCode: writersTable.fullCode,
+        fullName: writersTable.fullName,
+        isActive: writersTable.isActive,
+        phone: writersTable.phone,
+        location: writersTable.location,
+        hasPin: sql<boolean>`${writersTable.pinHash} is not null`,
+        terminalId: posTerminalsTable.id,
+        serialNumber: posTerminalsTable.serialNumber,
+        brand: posTerminalsTable.brand,
+        model: posTerminalsTable.model,
+        terminalStatus: posTerminalsTable.status,
+        assignedAt: terminalAssignmentsTable.assignedAt,
+      })
+      .from(writersTable)
+      .leftJoin(
+        terminalAssignmentsTable,
+        and(
+          eq(terminalAssignmentsTable.writerId, writersTable.id),
+          isNull(terminalAssignmentsTable.unassignedAt),
+        ),
+      )
+      .leftJoin(posTerminalsTable, eq(posTerminalsTable.id, terminalAssignmentsTable.terminalId))
+      .where(eq(writersTable.agentId, agentId))
+      .orderBy(writersTable.fullCode);
+
+    // Last sale per writer, so the dialog can say which devices are silent
+    // without a second round trip. Same exclusions as everywhere else.
+    const ids = rows.map((r) => r.writerId);
+    const lastSale = new Map<string, Date>();
+    if (ids.length > 0) {
+      const sales = await db
+        .select({
+          writerId: ticketsTable.writerId,
+          lastSaleAt: sql<Date | null>`max(${ticketsTable.createdAt})`,
+        })
+        .from(ticketsTable)
+        .where(
+          and(
+            inArray(ticketsTable.writerId, ids),
+            sql`${ticketsTable.status} not in ('cancelled', 'void')`,
+          ),
+        )
+        .groupBy(ticketsTable.writerId);
+      for (const r of sales) if (r.lastSaleAt) lastSale.set(r.writerId, new Date(r.lastSaleAt));
+    }
+
+    res.json(rows.map((r) => ({ ...r, lastSaleAt: lastSale.get(r.writerId) ?? null })));
   },
 );
 
