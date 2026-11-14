@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   useGetWriterReport, useGetAgentReport, useGetOrgReport,
@@ -22,7 +22,7 @@ import {
   generateWriterReportPDF,
   generateAgentReportPDF,
   generateOrgReportPDF,
-  generateGameSalesReportPDF,
+  generateGameSalesByAgencyPDF,
 } from "@/lib/pdf-generator";
 import { TokenReportView } from "@/components/token-report";
 
@@ -688,131 +688,122 @@ function OrgReportView() {
 }
 
 // ── Game Sales Report ─────────────────────────────────────────────────────────
+/*
+ * One game, over a period, and how each agency sold it.
+ *
+ * This tab used to ask for an agent and a date range and then show that one
+ * agent's sales split by game type - which is the Agent report with a
+ * different title, and there was no way to select a game at all. The question
+ * the name promises is the other way round: pick the game, see who sold it.
+ *
+ * A game is chosen by name rather than by draw, because a game runs many
+ * times and the period is what decides which of its events count. Picking one
+ * draw would make the date range meaningless.
+ *
+ * Figures come from the locked daily calculations, the same numbers an agency
+ * is settled on, so this report and the Agent report cannot disagree about
+ * money.
+ */
 
-type GameSalesWriter = { id: string; fullCode: string; fullName: string };
-type GameSalesByGameType = {
-  gameType: string;
-  ticketCount: number;
-  totalAmount: string;
+type GameName = { name: string; eventCount: number; firstEventAt: string; lastEventAt: string };
+
+type GameEvent = {
+  id: string; eventNumber: string; name: string;
+  goLiveAt: string; closeAt: string; status: string;
+};
+
+type AgencyMoney = {
+  gross: string; commission: string; netGross: string;
+  wins: string; reserve: string; balance: string;
+};
+
+type GameSalesWriterRow = AgencyMoney & {
+  writer: { id: string; fullCode: string; fullName: string };
+  eventCount: number;
+};
+
+type GameSalesAgencyRow = AgencyMoney & {
+  agent: { id: string; fullCode: string; agencyName: string | null; agentName: string };
   pct: number;
-  writers: { writer: GameSalesWriter; ticketCount: number; totalAmount: string }[];
+  writerCount: number;
+  eventCount: number;
+  writers: GameSalesWriterRow[];
 };
-type GameSalesByWriter = {
-  writer: GameSalesWriter;
-  ticketCount: number;
-  totalAmount: string;
-  pct: number;
-  byGameType: { gameType: string; ticketCount: number; totalAmount: string }[];
-};
-type GameSalesEntry = {
-  id: string;
-  saleDate: string;
-  gameType: string;
-  ticketAmount: string;
-  writerId: string;
-  writerCode: string;
-  writerFullName: string;
-  imageUrl?: string | null;
-};
-type GameFinancialSummary = {
-  gameId: string;
-  gameName: string;
-  eventNumber: string;
-  goLiveAt: string;
-  closeAt: string;
-  grossSales: string;
-  commission: string;
-  netGross: string;
-  wins: string;
-  reserve: string;
-  balance: string;
-};
+
 type GameSalesReport = {
-  agent: { id: string; fullCode: string; user?: { fullName?: string } | null };
-  summary: { totalEntries: number; totalAmount: string; gameTypeCount: number; writerCount: number };
-  byGameType: GameSalesByGameType[];
-  byWriter: GameSalesByWriter[];
-  entries: GameSalesEntry[];
-  gameFinancials?: GameFinancialSummary[];
+  game: { name: string; eventCount: number; events: GameEvent[] };
+  summary: AgencyMoney & { agencyCount: number; writerCount: number };
+  byAgent: GameSalesAgencyRow[];
 };
 
-const GAME_TYPE_COLOURS: Record<string, string> = {
-  Lotto:    "bg-blue-500",
-  Lucky5:   "bg-emerald-500",
-  Fortune3: "bg-violet-500",
-  Banker:   "bg-amber-500",
-};
-function gameTypeColour(gt: string) { return GAME_TYPE_COLOURS[gt] ?? "bg-gray-400"; }
-
-async function fetchGameSalesReport(agentId: string, dateFrom: string, dateTo: string): Promise<GameSalesReport> {
+const authHeaders = (): Record<string, string> => {
   const token = localStorage.getItem("accessToken");
-  const params = new URLSearchParams();
-  if (dateFrom) params.set("dateFrom", dateFrom);
-  if (dateTo) params.set("dateTo", dateTo);
-  const qs = params.toString() ? `?${params.toString()}` : "";
-  const res = await fetch(`/api/reports/agent/${agentId}/game-sales${qs}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+async function fetchGameNames(): Promise<GameName[]> {
+  const res = await fetch("/api/reports/game-names", { headers: authHeaders() });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<GameSalesReport>;
+  return res.json();
 }
 
+async function fetchGameSalesReport(
+  gameName: string, dateFrom: string, dateTo: string, agentId: string,
+): Promise<GameSalesReport> {
+  const params = new URLSearchParams({ gameName });
+  if (dateFrom) params.set("dateFrom", dateFrom);
+  if (dateTo) params.set("dateTo", dateTo);
+  if (agentId) params.set("agentId", agentId);
+  const res = await fetch(`/api/reports/game-sales?${params}`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+const ghs = (v: string | number) =>
+  `GH₵ ${Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 function GameSalesView() {
-  const [agentId, setAgentId] = useState("");
+  const [gameName, setGameName] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [showWriterBreakdown, setShowWriterBreakdown] = useState(false);
-  const [showEntries, setShowEntries] = useState(false);
+  const [agentId, setAgentId] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const { data: agents } = useListAgents({});
   const agentList = Array.isArray(agents) ? agents : [];
 
+  const { data: gameNames } = useQuery({ queryKey: ["game-names"], queryFn: fetchGameNames });
+  const nameList: GameName[] = Array.isArray(gameNames) ? gameNames : [];
+
   const { data: report, isLoading, error, refetch } = useQuery({
-    queryKey: ["game-sales", agentId, dateFrom, dateTo],
-    queryFn: () => fetchGameSalesReport(agentId, dateFrom, dateTo),
-    enabled: !!agentId,
+    queryKey: ["game-sales", gameName, dateFrom, dateTo, agentId],
+    queryFn: () => fetchGameSalesReport(gameName, dateFrom, dateTo, agentId),
+    enabled: !!gameName,
   });
 
-  const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); };
   const r = report;
-
-  const groupedFinancials = useMemo(() => {
-    if (!r?.gameFinancials) return {};
-    const groups: Record<string, GameFinancialSummary[]> = {};
-    for (const item of r.gameFinancials) {
-      const type = item.gameName;
-      if (!groups[type]) groups[type] = [];
-      groups[type].push(item);
-    }
-    return groups;
-  }, [r?.gameFinancials]);
-
-  const grandTotals = useMemo(() => {
-    if (!r?.gameFinancials) return { gross: 0, commission: 0, netGross: 0, wins: 0, reserve: 0, balance: 0 };
-    let gross = 0, commission = 0, netGross = 0, wins = 0, reserve = 0, balance = 0;
-    for (const item of r.gameFinancials) {
-      gross += Number(item.grossSales);
-      commission += Number(item.commission);
-      netGross += Number(item.netGross);
-      wins += Number(item.wins);
-      reserve += Number(item.reserve);
-      balance += Number(item.balance);
-    }
-    return { gross, commission, netGross, wins, reserve, balance };
-  }, [r?.gameFinancials]);
+  const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); };
 
   return (
     <div className="space-y-4 pt-4">
-      <ParamPanel onRun={() => void refetch()} disabled={!agentId} loading={isLoading} buttonLabel="Refresh" hint="Select an agent — data loads automatically. Use Refresh to reload.">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <ParamPanel
+        onRun={() => void refetch()}
+        disabled={!gameName}
+        loading={isLoading}
+        buttonLabel="Refresh"
+        hint="Choose a game and a period. Every agency that sold it is ranked by gross."
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Agent</Label>
-            <Select value={agentId || "_none"} onValueChange={v => setAgentId(v === "_none" ? "" : v)}>
-              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="Select agent…" /></SelectTrigger>
+            <Label className="text-xs text-muted-foreground">Game</Label>
+            <Select value={gameName || "_none"} onValueChange={v => setGameName(v === "_none" ? "" : v)}>
+              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="Select game…" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="_none">— Select agent —</SelectItem>
-                {agentList.map(a => (
-                  <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>
+                <SelectItem value="_none">— Select game —</SelectItem>
+                {nameList.map(g => (
+                  <SelectItem key={g.name} value={g.name}>
+                    {g.name} ({g.eventCount} event{g.eventCount === 1 ? "" : "s"})
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -825,12 +816,26 @@ function GameSalesView() {
             <Label className="text-xs text-muted-foreground">To</Label>
             <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 text-sm bg-background" />
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Agency (optional)</Label>
+            <Select value={agentId || "_all"} onValueChange={v => setAgentId(v === "_all" ? "" : v)}>
+              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="All agencies" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">All agencies</SelectItem>
+                {agentList.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.agencyName ?? a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <DateShortcuts onSelect={applyDates} />
       </ParamPanel>
 
-      {!agentId && !isLoading && (
-        <div className="text-center py-12 text-sm text-muted-foreground">Select an agent above to view their game sales.</div>
+      {!gameName && !isLoading && (
+        <div className="text-center py-12 text-sm text-muted-foreground">
+          Select a game above to see how each agency sold it.
+        </div>
       )}
 
       {error && (
@@ -843,295 +848,146 @@ function GameSalesView() {
         <div className="space-y-4">
           <ReportLetterhead
             title="Game Sales Report"
-            subtitle={`${r.agent?.fullCode ?? "—"} — ${r.agent?.user?.fullName ?? "—"}`}
+            subtitle={`${r.game.name} — ${r.game.eventCount} event${r.game.eventCount === 1 ? "" : "s"} in period`}
             dateFrom={dateFrom} dateTo={dateTo}
-            onExportPDF={async () => {
-              await generateGameSalesReportPDF(
-                r.agent?.user?.fullName ?? "Unknown Agent",
-                r.agent?.fullCode ?? "—",
-                dateFrom,
-                dateTo,
-                r.summary,
-                r.byGameType,
-                r.byWriter,
-                r.gameFinancials ?? []
-              );
-            }}
+            onExportPDF={() => generateGameSalesByAgencyPDF(
+              r.game.name, r.game.eventCount, dateFrom, dateTo, r.summary, r.byAgent,
+            )}
           />
 
-          {/* Summary strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* No draws of this game in the range is a different answer from no
+              sales, and saying so saves an operator doubting the report. */}
+          {r.game.eventCount === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-800">
+              No <strong>{r.game.name}</strong> events fall in this period. Widen the dates, or
+              check the game ran at all in that range.
+            </div>
+          ) : r.byAgent.length === 0 ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-800">
+              {r.game.eventCount} {r.game.name} event{r.game.eventCount === 1 ? "" : "s"} ran in this
+              period, but no calculated sales are recorded against {agentId ? "that agency" : "any agency"} yet.
+              Figures appear once the daily calculation has been run for those events.
+            </div>
+          ) : null}
+
+          {/* Period totals */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
-              { label: "Total Gross Sales", value: `GH₵ ${grandTotals.gross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: "Revenue from game events" },
-              { label: "Total Wins Deduct", value: `GH₵ ${grandTotals.wins.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: "Wins claimed by writers" },
-              { label: "Total Reserve", value: `GH₵ ${grandTotals.reserve.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, sub: "Allocations to reserve fund" },
+              { label: "Gross Sales", value: ghs(r.summary.gross), cls: "" },
+              { label: "Commission", value: ghs(r.summary.commission), cls: "text-amber-600 dark:text-amber-400" },
+              { label: "Net Gross", value: ghs(r.summary.netGross), cls: "text-teal-600 dark:text-teal-400" },
+              { label: "Wins Paid", value: ghs(r.summary.wins), cls: "text-rose-600 dark:text-rose-400" },
+              { label: "Reserve", value: ghs(r.summary.reserve), cls: "text-indigo-600 dark:text-indigo-400" },
               {
-                label: "Consolidated Net Balance",
-                value: `GH₵ ${grandTotals.balance.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                sub: "Combined writer balance yield",
+                label: "Net Balance", value: ghs(r.summary.balance),
+                cls: Number(r.summary.balance) < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400",
               },
-            ].map(({ label, value, sub }) => (
-              <div key={label} className="rounded-xl border bg-card px-4 py-3">
+            ].map(({ label, value, cls }) => (
+              <div key={label} className="rounded-xl border bg-card px-3 py-2.5">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</div>
-                <div className={`font-mono font-bold text-base ${label === "Consolidated Net Balance" ? (grandTotals.balance < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400") : ""}`}>{value}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+                <div className={`font-mono font-bold text-sm ${cls}`}>{value}</div>
               </div>
             ))}
           </div>
 
-          {/* Game Sales Financial Summary by Game Type */}
-          {Object.keys(groupedFinancials).length > 0 && (
-            <div className="space-y-6">
-              <div className="text-sm font-semibold uppercase tracking-wide text-muted-foreground border-b pb-1">
-                Game Sales Financial Summaries
+          {/* The draws being counted, named, so the totals can be checked. */}
+          {r.game.events.length > 0 && (
+            <div className="rounded-xl border px-4 py-3">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">
+                Events counted ({r.game.events.length})
               </div>
-              {Object.entries(groupedFinancials).map(([gameType, items]) => (
-                <div key={gameType} className="rounded-xl border overflow-hidden">
-                  <div className="bg-muted/40 px-4 py-2.5 border-b flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wide text-primary">{gameType} Sales</span>
-                    <span className="text-xs text-muted-foreground">{items.length} event(s)</span>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/20">
-                        <TableHead className="text-xs">Name of game</TableHead>
-                        <TableHead className="text-right text-xs">Gross sales</TableHead>
-                        <TableHead className="text-right text-xs">Commission</TableHead>
-                        <TableHead className="text-right text-xs">Net Gross</TableHead>
-                        <TableHead className="text-right text-xs">Wins</TableHead>
-                        <TableHead className="text-right text-xs">Reserve</TableHead>
-                        <TableHead className="text-right text-xs">Balance</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map(item => (
-                        <TableRow key={item.gameId} className="hover:bg-muted/20">
-                          <TableCell className="font-semibold">
-                            {item.gameName} #{item.eventNumber}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            GH₵ {Number(item.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-amber-600 dark:text-amber-400">
-                            GH₵ {Number(item.commission).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-teal-600 dark:text-teal-400">
-                            GH₵ {Number(item.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-rose-600 dark:text-rose-400">
-                            GH₵ {Number(item.wins).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-indigo-600 dark:text-indigo-400">
-                            GH₵ {Number(item.reserve).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className={`text-right font-mono font-bold ${Number(item.balance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
-                            GH₵ {Number(item.balance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Consolidated Grand Totals */}
-          {Object.keys(groupedFinancials).length > 0 && (
-            <div className="rounded-xl border bg-gradient-to-r from-muted/50 via-muted/30 to-muted/50 p-5 mt-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-1.5 h-4 bg-primary rounded-full" />
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Consolidated Grand Totals</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6">
-                {[
-                  { label: "Total Gross Sales", value: `GH₵ ${grandTotals.gross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-foreground" },
-                  { label: "Total Commission", value: `GH₵ ${grandTotals.commission.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-amber-600 dark:text-amber-400" },
-                  { label: "Total Net Gross", value: `GH₵ ${grandTotals.netGross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-teal-600 dark:text-teal-400" },
-                  { label: "Total Wins", value: `GH₵ ${grandTotals.wins.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-rose-600 dark:text-rose-400" },
-                  { label: "Total Reserve", value: `GH₵ ${grandTotals.reserve.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, valueClass: "text-indigo-600 dark:text-indigo-400" },
-                  { 
-                    label: "Grand Net Balance", 
-                    value: `GH₵ ${grandTotals.balance.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-                    valueClass: `font-extrabold ${grandTotals.balance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}` 
-                  },
-                ].map(({ label, value, valueClass }) => (
-                  <div key={label} className="space-y-1">
-                    <div className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wide">{label}</div>
-                    <div className={`font-mono text-sm font-bold ${valueClass}`}>{value}</div>
-                  </div>
+              <div className="flex flex-wrap gap-1.5">
+                {r.game.events.map(e => (
+                  <Badge key={e.id} variant="outline" className="font-mono text-[10px]">
+                    #{e.eventNumber} · {new Date(e.goLiveAt).toLocaleDateString("en-GB")}
+                  </Badge>
                 ))}
               </div>
             </div>
           )}
 
-          {/* By game type */}
-          {r.byGameType.length > 0 ? (
+          {/* The league table */}
+          {r.byAgent.length > 0 && (
             <div className="rounded-xl border overflow-hidden">
               <div className="bg-muted/40 px-4 py-2.5 border-b flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sales by Game Type</span>
-                <span className="text-xs text-muted-foreground">{r.byGameType.length} games</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Sales by Agency
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {r.summary.agencyCount} agenc{r.summary.agencyCount === 1 ? "y" : "ies"} · {r.summary.writerCount} writer{r.summary.writerCount === 1 ? "" : "s"}
+                </span>
               </div>
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/20">
-                    <TableHead className="text-xs w-[160px]">Game</TableHead>
-                    <TableHead className="text-xs">Share</TableHead>
-                    <TableHead className="text-right text-xs">Entries</TableHead>
-                    <TableHead className="text-right text-xs">Total Sales</TableHead>
-                    <TableHead className="text-right text-xs">%</TableHead>
+                    <TableHead className="text-xs">Agency</TableHead>
+                    <TableHead className="text-xs w-[120px]">Share</TableHead>
+                    <TableHead className="text-right text-xs">Gross Sales</TableHead>
+                    <TableHead className="text-right text-xs">Commission</TableHead>
+                    <TableHead className="text-right text-xs">Net Gross</TableHead>
+                    <TableHead className="text-right text-xs">Wins</TableHead>
+                    <TableHead className="text-right text-xs">Reserve</TableHead>
+                    <TableHead className="text-right text-xs">Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {r.byGameType.map(gt => (
-                    <TableRow key={gt.gameType} className="hover:bg-muted/20">
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${gameTypeColour(gt.gameType)}`} />
-                          <span className="font-semibold text-sm">{gt.gameType}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="pr-6 w-[140px]">
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${gameTypeColour(gt.gameType)}`} style={{ width: `${gt.pct}%` }} />
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">{gt.ticketCount}</TableCell>
-                      <TableCell className="text-right font-mono font-semibold text-sm">
-                        GH₵ {Number(gt.totalAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="outline" className="font-mono text-xs">{gt.pct.toFixed(1)}%</Badge>
-                      </TableCell>
-                    </TableRow>
+                  {r.byAgent.map(a => (
+                    <React.Fragment key={a.agent.id}>
+                      <TableRow
+                        className="hover:bg-muted/20 cursor-pointer"
+                        onClick={() => setExpanded(expanded === a.agent.id ? null : a.agent.id)}
+                      >
+                        <TableCell>
+                          <div className="font-semibold text-sm">{a.agent.agencyName ?? a.agent.agentName}</div>
+                          <div className="text-[10px] font-mono text-muted-foreground">
+                            {a.agent.fullCode} · {a.writerCount} writer{a.writerCount === 1 ? "" : "s"} · {expanded === a.agent.id ? "hide" : "show"} writers
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${a.pct}%` }} />
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">{a.pct.toFixed(1)}%</div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm font-semibold">{ghs(a.gross)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-amber-600 dark:text-amber-400">{ghs(a.commission)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-teal-600 dark:text-teal-400">{ghs(a.netGross)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-rose-600 dark:text-rose-400">{ghs(a.wins)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-indigo-600 dark:text-indigo-400">{ghs(a.reserve)}</TableCell>
+                        <TableCell className={`text-right font-mono text-sm font-bold ${Number(a.balance) < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400"}`}>
+                          {ghs(a.balance)}
+                        </TableCell>
+                      </TableRow>
+                      {expanded === a.agent.id && a.writers.map(w => (
+                        <TableRow key={w.writer.id} className="bg-muted/20">
+                          <TableCell className="pl-8">
+                            <div className="text-xs">{w.writer.fullName}</div>
+                            <div className="text-[10px] font-mono text-muted-foreground">{w.writer.fullCode}</div>
+                          </TableCell>
+                          <TableCell />
+                          <TableCell className="text-right font-mono text-xs">{ghs(w.gross)}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">{ghs(w.commission)}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">{ghs(w.netGross)}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">{ghs(w.wins)}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">{ghs(w.reserve)}</TableCell>
+                          <TableCell className="text-right font-mono text-xs">{ghs(w.balance)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </TableBody>
                 <tfoot>
                   <tr className="border-t-2 bg-muted/30">
-                    <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground">Total</td>
-                    <td />
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold">{r.summary.totalEntries}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold">
-                      GH₵ {Number(r.summary.totalAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold">100%</td>
+                    <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground" colSpan={2}>Total</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-bold">{ghs(r.summary.gross)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm">{ghs(r.summary.commission)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm">{ghs(r.summary.netGross)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm">{ghs(r.summary.wins)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm">{ghs(r.summary.reserve)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-bold">{ghs(r.summary.balance)}</td>
                   </tr>
                 </tfoot>
               </Table>
-            </div>
-          ) : (
-            <div className="text-center py-10 text-sm text-muted-foreground border rounded-xl">
-              No game sales recorded for this agent in the selected period.
-            </div>
-          )}
-
-          {/* By writer breakdown (toggle) */}
-          {r.byWriter.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2 px-1">
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  Writer Breakdown ({r.byWriter.length})
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setShowWriterBreakdown(v => !v)}>
-                  {showWriterBreakdown ? "Hide" : "Show Writer Breakdown"}
-                </Button>
-              </div>
-              {showWriterBreakdown && (
-                <div className="rounded-xl border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/40">
-                        <TableHead className="text-xs">Writer</TableHead>
-                        <TableHead className="text-xs">Games</TableHead>
-                        <TableHead className="text-right text-xs">Entries</TableHead>
-                        <TableHead className="text-right text-xs">Total Sales</TableHead>
-                        <TableHead className="text-right text-xs">% Share</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {r.byWriter.map(ws => (
-                        <TableRow key={ws.writer.id} className="hover:bg-muted/20">
-                          <TableCell>
-                            <div className="font-mono text-sm font-semibold">{ws.writer.fullCode}</div>
-                            <div className="text-xs text-muted-foreground">{ws.writer.fullName}</div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {ws.byGameType.slice(0, 3).map(g => (
-                                <span key={g.gameType} className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full text-white ${gameTypeColour(g.gameType)}`}>
-                                  {g.gameType}
-                                </span>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">{ws.ticketCount}</TableCell>
-                          <TableCell className="text-right font-mono font-semibold text-sm">
-                            GH₵ {Number(ws.totalAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge variant="outline" className="font-mono text-xs">{ws.pct.toFixed(1)}%</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Individual entries (toggle) */}
-          {r.entries.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2 px-1">
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  All Entries ({r.entries.length})
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setShowEntries(v => !v)}>
-                  {showEntries ? "Hide Entries" : "View All Entries"}
-                </Button>
-              </div>
-              {showEntries && (
-                <div className="rounded-xl border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/40">
-                        <TableHead className="text-xs">Date</TableHead>
-                        <TableHead className="text-xs">Writer</TableHead>
-                        <TableHead className="text-xs">Game</TableHead>
-                        <TableHead className="text-right text-xs">Amount</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {r.entries.map(e => (
-                        <TableRow key={e.id} className="hover:bg-muted/20">
-                          <TableCell className="text-sm">{fmtDate(e.saleDate)}</TableCell>
-                          <TableCell>
-                            <span className="font-mono text-xs font-semibold">{e.writerCode}</span>
-                            <span className="text-xs text-muted-foreground ml-1.5">{e.writerFullName}</span>
-                          </TableCell>
-                          <TableCell>
-                            <span className={`inline-flex text-[10px] font-medium px-2 py-0.5 rounded-full text-white ${gameTypeColour(e.gameType)}`}>
-                              {e.gameType}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-semibold text-sm">
-                            GH₵ {Number(e.ticketAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    <tfoot>
-                      <tr className="border-t-2 bg-muted/30">
-                        <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground" colSpan={3}>Total</td>
-                        <td className="px-4 py-2.5 text-right font-mono font-semibold">
-                          GH₵ {Number(r.summary.totalAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </Table>
-                </div>
-              )}
             </div>
           )}
         </div>

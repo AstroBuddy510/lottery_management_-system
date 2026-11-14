@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2, FileDown, CheckCircle2, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { fmtGHS } from "@/lib/utils";
+import { generateTokenReportPDF } from "@/lib/pdf-generator";
 
 /**
  * E-token report: what was generated, who holds it, where it went.
@@ -136,6 +137,16 @@ export function TokenReportView() {
           </Button>
           <Button variant="outline" className="h-9" onClick={exportCsv} disabled={!data}>
             <FileDown className="h-4 w-4 mr-1.5" /> Export CSV
+          </Button>
+          <Button
+            className="h-9 bg-[#ff6700] hover:bg-[#ff6700]/90 text-white font-semibold"
+            disabled={!data}
+            onClick={() => data && generateTokenReportPDF(
+              range?.from ?? "", range?.to ?? "",
+              data.summary, data.writerHoldings, data.floats, data.poolTransactions,
+            )}
+          >
+            <FileDown className="h-4 w-4 mr-1.5" /> Export PDF
           </Button>
         </CardContent>
       </Card>

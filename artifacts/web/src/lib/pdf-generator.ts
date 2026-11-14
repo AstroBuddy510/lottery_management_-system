@@ -510,6 +510,291 @@ export async function generateOrgReportPDF(
   doc.save(`org_performance_statement.pdf`);
 }
 
+// ─── 3a. E-TOKEN REPORT PDF ───
+/**
+ * The e-token report, which was the one report with no PDF.
+ *
+ * It had CSV, which is for a spreadsheet, not for a file somebody signs or
+ * files. The variance line leads, because it is the number the report exists
+ * to prove: minted units should equal pool plus floats plus what writers
+ * hold, and anything else is a discrepancy to chase.
+ */
+export async function generateTokenReportPDF(
+  dateFrom: string,
+  dateTo: string,
+  summary: {
+    totalMinted: string; poolBalance: string; heldByCashiers: string;
+    disbursedToWriters: string; variance: string;
+  },
+  writerHoldings: { held: string; purchased: string; spent: string },
+  floats: Array<{ cashierName: string; balance: string; totalReceived: string; totalDisbursed: string }>,
+  poolTransactions: Array<{ transactionType: string; amount: string; balanceAfter: string; createdAt: string; byName: string; notes: string | null }>,
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF() as any;
+
+  const variance = Number(summary.variance);
+  const startY = drawBrandHeader(
+    doc,
+    "E-Token Supply Report",
+    [
+      { label: "Report ID", value: `TOK-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
+    ],
+    "Reconciliation",
+    [
+      "VISION 2000 LOTTO.COM LTD",
+      `Units generated: ${fmt(summary.totalMinted)}`,
+      variance === 0 ? "Balanced - no variance" : `VARIANCE: ${fmt(summary.variance)}`,
+    ],
+    logoImg,
+  );
+
+  autoTable(doc, {
+    columns: [
+      { header: "Position", dataKey: "position" },
+      { header: "Units", dataKey: "units" },
+    ],
+    body: [
+      { position: "Generated (ever minted)", units: fmt(summary.totalMinted) },
+      { position: "In pool (unissued)", units: fmt(summary.poolBalance) },
+      { position: "Held by cashiers (floats)", units: fmt(summary.heldByCashiers) },
+      { position: "Sold to writers", units: fmt(summary.disbursedToWriters) },
+      { position: "Held by writers", units: fmt(writerHoldings.held) },
+      { position: "Staked by writers", units: fmt(writerHoldings.spent) },
+      { position: "Variance", units: fmt(summary.variance) },
+    ],
+    startY,
+    theme: "striped",
+    headStyles: { ...tableTheme.headStyles, halign: "right" },
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: { position: { halign: "left" } },
+    margin: tableTheme.margin,
+  });
+
+  let nextY = doc.lastAutoTable.finalY + 10;
+
+  if (floats.length > 0) {
+    if (nextY > 215) { doc.addPage(); nextY = 20; }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(40, 40, 40);
+    doc.text("Cashier Floats", 14, nextY);
+    autoTable(doc, {
+      columns: [
+        { header: "Cashier", dataKey: "cashier" },
+        { header: "Received", dataKey: "received" },
+        { header: "Disbursed", dataKey: "disbursed" },
+        { header: "Balance", dataKey: "balance" },
+      ],
+      body: floats.map((f) => ({
+        cashier: f.cashierName,
+        received: fmt(f.totalReceived),
+        disbursed: fmt(f.totalDisbursed),
+        balance: fmt(f.balance),
+      })),
+      startY: nextY + 4,
+      theme: "striped",
+      headStyles: { ...tableTheme.headStyles, halign: "right" },
+      bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+      columnStyles: { cashier: { halign: "left" } },
+      margin: tableTheme.margin,
+    });
+    nextY = doc.lastAutoTable.finalY + 10;
+  }
+
+  if (poolTransactions.length > 0) {
+    if (nextY > 200) { doc.addPage(); nextY = 20; }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(40, 40, 40);
+    doc.text("Pool Movements", 14, nextY);
+    autoTable(doc, {
+      columns: [
+        { header: "Date", dataKey: "date" },
+        { header: "Type", dataKey: "type" },
+        { header: "By", dataKey: "by" },
+        { header: "Amount", dataKey: "amount" },
+        { header: "Balance After", dataKey: "after" },
+      ],
+      // Capped: a year of movements is not a document anybody reads, and the
+      // CSV export is still there for the full history.
+      body: poolTransactions.slice(0, 60).map((t) => ({
+        date: new Date(t.createdAt).toLocaleDateString("en-GB"),
+        type: t.transactionType,
+        by: t.byName,
+        amount: fmt(t.amount),
+        after: fmt(t.balanceAfter),
+      })),
+      startY: nextY + 4,
+      theme: "striped",
+      headStyles: { ...tableTheme.headStyles, halign: "right" },
+      bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+      columnStyles: { date: { halign: "left" }, type: { halign: "left" }, by: { halign: "left" } },
+      margin: tableTheme.margin,
+    });
+    nextY = doc.lastAutoTable.finalY + 8;
+    if (poolTransactions.length > 60) {
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      doc.setTextColor(120, 120, 120);
+      doc.text(`Showing the 60 most recent of ${poolTransactions.length} movements. Export CSV for the full list.`, 14, nextY);
+    }
+  }
+
+  drawSignatureBlock(doc, "Prepared By", "Director Signatory");
+  doc.save("etoken_supply_report.pdf");
+}
+
+// ─── 4a. GAME SALES BY AGENCY PDF ───
+/**
+ * One game's sales over a period, by agency.
+ *
+ * Mirrors what the screen shows, in the order it shows it: the game and the
+ * draws counted, the period totals, then the agency league table. Writers go
+ * in as a second table only when the report was narrowed to one agency -
+ * every writer of every agency would be pages of detail nobody asked for.
+ */
+export async function generateGameSalesByAgencyPDF(
+  gameName: string,
+  eventCount: number,
+  dateFrom: string,
+  dateTo: string,
+  summary: {
+    gross: string; commission: string; netGross: string;
+    wins: string; reserve: string; balance: string;
+    agencyCount: number; writerCount: number;
+  },
+  byAgent: Array<{
+    agent: { fullCode: string; agencyName?: string | null; agentName?: string };
+    gross: string; commission: string; netGross: string;
+    wins: string; reserve: string; balance: string;
+    pct: number; writerCount: number; eventCount: number;
+    writers?: Array<{
+      writer: { fullCode: string; fullName: string };
+      gross: string; commission: string; netGross: string;
+      wins: string; reserve: string; balance: string;
+    }>;
+  }>,
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF() as any;
+
+  const startY = drawBrandHeader(
+    doc,
+    "Game Sales Report — by Agency",
+    [
+      { label: "Report ID", value: `GSA-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
+    ],
+    "Game",
+    [
+      gameName,
+      `${eventCount} event${eventCount === 1 ? "" : "s"} in period`,
+      `${summary.agencyCount} agenc${summary.agencyCount === 1 ? "y" : "ies"} · ${summary.writerCount} writer${summary.writerCount === 1 ? "" : "s"}`,
+    ],
+    logoImg,
+  );
+
+  autoTable(doc, {
+    columns: [
+      { header: "Agency", dataKey: "agency" },
+      { header: "Share", dataKey: "pct" },
+      { header: "Gross Sales", dataKey: "gross" },
+      { header: "Commission", dataKey: "commission" },
+      { header: "Net Gross", dataKey: "netGross" },
+      { header: "Wins", dataKey: "wins" },
+      { header: "Reserve", dataKey: "reserve" },
+      { header: "Balance", dataKey: "balance" },
+    ],
+    body: byAgent.map((a) => ({
+      agency: `${a.agent.fullCode} — ${a.agent.agencyName ?? a.agent.agentName ?? "—"}`,
+      pct: `${a.pct.toFixed(1)}%`,
+      gross: fmt(a.gross),
+      commission: fmt(a.commission),
+      netGross: fmt(a.netGross),
+      wins: fmt(a.wins),
+      reserve: fmt(a.reserve),
+      balance: fmt(a.balance),
+    })),
+    startY,
+    theme: "striped",
+    headStyles: { ...tableTheme.headStyles, halign: "right" },
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: { agency: { halign: "left" } },
+    margin: tableTheme.margin,
+  });
+
+  let nextY = doc.lastAutoTable.finalY + 10;
+
+  // Writers, only when the report is already narrowed to one agency.
+  if (byAgent.length === 1 && byAgent[0].writers?.length) {
+    if (nextY > 215) { doc.addPage(); nextY = 20; }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(40, 40, 40);
+    doc.text(`Writers — ${byAgent[0].agent.fullCode}`, 14, nextY);
+    autoTable(doc, {
+      columns: [
+        { header: "Writer", dataKey: "writer" },
+        { header: "Gross Sales", dataKey: "gross" },
+        { header: "Commission", dataKey: "commission" },
+        { header: "Net Gross", dataKey: "netGross" },
+        { header: "Wins", dataKey: "wins" },
+        { header: "Reserve", dataKey: "reserve" },
+        { header: "Balance", dataKey: "balance" },
+      ],
+      body: byAgent[0].writers.map((w) => ({
+        writer: `${w.writer.fullCode} — ${w.writer.fullName}`,
+        gross: fmt(w.gross),
+        commission: fmt(w.commission),
+        netGross: fmt(w.netGross),
+        wins: fmt(w.wins),
+        reserve: fmt(w.reserve),
+        balance: fmt(w.balance),
+      })),
+      startY: nextY + 4,
+      theme: "striped",
+      headStyles: { ...tableTheme.headStyles, halign: "right" },
+      bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+      columnStyles: { writer: { halign: "left" } },
+      margin: tableTheme.margin,
+    });
+    nextY = doc.lastAutoTable.finalY + 10;
+  }
+
+  if (nextY > 230) { doc.addPage(); nextY = 20; }
+
+  const pageWidth = doc.internal.pageSize.width;
+  doc.setFillColor(241, 245, 249);
+  doc.rect(pageWidth - 95, nextY, 80, 44, "F");
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text("Total Gross Sales:", pageWidth - 90, nextY + 7);
+  doc.text("Total Commission:", pageWidth - 90, nextY + 14);
+  doc.text("Total Wins Paid:", pageWidth - 90, nextY + 21);
+  doc.text("Total Reserve:", pageWidth - 90, nextY + 28);
+  doc.text("Net Balance:", pageWidth - 90, nextY + 38);
+
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(40, 40, 40);
+  doc.text(fmt(summary.gross), pageWidth - 20, nextY + 7, { align: "right" });
+  doc.text(fmt(summary.commission), pageWidth - 20, nextY + 14, { align: "right" });
+  doc.text(fmt(summary.wins), pageWidth - 20, nextY + 21, { align: "right" });
+  doc.text(fmt(summary.reserve), pageWidth - 20, nextY + 28, { align: "right" });
+
+  const bal = Number(summary.balance);
+  doc.setFontSize(10);
+  doc.setTextColor(bal < 0 ? 220 : 16, bal < 0 ? 38 : 124, bal < 0 ? 38 : 65);
+  doc.text(fmt(summary.balance), pageWidth - 20, nextY + 39, { align: "right" });
+
+  drawSignatureBlock(doc, "Prepared By", "Director Signatory");
+  doc.save(`game_sales_${gameName.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}.pdf`);
+}
+
 // ─── 4. GAME SALES REPORT PDF ───
 export async function generateGameSalesReportPDF(
   agentName: string,

@@ -13,7 +13,7 @@ import {
   gamesTable,
   systemSettingsTable,
 } from "@workspace/db";
-import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, desc, asc, inArray, sql } from "drizzle-orm";
 import { GetWriterReportParams, GetAgentReportParams } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
@@ -244,6 +244,222 @@ router.get(
     res.json({
       totals: sumRows(allCalcRows),
       agents: agentSummaries,
+    });
+  },
+);
+
+// ── GET /reports/game-names ───────────────────────────────────────────────────
+/**
+ * The games a report can be run for, by name rather than by draw.
+ *
+ * A game runs many times - "Monday Special" has an event a week - and the
+ * question the report answers is how a game performs over a period, not how
+ * one draw did. So the selector offers names, and the period decides which of
+ * that name's events are counted.
+ */
+router.get(
+  "/reports/game-names",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (_req, res) => {
+    const rows = await db
+      .select({
+        name: gamesTable.name,
+        eventCount: sql<number>`count(*)::int`,
+        firstEventAt: sql<Date>`min(${gamesTable.goLiveAt})`,
+        lastEventAt: sql<Date>`max(${gamesTable.goLiveAt})`,
+      })
+      .from(gamesTable)
+      .groupBy(gamesTable.name)
+      .orderBy(asc(gamesTable.name));
+    res.json(rows);
+  },
+);
+
+// ── GET /reports/game-sales ───────────────────────────────────────────────────
+/**
+ * One game's sales over a period, broken down by agency.
+ *
+ * The tab was called Game Sales and had no way to select a game: it asked for
+ * an agent and answered "how did this agent do", which is the Agent report.
+ * This answers the question the name promises - for this game, over these
+ * dates, which agencies sold it and what did each of them return.
+ *
+ * Figures come from daily_calculations, which is the locked per-writer,
+ * per-game result the calculation run produces. Reading sales_logs instead
+ * would have given a different gross from the one the agency is actually
+ * settled on, and two screens in the same product disagreeing about money is
+ * worse than one screen missing.
+ */
+router.get(
+  "/reports/game-sales",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (req, res) => {
+    const gameName = typeof req.query["gameName"] === "string" ? req.query["gameName"].trim() : "";
+    const { dateFrom, dateTo } = req.query as Record<string, string>;
+    const agentFilter = typeof req.query["agentId"] === "string" ? req.query["agentId"] : "";
+
+    if (!gameName) {
+      res.status(400).json({ error: "A game must be selected" });
+      return;
+    }
+
+    // Which draws of this game fall in the period. goLiveAt is when the game
+    // opened, which is the date an operator means by "that week's draw".
+    const gameConditions = [eq(gamesTable.name, gameName)];
+    if (dateFrom) gameConditions.push(gte(gamesTable.goLiveAt, new Date(dateFrom)));
+    if (dateTo) {
+      // The To date is inclusive of its whole day, not midnight at its start.
+      const end = new Date(dateTo);
+      end.setHours(23, 59, 59, 999);
+      gameConditions.push(lte(gamesTable.goLiveAt, end));
+    }
+
+    const events = await db
+      .select({
+        id: gamesTable.id,
+        eventNumber: gamesTable.eventNumber,
+        name: gamesTable.name,
+        goLiveAt: gamesTable.goLiveAt,
+        closeAt: gamesTable.closeAt,
+        status: gamesTable.status,
+      })
+      .from(gamesTable)
+      .where(and(...gameConditions))
+      .orderBy(desc(gamesTable.goLiveAt));
+
+    const empty = {
+      game: { name: gameName, eventCount: 0, events: [] as typeof events },
+      summary: {
+        gross: "0.00", commission: "0.00", netGross: "0.00",
+        wins: "0.00", reserve: "0.00", balance: "0.00",
+        agencyCount: 0, writerCount: 0,
+      },
+      byAgent: [] as unknown[],
+    };
+
+    if (events.length === 0) {
+      res.json(empty);
+      return;
+    }
+
+    const eventIds = events.map((e) => e.id);
+
+    const calcConditions = [inArray(dailyCalculationsTable.gameId, eventIds)];
+    if (agentFilter) calcConditions.push(eq(agentsTable.id, agentFilter));
+
+    const rows = await db
+      .select({
+        agentId: agentsTable.id,
+        agentFullCode: agentsTable.fullCode,
+        agencyName: agentsTable.agencyName,
+        agentName: usersTable.fullName,
+        writerId: writersTable.id,
+        writerFullCode: writersTable.fullCode,
+        writerName: writersTable.fullName,
+        gameId: dailyCalculationsTable.gameId,
+        grossSales: dailyCalculationsTable.grossSales,
+        commissionAmount: dailyCalculationsTable.commissionAmount,
+        netGross: dailyCalculationsTable.netGross,
+        winsAmount: dailyCalculationsTable.winsAmount,
+        reserveAmount: dailyCalculationsTable.reserveAmount,
+        writerBalance: dailyCalculationsTable.writerBalance,
+      })
+      .from(dailyCalculationsTable)
+      .innerJoin(writersTable, eq(writersTable.id, dailyCalculationsTable.writerId))
+      .innerJoin(agentsTable, eq(agentsTable.id, writersTable.agentId))
+      .innerJoin(usersTable, eq(usersTable.id, agentsTable.userId))
+      .where(and(...calcConditions));
+
+    type Money = {
+      gross: number; commission: number; netGross: number;
+      wins: number; reserve: number; balance: number;
+    };
+    const zero = (): Money => ({ gross: 0, commission: 0, netGross: 0, wins: 0, reserve: 0, balance: 0 });
+    const add = (m: Money, r: typeof rows[number]) => {
+      m.gross += parseFloat(r.grossSales ?? "0");
+      m.commission += parseFloat(r.commissionAmount ?? "0");
+      m.netGross += parseFloat(r.netGross ?? "0");
+      m.wins += parseFloat(r.winsAmount ?? "0");
+      m.reserve += parseFloat(r.reserveAmount ?? "0");
+      m.balance += parseFloat(r.writerBalance ?? "0");
+    };
+
+    const agencies = new Map<string, {
+      agentId: string; fullCode: string; agencyName: string | null; agentName: string;
+      totals: Money;
+      writers: Map<string, { writerId: string; fullCode: string; fullName: string; totals: Money; events: Set<string> }>;
+      events: Set<string>;
+    }>();
+    const totals = zero();
+    const allWriters = new Set<string>();
+
+    for (const r of rows) {
+      add(totals, r);
+      allWriters.add(r.writerId);
+
+      let a = agencies.get(r.agentId);
+      if (!a) {
+        a = {
+          agentId: r.agentId, fullCode: r.agentFullCode, agencyName: r.agencyName,
+          agentName: r.agentName, totals: zero(), writers: new Map(), events: new Set(),
+        };
+        agencies.set(r.agentId, a);
+      }
+      add(a.totals, r);
+      if (r.gameId) a.events.add(r.gameId);
+
+      let w = a.writers.get(r.writerId);
+      if (!w) {
+        w = { writerId: r.writerId, fullCode: r.writerFullCode, fullName: r.writerName, totals: zero(), events: new Set() };
+        a.writers.set(r.writerId, w);
+      }
+      add(w.totals, r);
+      if (r.gameId) w.events.add(r.gameId);
+    }
+
+    const money = (m: Money) => ({
+      gross: m.gross.toFixed(2),
+      commission: m.commission.toFixed(2),
+      netGross: m.netGross.toFixed(2),
+      wins: m.wins.toFixed(2),
+      reserve: m.reserve.toFixed(2),
+      balance: m.balance.toFixed(2),
+    });
+
+    const byAgent = [...agencies.values()]
+      .sort((a, b) => b.totals.gross - a.totals.gross)
+      .map((a) => ({
+        agent: {
+          id: a.agentId,
+          fullCode: a.fullCode,
+          agencyName: a.agencyName,
+          agentName: a.agentName,
+        },
+        ...money(a.totals),
+        // Share of the game's gross, so a reader can see concentration
+        // without doing the division themselves.
+        pct: totals.gross > 0 ? Math.round((a.totals.gross / totals.gross) * 1000) / 10 : 0,
+        writerCount: a.writers.size,
+        eventCount: a.events.size,
+        writers: [...a.writers.values()]
+          .sort((x, y) => y.totals.gross - x.totals.gross)
+          .map((w) => ({
+            writer: { id: w.writerId, fullCode: w.fullCode, fullName: w.fullName },
+            ...money(w.totals),
+            eventCount: w.events.size,
+          })),
+      }));
+
+    res.json({
+      game: { name: gameName, eventCount: events.length, events },
+      summary: {
+        ...money(totals),
+        agencyCount: agencies.size,
+        writerCount: allWriters.size,
+      },
+      byAgent,
     });
   },
 );
