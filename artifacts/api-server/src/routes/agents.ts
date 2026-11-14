@@ -42,6 +42,39 @@ function parseCoords(
   return { lat: latNum.toFixed(6), lng: lngNum.toFixed(6) };
 }
 
+/**
+ * Fold a writer's location and coordinates into an update set.
+ *
+ * This lived only inside PATCH /agents/:agentId/writers/:id. The other route -
+ * PATCH /writers/:id, which is the one every writer edit form in the web app
+ * actually calls - accepted location, lat and lng in its body schema and then
+ * wrote neither, so a pin set in the UI was answered with 200 OK and silently
+ * dropped. That is why writers ended up with an address and no coordinates and
+ * nothing the operator did could fix it.
+ *
+ * Returns an error message when the input is unusable, or null on success,
+ * having mutated `updates`. Shared rather than copied, so the next change
+ * cannot fix one route and leave the other behind.
+ */
+function applyLocationUpdates(
+  data: { location?: string | undefined; lat?: string | undefined; lng?: string | undefined },
+  updates: Record<string, unknown>,
+): string | null {
+  if (data.location !== undefined) {
+    const trimmed = data.location.trim();
+    // Empty clears it; one or two characters is a typo, not a place.
+    if (trimmed.length > 0 && trimmed.length < 3) return "Location is too short";
+    updates.location = trimmed || null;
+  }
+  if (data.lat !== undefined || data.lng !== undefined) {
+    const coords = parseCoords(data.lat, data.lng);
+    if (coords === "invalid") return "Latitude and longitude are out of range";
+    updates.lat = coords ? coords.lat : null;
+    updates.lng = coords ? coords.lng : null;
+  }
+  return null;
+}
+
 function formatAgent(r: {
   id: string; userId: string; agentCode: string; fullCode: string;
   isActive: boolean; agencyName: string | null; location: string | null;
@@ -403,22 +436,10 @@ router.patch(
     if (bodyResult.data.isActive !== undefined) updates.isActive = bodyResult.data.isActive;
     // Lets the writers who predate the location field be filled in without
     // forcing it on someone who only came here to toggle isActive.
-    if (bodyResult.data.location !== undefined) {
-      const trimmed = bodyResult.data.location.trim();
-      if (trimmed.length > 0 && trimmed.length < 3) {
-        res.status(400).json({ error: "Location is too short" });
-        return;
-      }
-      updates.location = trimmed || null;
-    }
-    if (bodyResult.data.lat !== undefined || bodyResult.data.lng !== undefined) {
-      const coords = parseCoords(bodyResult.data.lat, bodyResult.data.lng);
-      if (coords === "invalid") {
-        res.status(400).json({ error: "Latitude and longitude are out of range" });
-        return;
-      }
-      updates.lat = coords ? coords.lat : null;
-      updates.lng = coords ? coords.lng : null;
+    const nestedLocationError = applyLocationUpdates(bodyResult.data, updates);
+    if (nestedLocationError) {
+      res.status(400).json({ error: nestedLocationError });
+      return;
     }
     const [writer] = await db
       .update(writersTable)
@@ -471,6 +492,12 @@ router.patch(
     const updates: Record<string, unknown> = {};
     if (bodyResult.data.fullName) updates.fullName = bodyResult.data.fullName;
     if (bodyResult.data.isActive !== undefined) updates.isActive = bodyResult.data.isActive;
+    // This is where a pin set from any of the writer edit forms arrives.
+    const locationError = applyLocationUpdates(bodyResult.data, updates);
+    if (locationError) {
+      res.status(400).json({ error: locationError });
+      return;
+    }
 
     const [writer] = await db
       .update(writersTable)

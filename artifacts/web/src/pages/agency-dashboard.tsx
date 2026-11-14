@@ -920,13 +920,18 @@ function MapView({
 /**
  * One assigned terminal, pinned where its writer works.
  *
- * Labelled with the writer's code rather than the serial number: the code is
- * what a supervisor knows a person by, and it is short enough to read at a
- * glance on a crowded map. The serial is in the tooltip for whoever needs it.
+ * Four facts on the pin itself - writer code, writer name, serial number and
+ * the location label - because the question asked of this map is "who is that
+ * and which device do they have", and a tooltip answers it only for whoever
+ * thinks to hover. The code leads: it is what a supervisor knows a person by.
+ *
+ * The cost is width, so the name and the location truncate rather than push
+ * the bubble across its neighbours, and the full text stays in the title for
+ * the cases where a label is cut.
  *
  * Green means the writer has sold within the active window; red means the
  * device is issued and silent. Colour is never the only signal - the dot
- * carries a shape too and the title spells the state out - because a red/green
+ * carries a shape too and the label spells the state out - because a red/green
  * pair is the most common form of colour blindness.
  */
 function TerminalPin({ terminal, highlighted = false }: { terminal: TerminalWithStatus; highlighted?: boolean }) {
@@ -938,18 +943,31 @@ function TerminalPin({ terminal, highlighted = false }: { terminal: TerminalWith
       style={{ transform: "translate(-50%, -100%)", display: "inline-flex", flexDirection: "column", alignItems: "center" }}
     >
       <div
-        className={`flex items-center gap-1.5 bg-white rounded-xl shadow-lg border px-2 py-1 whitespace-nowrap ${highlighted ? "ring-4 ring-sky-400/60 scale-110" : ""}`}
-        style={{ borderColor: ring, borderWidth: 2 }}
+        className={`bg-white rounded-xl shadow-lg border px-2 py-1 ${highlighted ? "ring-4 ring-sky-400/60 scale-110" : ""}`}
+        style={{ borderColor: ring, borderWidth: 2, maxWidth: 170 }}
       >
-        <span
-          className="inline-block rounded-full flex-shrink-0"
-          style={{ width: 8, height: 8, background: ring }}
-          aria-hidden="true"
-        />
-        <span className="font-mono text-[11px] font-bold text-slate-800">{terminal.writerCode}</span>
-        <span className="text-[9px] font-semibold uppercase" style={{ color: ring }}>
-          {active ? "Active" : "Idle"}
-        </span>
+        <div className="flex items-center gap-1.5 whitespace-nowrap">
+          <span
+            className="inline-block rounded-full flex-shrink-0"
+            style={{ width: 8, height: 8, background: ring }}
+            aria-hidden="true"
+          />
+          <span className="font-mono text-[11px] font-bold text-slate-800">{terminal.writerCode}</span>
+          <span className="text-[9px] font-semibold uppercase ml-auto" style={{ color: ring }}>
+            {active ? "Active" : "Idle"}
+          </span>
+        </div>
+        <div className="text-[10px] font-semibold text-slate-700 truncate leading-tight">
+          {terminal.writerName}
+        </div>
+        <div className="font-mono text-[9px] text-slate-500 truncate leading-tight">
+          {terminal.serialNumber}
+        </div>
+        {terminal.writerLocation && (
+          <div className="text-[9px] text-slate-500 truncate leading-tight">
+            {terminal.writerLocation}
+          </div>
+        )}
       </div>
       {/* Stem, so the bubble clearly points at a place rather than floating. */}
       <div style={{ width: 2, height: 8, background: ring }} aria-hidden="true" />
@@ -977,10 +995,25 @@ function TerminalMapView({ focusId }: { focusId?: string }) {
     () => terminals.filter(t => t.writerId && t.writerLat && t.writerLng),
     [terminals],
   );
-  const assignedNoCoords = useMemo(
-    () => terminals.filter(t => t.writerId && (!t.writerLat || !t.writerLng)),
+  /*
+   * Two different problems, which this used to report as one.
+   *
+   * A pin needs coordinates, so the filter above is on lat/lng - but the
+   * message underneath said "no location set", which is false and misleading
+   * for a writer who has "Manet Junction" saved and simply never got a pin.
+   * The operator reads that, opens the writer, sees a location, and concludes
+   * the map is broken. They are two separate jobs: one writer needs a location
+   * typed, the other needs a pin dropped on an address already recorded.
+   */
+  const locationNoPin = useMemo(
+    () => terminals.filter(t => t.writerId && (!t.writerLat || !t.writerLng) && !!t.writerLocation?.trim()),
     [terminals],
   );
+  const noLocationAtAll = useMemo(
+    () => terminals.filter(t => t.writerId && (!t.writerLat || !t.writerLng) && !t.writerLocation?.trim()),
+    [terminals],
+  );
+  const unmappedAssigned = locationNoPin.length + noLocationAtAll.length;
   const inStock = useMemo(() => terminals.filter(t => !t.writerId), [terminals]);
 
   const boundsKey = mapped.map(t => `${t.id}:${t.writerLat},${t.writerLng}`).join("|");
@@ -1031,20 +1064,31 @@ function TerminalMapView({ focusId }: { focusId?: string }) {
         <div className={`rounded-xl border px-4 py-2.5 text-xs ${focused ? "border-sky-200 bg-sky-50 text-sky-800" : "border-amber-200 bg-amber-50/60 text-amber-800"}`}>
           {focused
             ? <>Showing <strong>{focused.serialNumber}</strong> with {focused.writerCode} — {focused.writerName}{focused.writerLocation ? ` at ${focused.writerLocation}` : ""}.</>
-            : <>That terminal could not be shown on the map — it is either unassigned or its writer has no location set.</>}
+            : <>That terminal could not be shown on the map — it is either unassigned, or its writer has no map pin yet. A writer with an address but no pin can be pinned from Edit Writer on the agency's profile.</>}
         </div>
       )}
 
-      {(assignedNoCoords.length > 0 || inStock.length > 0) && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-800">
-          Not on the map:{" "}
-          {[
-            assignedNoCoords.length > 0
-              ? `${assignedNoCoords.length} assigned terminal${assignedNoCoords.length !== 1 ? "s" : ""} whose writer has no location set (${assignedNoCoords.map(t => t.writerCode).filter(Boolean).join(", ")})`
-              : null,
-            inStock.length > 0 ? `${inStock.length} in stock` : null,
-          ].filter(Boolean).join("; ")}
-          .
+      {(unmappedAssigned > 0 || inStock.length > 0) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-800 space-y-1">
+          <p>
+            Not on the map:{" "}
+            {[
+              locationNoPin.length > 0
+                ? `${locationNoPin.length} whose writer has an address but no map pin (${locationNoPin.map(t => t.writerCode).filter(Boolean).join(", ")})`
+                : null,
+              noLocationAtAll.length > 0
+                ? `${noLocationAtAll.length} whose writer has no location recorded (${noLocationAtAll.map(t => t.writerCode).filter(Boolean).join(", ")})`
+                : null,
+              inStock.length > 0 ? `${inStock.length} in stock` : null,
+            ].filter(Boolean).join("; ")}
+            .
+          </p>
+          {locationNoPin.length > 0 && (
+            <p className="text-[11px]">
+              Open the agency profile, use Edit Writer and press <strong>Set pin</strong> — search
+              the saved address or click the map — and the terminal appears here.
+            </p>
+          )}
         </div>
       )}
 
@@ -1076,9 +1120,10 @@ function TerminalMapView({ focusId }: { focusId?: string }) {
             <div className="max-w-md space-y-2">
               <p className="text-sm font-semibold text-slate-700">No terminals to map yet</p>
               <p className="text-xs text-muted-foreground">
-                A terminal appears here once it is assigned to a writer who has a location set.
+                A terminal appears here once it is assigned to a writer who has a map pin.
                 {inStock.length > 0 && ` ${inStock.length} terminal${inStock.length !== 1 ? "s are" : " is"} in stock, unassigned.`}
-                {assignedNoCoords.length > 0 && ` ${assignedNoCoords.length} assigned terminal${assignedNoCoords.length !== 1 ? "s need" : " needs"} a writer location.`}
+                {locationNoPin.length > 0 && ` ${locationNoPin.length} assigned terminal${locationNoPin.length !== 1 ? "s have writers with an address but no pin" : " has a writer with an address but no pin"} — set it from Edit Writer.`}
+                {noLocationAtAll.length > 0 && ` ${noLocationAtAll.length} assigned terminal${noLocationAtAll.length !== 1 ? "s need" : " needs"} a writer location.`}
               </p>
             </div>
           </div>

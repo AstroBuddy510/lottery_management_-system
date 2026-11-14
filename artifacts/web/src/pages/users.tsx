@@ -121,7 +121,7 @@ function WritersSection({ agentId }: { agentId: string }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
   const [form, setForm] = useState({ writerCode: "", fullName: "", location: "", lat: "", lng: "" });
-  const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
+  const [editForm, setEditForm] = useState({ fullName: "", isActive: true, location: "", lat: "", lng: "" });
 
   // Live per-writer figures for the selected game, polled on the shared cadence.
   const [pinWriter, setPinWriter] = useState<IssuePinTarget | null>(null);
@@ -174,7 +174,18 @@ function WritersSection({ agentId }: { agentId: string }) {
     e.preventDefault();
     if (!editWriter) return;
     try {
-      await updateMutation.mutateAsync({ id: editWriter.id, data: { fullName: editForm.fullName, isActive: editForm.isActive } });
+      await updateMutation.mutateAsync({
+        id: editWriter.id,
+        data: {
+          fullName: editForm.fullName,
+          isActive: editForm.isActive,
+          // Sent on every save, so a writer carrying an address but no pin can
+          // be completed from here rather than only at creation.
+          location: editForm.location.trim(),
+          lat: editForm.lat,
+          lng: editForm.lng,
+        },
+      });
       toast({ title: "Writer updated" });
       setEditWriter(null);
       invalidate();
@@ -278,7 +289,7 @@ function WritersSection({ agentId }: { agentId: string }) {
                 <td className="py-2 text-right text-xs tabular-nums">{fmtGHS(stats[w.id]?.totalStakes ?? 0)}</td>
                 <td className="py-2 text-right text-xs tabular-nums">{fmtGHS(stats[w.id]?.totalWins ?? 0)}</td>
                 <td className="py-2 text-right pr-2">
-                  <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold rounded-md text-primary hover:bg-primary/10 transition-colors" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}>Edit</Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold rounded-md text-primary hover:bg-primary/10 transition-colors" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}>Edit</Button>
                   {stats[w.id]?.hasPin && (
                     <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2 font-bold rounded-md text-muted-foreground hover:bg-muted transition-colors" onClick={() => setPinWriter({
                       id: w.id,
@@ -329,6 +340,12 @@ function WritersSection({ agentId }: { agentId: string }) {
               <Label className="text-xs">Full Name</Label>
               <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
             </div>
+            <WriterLocationField
+              id="users-edit-writer-location"
+              required={false}
+              value={{ location: editForm.location, lat: editForm.lat, lng: editForm.lng }}
+              onChange={v => setEditForm(f => ({ ...f, ...v }))}
+            />
             <div className="flex items-center gap-3">
               <Switch checked={editForm.isActive} onCheckedChange={v => setEditForm(f => ({ ...f, isActive: v }))} />
               <Label className="text-sm">{editForm.isActive ? "Active" : "Inactive"}</Label>

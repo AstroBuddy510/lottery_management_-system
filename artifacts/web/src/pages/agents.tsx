@@ -29,7 +29,7 @@ function WritersSection({ agentId }: { agentId: string }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
   const [form, setForm] = useState({ writerCode: "", fullName: "", location: "", lat: "", lng: "" });
-  const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
+  const [editForm, setEditForm] = useState({ fullName: "", isActive: true, location: "", lat: "", lng: "" });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWritersQueryKey(agentId) });
 
@@ -57,7 +57,19 @@ function WritersSection({ agentId }: { agentId: string }) {
     e.preventDefault();
     if (!editWriter) return;
     try {
-      await updateMutation.mutateAsync({ id: editWriter.id, data: { fullName: editForm.fullName, isActive: editForm.isActive } });
+      await updateMutation.mutateAsync({
+        id: editWriter.id,
+        data: {
+          fullName: editForm.fullName,
+          isActive: editForm.isActive,
+          // Sent whether or not they changed, so a writer who predates the
+          // location field - or who has an address but no pin - can be
+          // completed here instead of being recreated.
+          location: editForm.location.trim(),
+          lat: editForm.lat,
+          lng: editForm.lng,
+        },
+      });
       toast({ title: "Writer updated" });
       setEditWriter(null);
       invalidate();
@@ -93,7 +105,7 @@ function WritersSection({ agentId }: { agentId: string }) {
                 <td className="py-1 text-xs">{w.fullName}</td>
                 <td className="py-1"><Badge variant={w.isActive ? "default" : "secondary"} className="text-xs h-4 px-1">{w.isActive ? "Active" : "Inactive"}</Badge></td>
                 <td className="py-1 text-right">
-                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}>Edit</Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}>Edit</Button>
                 </td>
               </tr>
             ))}
@@ -133,6 +145,12 @@ function WritersSection({ agentId }: { agentId: string }) {
               <Label className="text-xs">Full Name</Label>
               <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
             </div>
+            <WriterLocationField
+              id="agents-edit-writer-location"
+              required={false}
+              value={{ location: editForm.location, lat: editForm.lat, lng: editForm.lng }}
+              onChange={v => setEditForm(f => ({ ...f, ...v }))}
+            />
             <div className="flex items-center gap-3">
               <Switch checked={editForm.isActive} onCheckedChange={v => setEditForm(f => ({ ...f, isActive: v }))} />
               <Label className="text-sm">{editForm.isActive ? "Active" : "Inactive"}</Label>

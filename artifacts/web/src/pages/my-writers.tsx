@@ -64,7 +64,7 @@ export function MyWriters() {
   const [pinWriter, setPinWriter] = useState<IssuePinTarget | null>(null);
   const [createForm, setCreateForm] = useState({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid", location: "", lat: "", lng: "" });
   const [issued, setIssued] = useState<{ name: string; fullCode: string; pin: string } | null>(null);
-  const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
+  const [editForm, setEditForm] = useState({ fullName: "", isActive: true, location: "", lat: "", lng: "" });
 
   const invalidate = () => agent?.id && qc.invalidateQueries({ queryKey: getListWritersQueryKey(agent.id, {}) });
 
@@ -102,7 +102,15 @@ export function MyWriters() {
     try {
       await updateMutation.mutateAsync({
         id: editWriter.id,
-        data: { fullName: editForm.fullName.trim() || undefined, isActive: editForm.isActive },
+        data: {
+          fullName: editForm.fullName.trim() || undefined,
+          isActive: editForm.isActive,
+          // An agent can pin their own writers from here. Sent on every save so
+          // the ones added before the field existed can be completed in place.
+          location: editForm.location.trim(),
+          lat: editForm.lat,
+          lng: editForm.lng,
+        },
       });
       toast.success("Writer updated");
       setEditWriter(null);
@@ -213,7 +221,7 @@ export function MyWriters() {
                     </svg>
                   </button>
                   <button
-                    onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive }); }}
+                    onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}
                     className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
                   >
                     <EditIcon />
@@ -338,6 +346,12 @@ export function MyWriters() {
                 autoComplete="name"
               />
             </div>
+            <WriterLocationField
+              id="my-writers-edit-location"
+              required={false}
+              value={{ location: editForm.location, lat: editForm.lat, lng: editForm.lng }}
+              onChange={v => setEditForm(f => ({ ...f, ...v }))}
+            />
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Status</Label>
               <div className="flex gap-2">
