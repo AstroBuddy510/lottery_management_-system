@@ -500,8 +500,16 @@ export function Inventory() {
     return null;
   };
 
+  /*
+   * p-6 space-y-6 - the same root every other admin page uses.
+   *
+   * The max-w-[1600px] mx-auto that used to be here centred the content, so on
+   * a 1920px screen this one page had 72px side gutters where every other page
+   * had 24px. Below about 1600px the cap never bit, which is why the
+   * inconsistency only appeared on the wide monitors it was meant to help.
+   */
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-border/80 bg-card/60 backdrop-blur-md p-6 rounded-3xl shadow-sm">
         <div className="flex items-center gap-4">
