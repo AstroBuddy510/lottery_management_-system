@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { WriterLocationField, locationPayload, EMPTY_LOCATION } from "@/components/writer-location-field";
 
 interface Props {
   agentId: string;
@@ -21,33 +22,6 @@ interface Props {
 type CreateForm = { writerCode: string; fullName: string; location: string; lat: string; lng: string };
 type EditForm = { fullName: string; isActive: boolean; location: string; lat: string; lng: string };
 
-/**
- * Turn a typed place into coordinates.
- *
- * Same service and the same Ghana scoping the agency location field already
- * uses, and the only external host connect-src permits. Failure is deliberately
- * quiet: the text is what was asked for and is saved either way, the
- * coordinates are a bonus that puts the writer's terminal on the map. A writer
- * whose village does not geocode should still be registrable.
- */
-async function geocode(query: string): Promise<{ lat: string; lng: string } | null> {
-  const q = query.trim();
-  if (q.length < 3) return null;
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=gh`,
-      { headers: { "Accept-Language": "en" } },
-    );
-    if (!res.ok) return null;
-    const results: { lat: string; lon: string }[] = await res.json();
-    if (!results.length) return null;
-    const hit = results[0];
-    if (!hit) return null;
-    return { lat: parseFloat(hit.lat).toFixed(6), lng: parseFloat(hit.lon).toFixed(6) };
-  } catch {
-    return null;
-  }
-}
 
 export function WriterManager({ agentId, agentFullCode, readOnly = false }: Props) {
   const qc = useQueryClient();
@@ -65,22 +39,6 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
   const [createForm, setCreateForm] = useState<CreateForm>({ writerCode: "", fullName: "", location: "", lat: "", lng: "" });
   const [editForm, setEditForm] = useState<EditForm>({ fullName: "", isActive: true, location: "", lat: "", lng: "" });
-  const [locating, setLocating] = useState(false);
-
-  /** Resolve a typed place to coordinates, for whichever form is open. */
-  const resolveLocation = async (
-    value: string,
-    set: (fn: (f: any) => any) => void,
-  ) => {
-    if (value.trim().length < 3) {
-      set(f => ({ ...f, lat: "", lng: "" }));
-      return;
-    }
-    setLocating(true);
-    const hit = await geocode(value);
-    setLocating(false);
-    set(f => ({ ...f, lat: hit?.lat ?? "", lng: hit?.lng ?? "" }));
-  };
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWritersQueryKey(agentId, {}) });
 
@@ -92,10 +50,7 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
         data: {
           writerCode: createForm.writerCode.trim().toUpperCase(),
           fullName: createForm.fullName.trim(),
-          location: createForm.location.trim(),
-          // Omitted rather than sent empty when the place did not geocode;
-          // the server treats absent coordinates as "recorded but unmapped".
-          ...(createForm.lat && createForm.lng ? { lat: createForm.lat, lng: createForm.lng } : {}),
+          ...locationPayload({ location: createForm.location, lat: createForm.lat, lng: createForm.lng }),
         },
       });
       toast({ title: "Writer added successfully" });
@@ -236,33 +191,11 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
                 placeholder="e.g. Carlos King"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">
-                Location{ <span className="text-destructive">*</span>}
-              </Label>
-              <Input
-                value={createForm.location}
-                onChange={e => setCreateForm(f => ({ ...f, location: e.target.value }))}
-                onBlur={e => resolveLocation(e.target.value, setCreateForm)}
-                required
-                minLength={3}
-                maxLength={200}
-                className="h-9 text-sm"
-                placeholder="e.g. Adenta Market, Accra"
-              />
-              {/* Coordinates are shown, not edited: an operator should be able
-                  to see whether the place was found, and notice when it was
-                  not, without being asked to supply numbers themselves. */}
-              <p className="text-[11px] text-muted-foreground">
-                {locating
-                  ? "Finding location…"
-                  : createForm.lat && createForm.lng
-                    ? `Mapped to ${createForm.lat}, ${createForm.lng}`
-                    : createForm.location.trim().length >= 3
-                      ? "Could not place this on the map — it will be saved as text only."
-                      : "Used to place this writer's terminal on the map."}
-              </p>
-            </div>
+            <WriterLocationField
+              id="create-writer-location"
+              value={{ location: createForm.location, lat: createForm.lat, lng: createForm.lng }}
+              onChange={v => setCreateForm(f => ({ ...f, ...v }))}
+            />
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createMutation.isPending}>Add Writer</Button>
@@ -290,32 +223,12 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
                 className="h-9 text-sm"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">
-                Location{ <span className="text-muted-foreground">(optional here)</span>}
-              </Label>
-              <Input
-                value={editForm.location}
-                onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
-                onBlur={e => resolveLocation(e.target.value, setEditForm)}
-                
-                maxLength={200}
-                className="h-9 text-sm"
-                placeholder="e.g. Adenta Market, Accra"
-              />
-              {/* Coordinates are shown, not edited: an operator should be able
-                  to see whether the place was found, and notice when it was
-                  not, without being asked to supply numbers themselves. */}
-              <p className="text-[11px] text-muted-foreground">
-                {locating
-                  ? "Finding location…"
-                  : editForm.lat && editForm.lng
-                    ? `Mapped to ${editForm.lat}, ${editForm.lng}`
-                    : editForm.location.trim().length >= 3
-                      ? "Could not place this on the map — it will be saved as text only."
-                      : "Used to place this writer's terminal on the map."}
-              </p>
-            </div>
+            <WriterLocationField
+              id="edit-writer-location"
+              required={false}
+              value={{ location: editForm.location, lat: editForm.lat, lng: editForm.lng }}
+              onChange={v => setEditForm(f => ({ ...f, ...v }))}
+            />
             <div className="flex items-center gap-3 py-1">
               <Label className="text-xs text-muted-foreground">Status</Label>
               <div className="flex items-center gap-2">

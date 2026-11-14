@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { WriterLocationField, locationPayload } from "@/components/writer-location-field";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -27,7 +28,7 @@ function WritersSection({ agentId }: { agentId: string }) {
 
   const [addOpen, setAddOpen] = useState(false);
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
-  const [form, setForm] = useState({ writerCode: "", fullName: "" });
+  const [form, setForm] = useState({ writerCode: "", fullName: "", location: "", lat: "", lng: "" });
   const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getListWritersQueryKey(agentId) });
@@ -35,10 +36,17 @@ function WritersSection({ agentId }: { agentId: string }) {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await createMutation.mutateAsync({ agentId, data: { writerCode: form.writerCode.toUpperCase(), fullName: form.fullName } });
+      await createMutation.mutateAsync({
+        agentId,
+        data: {
+          writerCode: form.writerCode.toUpperCase(),
+          fullName: form.fullName,
+          ...locationPayload(form),
+        },
+      });
       toast({ title: "Writer created" });
       setAddOpen(false);
-      setForm({ writerCode: "", fullName: "" });
+      setForm({ writerCode: "", fullName: "", location: "", lat: "", lng: "" });
       invalidate();
     } catch {
       toast({ title: "Failed to create writer", variant: "destructive" });
@@ -105,6 +113,10 @@ function WritersSection({ agentId }: { agentId: string }) {
               <Label className="text-xs">Full Name</Label>
               <Input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
             </div>
+            <WriterLocationField
+              value={{ location: form.location, lat: form.lat, lng: form.lng }}
+              onChange={v => setForm(f => ({ ...f, ...v }))}
+            />
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={createMutation.isPending}>Create</Button>

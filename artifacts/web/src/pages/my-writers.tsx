@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { WriterLocationField, locationPayload } from "@/components/writer-location-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -61,7 +62,7 @@ export function MyWriters() {
   const [addOpen, setAddOpen] = useState(false);
   const [editWriter, setEditWriter] = useState<Writer | null>(null);
   const [pinWriter, setPinWriter] = useState<IssuePinTarget | null>(null);
-  const [createForm, setCreateForm] = useState({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid" });
+  const [createForm, setCreateForm] = useState({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid", location: "", lat: "", lng: "" });
   const [issued, setIssued] = useState<{ name: string; fullCode: string; pin: string } | null>(null);
   const [editForm, setEditForm] = useState({ fullName: "", isActive: true });
 
@@ -78,10 +79,11 @@ export function MyWriters() {
           fullName: createForm.fullName.trim(),
           phone: createForm.phone.trim(),
           operationModel: createForm.operationModel as "prepaid" | "postpaid",
+          ...locationPayload(createForm),
         },
       });
       setAddOpen(false);
-      setCreateForm({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid" });
+      setCreateForm({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid", location: "", lat: "", lng: "" });
       invalidate();
       if (created?.pin) {
         // Shown once - only the hash is stored server-side.
@@ -223,7 +225,7 @@ export function MyWriters() {
         )}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={o => { if (!o) setCreateForm({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid" }); setAddOpen(o); }}>
+      <Dialog open={addOpen} onOpenChange={o => { if (!o) setCreateForm({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid", location: "", lat: "", lng: "" }); setAddOpen(o); }}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-sm rounded-2xl p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add Writer</DialogTitle></DialogHeader>
           <p className="text-xs text-muted-foreground">
@@ -256,6 +258,10 @@ export function MyWriters() {
                 autoComplete="name"
               />
             </div>
+            <WriterLocationField
+              value={{ location: createForm.location, lat: createForm.lat, lng: createForm.lng }}
+              onChange={v => setCreateForm(f => ({ ...f, ...v }))}
+            />
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Phone Number</Label>
               <Input
