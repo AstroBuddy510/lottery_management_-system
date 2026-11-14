@@ -645,6 +645,7 @@ paths:
           required: true
           schema:
             type: string
+            format: uuid
       requestBody:
         required: true
         content:
@@ -658,6 +659,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Writer"
+
+  /writers/{id}/profile:
+    get:
+      operationId: getWriterProfile
+      tags: [agents]
+      summary: Everything one writer's profile page shows
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          # Declared as a uuid so a malformed id is refused by validation
+          # rather than by Postgres, which answers with a 22P02 and, before the
+          # error handler existed, put the failing SQL in the response body.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WriterProfile"
+        "404":
+          description: No such writer
 
   /agents/{agentId}/debt-reductions:
     get:
@@ -2997,6 +3025,70 @@ components:
           type: string
         lng:
           type: string
+
+    WriterProfile:
+      type: object
+      required: [writer, agency, sales]
+      properties:
+        writer:
+          $ref: "#/components/schemas/Writer"
+        hasPin:
+          type: boolean
+        isRedFlagged:
+          type: boolean
+        redFlagReason:
+          type: ["string", "null"]
+        registrationSource:
+          type: ["string", "null"]
+        agency:
+          type: object
+          required: [agentId, agentCode]
+          properties:
+            agentId:
+              type: string
+            agentCode:
+              type: string
+            agencyName:
+              type: ["string", "null"]
+            location:
+              type: ["string", "null"]
+        terminal:
+          type: ["object", "null"]
+          properties:
+            id:
+              type: string
+            serialNumber:
+              type: string
+            brand:
+              type: string
+            model:
+              type: string
+            imei:
+              type: string
+            status:
+              type: string
+            assignedAt:
+              type: string
+        terminalHistoryCount:
+          type: integer
+        sales:
+          type: object
+          required: [ticketCount, salesToday, totalStakes, totalWins, winningTickets]
+          properties:
+            ticketCount:
+              type: integer
+            salesToday:
+              type: integer
+            stakesToday:
+              type: string
+            totalStakes:
+              type: string
+            winningTickets:
+              type: integer
+            totalWins:
+              type: string
+            lastSaleAt:
+              type: ["string", "null"]
 
     WriterUpdate:
       type: object

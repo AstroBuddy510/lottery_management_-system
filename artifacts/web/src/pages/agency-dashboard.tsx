@@ -22,6 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   List as ListIcon,
   LayoutGrid,
   Map as MapIcon,
@@ -42,7 +45,9 @@ import {
   Phone,
   ArrowRight,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Flame,
+  Smartphone
 } from "lucide-react";
 
 type PigeonMapProps = MapProps & {
@@ -918,61 +923,153 @@ function MapView({
 /* ─── terminal map ────────────────────────────────────────────────────────── */
 
 /**
- * One assigned terminal, pinned where its writer works.
+ * One assigned terminal, marked where its writer works.
  *
- * Four facts on the pin itself - writer code, writer name, serial number and
- * the location label - because the question asked of this map is "who is that
- * and which device do they have", and a tooltip answers it only for whoever
- * thinks to hover. The code leads: it is what a supervisor knows a person by.
+ * A small dot and the writer's code, nothing more. The four-line card this
+ * replaces was legible but it was also 170px wide, and a dozen of them over
+ * Accra covered the city they were meant to describe - markers overlapped each
+ * other and hid the streets, so the map stopped being a map. What stays on
+ * screen permanently is the minimum that still identifies somebody: the code,
+ * which is what a supervisor knows a person by.
  *
- * The cost is width, so the name and the location truncate rather than push
- * the bubble across its neighbours, and the full text stays in the title for
- * the cases where a label is cut.
+ * Everything else moves to hover, where it costs nothing until it is wanted,
+ * and the whole marker is a link to that writer's profile.
  *
  * Green means the writer has sold within the active window; red means the
- * device is issued and silent. Colour is never the only signal - the dot
- * carries a shape too and the label spells the state out - because a red/green
+ * device is issued and silent. Colour is never the only signal - the hover
+ * card and the title both spell the state out in words - because a red/green
  * pair is the most common form of colour blindness.
  */
-function TerminalPin({ terminal, highlighted = false }: { terminal: TerminalWithStatus; highlighted?: boolean }) {
+function TerminalPin({
+  terminal, highlighted = false, hovered = false, onHover, onOpen,
+}: {
+  terminal: TerminalWithStatus;
+  highlighted?: boolean;
+  hovered?: boolean;
+  onHover: (id: string | null) => void;
+  onOpen: (writerId: string) => void;
+}) {
   const active = terminal.isActive;
   const ring = active ? "#22c55e" : "#ef4444";
+  const label = `${terminal.writerCode} — ${terminal.writerName}\n${terminal.serialNumber} (${terminal.brand} ${terminal.model})\n${active ? "Active" : "Inactive"}${terminal.writerLocation ? `\n${terminal.writerLocation}` : ""}`;
+
   return (
     <div
-      title={`${terminal.writerCode} — ${terminal.writerName}\n${terminal.serialNumber} (${terminal.brand} ${terminal.model})\n${active ? "Active" : "Inactive"}${terminal.writerLocation ? `\n${terminal.writerLocation}` : ""}`}
-      style={{ transform: "translate(-50%, -100%)", display: "inline-flex", flexDirection: "column", alignItems: "center" }}
+      style={{
+        transform: "translate(-50%, -100%)",
+        position: "relative",
+        /*
+         * Only the drawn marker catches the pointer.
+         *
+         * pigeon-maps keeps each Overlay's wrapper at the anchor point while
+         * the content above translates itself up and left to sit over it. The
+         * wrapper is left behind as an empty, still-hit-testable box below and
+         * right of the marker - and with markers a few hundred metres apart,
+         * those empty boxes land squarely on their neighbours' labels and
+         * swallow the click. Caught by elementFromPoint returning
+         * .pigeon-click-block where a label plainly was.
+         *
+         * So the wrapper is made transparent to the pointer (see the Overlay)
+         * and only this content takes it back.
+         */
+        pointerEvents: "auto",
+      }}
+      onMouseEnter={() => onHover(terminal.id)}
+      onMouseLeave={() => onHover(null)}
     >
-      <div
-        className={`bg-white rounded-xl shadow-lg border px-2 py-1 ${highlighted ? "ring-4 ring-sky-400/60 scale-110" : ""}`}
-        style={{ borderColor: ring, borderWidth: 2, maxWidth: 170 }}
-      >
-        <div className="flex items-center gap-1.5 whitespace-nowrap">
-          <span
-            className="inline-block rounded-full flex-shrink-0"
-            style={{ width: 8, height: 8, background: ring }}
-            aria-hidden="true"
-          />
-          <span className="font-mono text-[11px] font-bold text-slate-800">{terminal.writerCode}</span>
-          <span className="text-[9px] font-semibold uppercase ml-auto" style={{ color: ring }}>
-            {active ? "Active" : "Idle"}
-          </span>
-        </div>
-        <div className="text-[10px] font-semibold text-slate-700 truncate leading-tight">
-          {terminal.writerName}
-        </div>
-        <div className="font-mono text-[9px] text-slate-500 truncate leading-tight">
-          {terminal.serialNumber}
-        </div>
-        {terminal.writerLocation && (
-          <div className="text-[9px] text-slate-500 truncate leading-tight">
-            {terminal.writerLocation}
+      {/* The card. Rendered above the marker so it never covers the point it
+          describes, and pointer-events off so moving onto it is not required
+          and cannot flicker the hover off. */}
+      {hovered && (
+        <div
+          className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 w-60 rounded-xl bg-white shadow-xl border px-3 py-2.5 text-left pointer-events-none"
+          style={{ borderColor: ring }}
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block rounded-full" style={{ width: 8, height: 8, background: ring }} aria-hidden="true" />
+            <span className="font-mono text-xs font-bold text-slate-800">{terminal.writerCode}</span>
+            <span className="text-[9px] font-bold uppercase ml-auto" style={{ color: ring }}>
+              {active ? "Active" : "Idle"}
+            </span>
           </div>
-        )}
-      </div>
-      {/* Stem, so the bubble clearly points at a place rather than floating. */}
-      <div style={{ width: 2, height: 8, background: ring }} aria-hidden="true" />
+          <p className="text-sm font-semibold text-slate-800 mt-1 truncate">{terminal.writerName}</p>
+          {terminal.writerLocation && (
+            <p className="text-[11px] text-slate-500 truncate">{terminal.writerLocation}</p>
+          )}
+          <div className="border-t mt-2 pt-2 space-y-0.5">
+            <p className="font-mono text-[11px] font-semibold text-slate-700">{terminal.serialNumber}</p>
+            <p className="text-[10px] text-slate-500">{terminal.brand} {terminal.model}</p>
+            <p className="text-[10px] text-slate-500">
+              {terminal.lastSaleAt
+                ? `Last sale ${relativeTime(terminal.lastSaleAt)} · ${terminal.salesToday} today`
+                : "No sales recorded"}
+            </p>
+            {terminal.agentCode && (
+              <p className="text-[10px] text-slate-400 font-mono">{terminal.agentCode}</p>
+            )}
+          </div>
+          <p className="text-[10px] text-sky-600 font-semibold mt-1.5">Click to open this writer</p>
+        </div>
+      )}
+
+      <button
+        type="button"
+        title={label}
+        aria-label={label}
+        onClick={() => terminal.writerId && onOpen(terminal.writerId)}
+        className="flex flex-col items-center cursor-pointer bg-transparent border-0 p-0"
+      >
+        {/* The label that always shows. A pill, so it stays readable over any
+            tile, and narrow enough that neighbours rarely collide. */}
+        <span
+          className={`font-mono text-[10px] font-bold px-1.5 py-px rounded bg-white/95 shadow-sm whitespace-nowrap mb-0.5 ${highlighted ? "ring-2 ring-sky-400" : ""}`}
+          style={{ color: ring, border: `1px solid ${ring}` }}
+        >
+          {terminal.writerCode}
+        </span>
+        <span
+          className={`block rounded-full ${highlighted ? "ring-4 ring-sky-400/60" : ""}`}
+          style={{
+            width: hovered ? 14 : 10,
+            height: hovered ? 14 : 10,
+            background: ring,
+            border: "2px solid white",
+            boxShadow: "0 1px 3px rgba(0,0,0,.4)",
+            transition: "width .1s, height .1s",
+          }}
+          aria-hidden="true"
+        />
+      </button>
     </div>
   );
+}
+
+/** "14 min ago". Used on the hover card, where an exact timestamp is noise. */
+function relativeTime(ts: string | Date | null | undefined): string {
+  if (!ts) return "never";
+  const then = new Date(ts).getTime();
+  if (!Number.isFinite(then)) return "never";
+  const mins = Math.floor((Date.now() - then) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+/**
+ * How wide an idle blob should be drawn, in pixels, to cover a fixed distance
+ * on the ground.
+ *
+ * A fixed pixel radius would be meaningless: zoomed out it would shade half of
+ * Ghana, zoomed in it would be a dot. This keeps each blob at roughly 1.2km so
+ * the shading means the same thing at every zoom, clamped so it stays visible
+ * when zoomed far out and does not swallow the screen when zoomed in.
+ */
+function heatRadiusPx(zoom: number, lat: number): number {
+  const metresPerPixel = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+  if (!Number.isFinite(metresPerPixel) || metresPerPixel <= 0) return 80;
+  return Math.max(36, Math.min(300, 1200 / metresPerPixel));
 }
 
 /**
@@ -985,11 +1082,36 @@ function TerminalPin({ terminal, highlighted = false }: { terminal: TerminalWith
  * nineteen.
  */
 function TerminalMapView({ focusId }: { focusId?: string }) {
+  const [, navigate] = useLocation();
   const params = { activeWindowMinutes: 60 };
   const { data, isLoading, error } = useListTerminals(params, {
     query: { queryKey: getListTerminalsQueryKey(params), refetchInterval: 30_000, refetchOnWindowFocus: true },
   });
-  const terminals: TerminalWithStatus[] = Array.isArray(data) ? data : [];
+  const all: TerminalWithStatus[] = Array.isArray(data) ? data : [];
+
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [agencyFilter, setAgencyFilter] = useState<string>("all");
+  const [showHeat, setShowHeat] = useState(false);
+
+  /*
+   * Agencies to choose between, built from the terminals themselves rather
+   * than from the agency list: an agency with no terminals has nothing to show
+   * on this map, and offering it as a filter only produces an empty screen.
+   */
+  const agencies = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const t of all) {
+      if (t.agentId && !seen.has(t.agentId)) {
+        seen.set(t.agentId, t.agencyName ? `${t.agencyName} (${t.agentCode})` : (t.agentCode ?? ""));
+      }
+    }
+    return [...seen].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [all]);
+
+  const terminals = useMemo(
+    () => (agencyFilter === "all" ? all : all.filter(t => t.agentId === agencyFilter)),
+    [all, agencyFilter],
+  );
 
   const mapped = useMemo(
     () => terminals.filter(t => t.writerId && t.writerLat && t.writerLng),
@@ -1030,6 +1152,9 @@ function TerminalMapView({ focusId }: { focusId?: string }) {
   }, [boundsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeCount = mapped.filter(t => t.isActive).length;
+  /* Issued and silent. Stock is not idle - it is in a cupboard. */
+  const mappedIdle = useMemo(() => mapped.filter(t => !t.isActive), [mapped]);
+  const mappedIdleCount = mappedIdle.length;
   const focused = focusId ? mapped.find(t => t.id === focusId) : undefined;
 
   /*
@@ -1058,7 +1183,42 @@ function TerminalMapView({ focusId }: { focusId?: string }) {
         <span className="text-xs text-muted-foreground">
           Active = the holding writer sold within the last 60 minutes. Refreshes every 30s.
         </span>
+
+        {/* Controls sit on this row, to the right, because they qualify
+            exactly what the counts to their left are counting. */}
+        <div className="ml-auto flex items-center gap-2">
+          <Select value={agencyFilter} onValueChange={setAgencyFilter}>
+            <SelectTrigger className="h-8 w-[200px] text-xs">
+              <SelectValue placeholder="All agencies" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All agencies</SelectItem>
+              {agencies.map(a => (
+                <SelectItem key={a.id} value={a.id}>{a.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            variant={showHeat ? "default" : "outline"}
+            className="h-8 text-xs"
+            aria-pressed={showHeat}
+            onClick={() => setShowHeat(v => !v)}
+            title="Shade where terminals are issued but silent"
+          >
+            <Flame className="w-3.5 h-3.5 mr-1.5" />
+            Idle heat
+          </Button>
+        </div>
       </div>
+
+      {showHeat && (
+        <p className="text-[11px] text-muted-foreground px-1 -mt-2">
+          Shading marks terminals that are issued and silent — the denser the red, the more
+          idle devices sit within about a kilometre of each other.
+          {mappedIdleCount === 0 && " Nothing is idle in this view right now."}
+        </p>
+      )}
 
       {focusId && (
         <div className={`rounded-xl border px-4 py-2.5 text-xs ${focused ? "border-sky-200 bg-sky-50 text-sky-800" : "border-amber-200 bg-amber-50/60 text-amber-800"}`}>
@@ -1135,9 +1295,51 @@ function TerminalMapView({ focusId }: { focusId?: string }) {
             attribution={<span className="text-[10px] text-slate-500">{TILE_ATTRIBUTION}</span>}
             onBoundsChanged={({ center: c, zoom: z }) => { setCenter(c as [number, number]); setZoom(z); }}
           >
+            {/* Heat first, so it sits under every marker rather than greying
+                them out. One soft blob per idle terminal: where several
+                overlap the red compounds, which is the clustering the toggle
+                exists to show. */}
+            {showHeat && mappedIdle.map(t => {
+              const lat = parseFloat(t.writerLat!), lng = parseFloat(t.writerLng!);
+              const r = heatRadiusPx(zoom, lat);
+              return (
+                <Overlay key={`heat-${t.id}`} anchor={[lat, lng] as [number, number]} style={{ pointerEvents: "none" }}>
+                  <div
+                    style={{
+                      width: r * 2, height: r * 2,
+                      transform: "translate(-50%, -50%)",
+                      borderRadius: "50%",
+                      background: "radial-gradient(circle, rgba(239,68,68,.45) 0%, rgba(239,68,68,.22) 45%, rgba(239,68,68,0) 72%)",
+                      pointerEvents: "none",
+                    }}
+                    aria-hidden="true"
+                  />
+                </Overlay>
+              );
+            })}
             {mapped.map(t => (
-              <Overlay key={t.id} anchor={[parseFloat(t.writerLat!), parseFloat(t.writerLng!)] as [number, number]}>
-                <TerminalPin terminal={t} highlighted={t.id === focusId} />
+              <Overlay
+                key={t.id}
+                anchor={[parseFloat(t.writerLat!), parseFloat(t.writerLng!)] as [number, number]}
+                /*
+                 * The lift belongs on the wrapper, not on the marker inside it.
+                 *
+                 * pigeon-maps positions each Overlay with a transform, and a
+                 * transform creates a stacking context - so a z-index set on
+                 * the marker only orders it against its own siblings, and
+                 * between markers the later one in the DOM always wins. The
+                 * hovered marker's card was being painted over by the three
+                 * neighbours that happened to come after it.
+                 */
+                style={{ pointerEvents: "none", zIndex: hoverId === t.id ? 40 : 1 }}
+              >
+                <TerminalPin
+                  terminal={t}
+                  highlighted={t.id === focusId}
+                  hovered={hoverId === t.id}
+                  onHover={setHoverId}
+                  onOpen={id => navigate(`/writers/${id}`)}
+                />
               </Overlay>
             ))}
           </PigeonMap>

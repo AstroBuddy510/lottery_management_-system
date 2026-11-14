@@ -628,7 +628,7 @@ export const CreateWriterBody = zod.object({
  * @summary Update writer
  */
 export const UpdateWriterParams = zod.object({
-  "id": zod.coerce.string()
+  "id": zod.coerce.string().uuid()
 })
 
 export const updateWriterBodyLocationMax = 200;
@@ -658,6 +658,62 @@ export const UpdateWriterResponse = zod.object({
   "lat": zod.string().nullish(),
   "lng": zod.string().nullish(),
   "pin": zod.string().nullish()
+})
+
+
+/**
+ * @summary Everything one writer's profile page shows
+ */
+export const GetWriterProfileParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const GetWriterProfileResponse = zod.object({
+  "writer": zod.object({
+  "id": zod.string(),
+  "agentId": zod.string(),
+  "writerCode": zod.string(),
+  "fullCode": zod.string(),
+  "fullName": zod.string(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string(),
+  "phone": zod.string().nullish(),
+  "operationModel": zod.union([zod.literal('prepaid'),zod.literal('postpaid'),zod.literal(null)]).nullish(),
+  "approvalStatus": zod.union([zod.literal('pending'),zod.literal('approved'),zod.literal('rejected'),zod.literal(null)]).nullish(),
+  "location": zod.string().nullish(),
+  "lat": zod.string().nullish(),
+  "lng": zod.string().nullish(),
+  "pin": zod.string().nullish()
+}),
+  "hasPin": zod.boolean().optional(),
+  "isRedFlagged": zod.boolean().optional(),
+  "redFlagReason": zod.string().nullish(),
+  "registrationSource": zod.string().nullish(),
+  "agency": zod.object({
+  "agentId": zod.string(),
+  "agentCode": zod.string(),
+  "agencyName": zod.string().nullish(),
+  "location": zod.string().nullish()
+}),
+  "terminal": zod.object({
+  "id": zod.string().optional(),
+  "serialNumber": zod.string().optional(),
+  "brand": zod.string().optional(),
+  "model": zod.string().optional(),
+  "imei": zod.string().optional(),
+  "status": zod.string().optional(),
+  "assignedAt": zod.string().optional()
+}).nullish(),
+  "terminalHistoryCount": zod.number().optional(),
+  "sales": zod.object({
+  "ticketCount": zod.number(),
+  "salesToday": zod.number(),
+  "stakesToday": zod.string().optional(),
+  "totalStakes": zod.string(),
+  "winningTickets": zod.number(),
+  "totalWins": zod.string(),
+  "lastSaleAt": zod.string().nullish()
+})
 })
 
 

@@ -144,6 +144,7 @@ import type {
   WinsEntryUpdate,
   Writer,
   WriterInput,
+  WriterProfile,
   WriterReport,
   WriterUpdate
 } from './api.schemas';
@@ -2304,6 +2305,83 @@ export const useUpdateWriter = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateWriterMutationOptions(options));
     }
+
+export const getGetWriterProfileUrl = (id: string,) => {
+
+
+
+
+  return `/api/writers/${id}/profile`
+}
+
+/**
+ * @summary Everything one writer's profile page shows
+ */
+export const getWriterProfile = async (id: string, options?: RequestInit): Promise<WriterProfile> => {
+
+  return customFetch<WriterProfile>(getGetWriterProfileUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWriterProfileQueryKey = (id: string,) => {
+    return [
+    `/api/writers/${id}/profile`
+    ] as const;
+    }
+
+
+export const getGetWriterProfileQueryOptions = <TData = Awaited<ReturnType<typeof getWriterProfile>>, TError = ErrorType<void>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWriterProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWriterProfileQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWriterProfile>>> = ({ signal }) => getWriterProfile(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWriterProfile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWriterProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getWriterProfile>>>
+export type GetWriterProfileQueryError = ErrorType<void>
+
+
+/**
+ * @summary Everything one writer's profile page shows
+ */
+
+export function useGetWriterProfile<TData = Awaited<ReturnType<typeof getWriterProfile>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWriterProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWriterProfileQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListAgentDebtReductionsUrl = (agentId: string,) => {
 

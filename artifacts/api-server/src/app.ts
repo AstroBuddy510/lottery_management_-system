@@ -91,4 +91,27 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
+/**
+ * The last handler. Nothing internal goes out in a response.
+ *
+ * There was none at all, which meant Express's own default handler answered
+ * every unhandled throw - and its answer is an HTML page carrying err.message.
+ * For anything thrown by the database driver that message is the full SQL
+ * statement, so a single malformed id in a URL returned the writers table's
+ * entire column list to whoever asked. Production only removes the stack
+ * trace; the message, and so the schema, still went out.
+ *
+ * Four arguments, and the unused `next`, are what makes Express treat this as
+ * an error handler rather than ordinary middleware. It must be registered
+ * after the routes.
+ */
+app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error(
+    { err, method: req.method, path: req.path },
+    "Unhandled error",
+  );
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Something went wrong" });
+});
+
 export default app;

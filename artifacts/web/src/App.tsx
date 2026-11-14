@@ -40,6 +40,7 @@ const Users = lazy(() => import("@/pages/users").then((m) => ({ default: m.Users
 const Settings = lazy(() => import("@/pages/settings").then((m) => ({ default: m.Settings })));
 const Games = lazy(() => import("@/pages/games").then((m) => ({ default: m.Games })));
 const AgentDetail = lazy(() => import("@/pages/agent-detail").then((m) => ({ default: m.AgentDetail })));
+const WriterProfile = lazy(() => import("@/pages/writer-profile").then((m) => ({ default: m.WriterProfile })));
 const Sales = lazy(() => import("@/pages/sales").then((m) => ({ default: m.Sales })));
 const GrossEntries = lazy(() => import("@/pages/gross-entries").then((m) => ({ default: m.GrossEntries })));
 const WinsEntries = lazy(() => import("@/pages/wins-entries").then((m) => ({ default: m.WinsEntries })));
@@ -140,6 +141,13 @@ function Router() {
 
       <Route path="/agents/:agentId/detail">
         {() => <ProtectedRoute component={AgentDetail} roles={['director', 'administrator']} />}
+      </Route>
+
+      {/* Where a click on the terminal map lands. Cashiers are included
+          because they answer the phone when a writer says the device is dead,
+          and agents reach their own writers from here too. */}
+      <Route path="/writers/:id">
+        {() => <ProtectedRoute component={WriterProfile} roles={['director', 'administrator', 'cashier', 'agent']} />}
       </Route>
 
       <Route path="/games">

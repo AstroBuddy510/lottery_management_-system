@@ -1,6 +1,9 @@
 import { Router } from "express";
-import { db, agentsTable, writersTable, usersTable, agentDebtReductionsTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import {
+  db, agentsTable, writersTable, usersTable, agentDebtReductionsTable,
+  posTerminalsTable, terminalAssignmentsTable, ticketsTable,
+} from "@workspace/db";
+import { eq, and, desc, isNull, sql } from "drizzle-orm";
 import {
   CreateAgentBody,
   GetAgentParams,
@@ -11,6 +14,7 @@ import {
   CreateWriterBody,
   UpdateWriterParams,
   UpdateWriterBody,
+  GetWriterProfileParams,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { composeWriterFullCode, generatePin, hashPin } from "../lib/writer-onboarding";
@@ -506,6 +510,132 @@ router.patch(
       .returning();
 
     res.json(writer);
+  },
+);
+
+/**
+ * Everything one writer's profile page shows, in one request.
+ *
+ * The map now sends a click here, and a supervisor arriving from a marker
+ * wants the same four answers every time: who is this, where do they sell,
+ * what device are they holding, and are they actually selling. Assembling
+ * that client-side would have meant four round trips and a page that fills
+ * in piecemeal, so it is one endpoint.
+ *
+ * The PIN hash never leaves - only whether one exists, because "this writer
+ * cannot sign in" is the single most common reason a terminal sits idle.
+ */
+router.get(
+  "/writers/:id/profile",
+  requireAuth,
+  requireRole("director", "administrator", "cashier", "agent"),
+  async (req, res) => {
+    const parsed = GetWriterProfileParams.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid params" });
+      return;
+    }
+    const writerId = parsed.data.id;
+
+    const [row] = await db
+      .select({
+        writer: writersTable,
+        agentId: agentsTable.id,
+        agentCode: agentsTable.fullCode,
+        agencyName: agentsTable.agencyName,
+        agencyLocation: agentsTable.location,
+      })
+      .from(writersTable)
+      .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+      .where(eq(writersTable.id, writerId))
+      .limit(1);
+
+    if (!row) {
+      res.status(404).json({ error: "Writer not found" });
+      return;
+    }
+
+    // An agent sees their own writers and nobody else's.
+    if (req.user!.role === "agent") {
+      const myAgent = await getAgentForUser(req.user!.userId);
+      if (!myAgent || myAgent.id !== row.agentId) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    }
+
+    const [held] = await db
+      .select({
+        id: posTerminalsTable.id,
+        serialNumber: posTerminalsTable.serialNumber,
+        brand: posTerminalsTable.brand,
+        model: posTerminalsTable.model,
+        imei: posTerminalsTable.imei,
+        status: posTerminalsTable.status,
+        assignedAt: terminalAssignmentsTable.assignedAt,
+      })
+      .from(terminalAssignmentsTable)
+      .innerJoin(posTerminalsTable, eq(posTerminalsTable.id, terminalAssignmentsTable.terminalId))
+      .where(
+        and(
+          eq(terminalAssignmentsTable.writerId, writerId),
+          isNull(terminalAssignmentsTable.unassignedAt),
+        ),
+      )
+      .limit(1);
+
+    const [history] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(terminalAssignmentsTable)
+      .where(eq(terminalAssignmentsTable.writerId, writerId));
+
+    // Cancelled and void tickets are excluded here exactly as they are in the
+    // terminal list, so the profile and the map cannot disagree about whether
+    // somebody has sold today.
+    const [sales] = await db
+      .select({
+        ticketCount: sql<number>`count(*)::int`,
+        salesToday: sql<number>`count(*) filter (where date(${ticketsTable.createdAt}) = current_date)::int`,
+        stakesToday: sql<string>`coalesce(sum(${ticketsTable.stakeAmount}) filter (where date(${ticketsTable.createdAt}) = current_date), 0)::text`,
+        totalStakes: sql<string>`coalesce(sum(${ticketsTable.stakeAmount}), 0)::text`,
+        winningTickets: sql<number>`count(*) filter (where ${ticketsTable.isWinner})::int`,
+        totalWins: sql<string>`coalesce(sum(${ticketsTable.winAmount}), 0)::text`,
+        lastSaleAt: sql<Date | null>`max(${ticketsTable.createdAt})`,
+      })
+      .from(ticketsTable)
+      .where(
+        and(
+          eq(ticketsTable.writerId, writerId),
+          sql`${ticketsTable.status} not in ('cancelled', 'void')`,
+        ),
+      );
+
+    const { pinHash, ...writer } = row.writer;
+
+    res.json({
+      writer,
+      hasPin: pinHash !== null,
+      isRedFlagged: row.writer.isRedFlagged,
+      redFlagReason: row.writer.redFlagReason,
+      registrationSource: row.writer.registrationSource,
+      agency: {
+        agentId: row.agentId,
+        agentCode: row.agentCode,
+        agencyName: row.agencyName,
+        location: row.agencyLocation,
+      },
+      terminal: held ?? null,
+      terminalHistoryCount: history?.n ?? 0,
+      sales: {
+        ticketCount: sales?.ticketCount ?? 0,
+        salesToday: sales?.salesToday ?? 0,
+        stakesToday: sales?.stakesToday ?? "0",
+        totalStakes: sales?.totalStakes ?? "0",
+        winningTickets: sales?.winningTickets ?? 0,
+        totalWins: sales?.totalWins ?? "0",
+        lastSaleAt: sales?.lastSaleAt ?? null,
+      },
+    });
   },
 );
 

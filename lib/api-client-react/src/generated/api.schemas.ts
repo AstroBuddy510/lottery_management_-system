@@ -434,6 +434,54 @@ export interface WriterInput {
   lng?: string;
 }
 
+export type WriterProfileAgency = {
+  agentId: string;
+  agentCode: string;
+  /** @nullable */
+  agencyName?: string | null;
+  /** @nullable */
+  location?: string | null;
+};
+
+/**
+ * @nullable
+ */
+export type WriterProfileTerminal = {
+  id?: string;
+  serialNumber?: string;
+  brand?: string;
+  model?: string;
+  imei?: string;
+  status?: string;
+  assignedAt?: string;
+} | null;
+
+export type WriterProfileSales = {
+  ticketCount: number;
+  salesToday: number;
+  stakesToday?: string;
+  totalStakes: string;
+  winningTickets: number;
+  totalWins: string;
+  /** @nullable */
+  lastSaleAt?: string | null;
+};
+
+export interface WriterProfile {
+  writer: Writer;
+  hasPin?: boolean;
+  isRedFlagged?: boolean;
+  /** @nullable */
+  redFlagReason?: string | null;
+  /** @nullable */
+  registrationSource?: string | null;
+  agency: WriterProfileAgency;
+  /** @nullable */
+  terminal?: WriterProfileTerminal;
+  terminalHistoryCount?: number;
+  sales: WriterProfileSales;
+}
+
 export interface WriterUpdate {
   fullName?: string;
   isActive?: boolean;
