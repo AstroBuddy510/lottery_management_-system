@@ -2339,7 +2339,7 @@ export const ListTerminalAssignmentsResponseItem = zod.object({
   "writerPhone": zod.string().nullish(),
   "agencyName": zod.string().nullish(),
   "assignedAt": zod.string(),
-  "returnedAt": zod.string().nullish(),
+  "unassignedAt": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "assignedBy": zod.string(),
   "createdAt": zod.string()
@@ -2348,17 +2348,18 @@ export const ListTerminalAssignmentsResponse = zod.array(ListTerminalAssignments
 
 
 /**
- * @summary Record a terminal as handed back
+ * @summary End a terminal/writer pairing and record the date
  */
-export const ReturnTerminalAssignmentParams = zod.object({
+export const UnassignTerminalAssignmentParams = zod.object({
   "id": zod.coerce.string()
 })
 
-export const ReturnTerminalAssignmentBody = zod.object({
-  "notes": zod.string().optional()
+export const UnassignTerminalAssignmentBody = zod.object({
+  "notes": zod.string().optional(),
+  "condition": zod.enum(['working', 'faulty']).optional()
 })
 
-export const ReturnTerminalAssignmentResponse = zod.object({
+export const UnassignTerminalAssignmentResponse = zod.object({
   "id": zod.string(),
   "terminalId": zod.string(),
   "terminalSerialNumber": zod.string(),
@@ -2370,7 +2371,7 @@ export const ReturnTerminalAssignmentResponse = zod.object({
   "writerPhone": zod.string().nullish(),
   "agencyName": zod.string().nullish(),
   "assignedAt": zod.string(),
-  "returnedAt": zod.string().nullish(),
+  "unassignedAt": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "assignedBy": zod.string(),
   "createdAt": zod.string()

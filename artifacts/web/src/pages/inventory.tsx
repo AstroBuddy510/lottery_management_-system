@@ -16,7 +16,8 @@ import {
 } from "@workspace/api-client-react";
 import { generatePadlockAssignmentsPDF } from "@/lib/pdf-generator";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
-import { TerminalsManager } from "@/components/terminals-manager";
+import { TerminalsManager, TerminalMetrics } from "@/components/terminals-manager";
+import { useListTerminals, getListTerminalsQueryKey, type TerminalWithStatus } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,27 @@ export function Inventory() {
   const { data: allocations, isLoading: loadingAllocations } = useListBookletAllocations();
   const { data: agentBalances, isLoading: loadingBalances } = useListBookletAgentBalances();
   const { data: padlocks, isLoading: loadingPadlocks } = useListPadlocks();
+
+  /* The overview shows terminal figures, so it needs the same source the
+     Terminals tab reads. Same query key, so React Query serves one request
+     for both rather than two that can disagree. */
+  const terminalParams = { activeWindowMinutes: 60 };
+  const { data: terminalData } = useListTerminals(terminalParams, {
+    query: { queryKey: getListTerminalsQueryKey(terminalParams), refetchInterval: 30_000 },
+  });
+  const terminalMetrics = useMemo(() => {
+    const list: TerminalWithStatus[] = Array.isArray(terminalData) ? terminalData : [];
+    const assigned = list.filter(t => !!t.writerId);
+    return {
+      total: list.length,
+      assigned: assigned.length,
+      inStock: list.filter(t => !t.writerId && t.status === "available").length,
+      repair: list.filter(t => t.status === "repair").length,
+      outOfService: list.filter(t => ["lost", "retired", "damaged"].includes(t.status)).length,
+      active: assigned.filter(t => t.isActive).length,
+      inactive: assigned.filter(t => !t.isActive).length,
+    };
+  }, [terminalData]);
   const { data: assignments, isLoading: loadingAssignments } = useListPadlockAssignments();
 
   // Mutations
@@ -531,6 +553,153 @@ export function Inventory() {
             transition={{ duration: 0.3 }}
             className="space-y-8"
           >
+            {/* TERMINAL INVENTORY PANEL */}
+            <div className="border border-border/80 bg-card rounded-3xl p-6 shadow-sm space-y-6">
+              <div className="flex items-center justify-between border-b pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-6 bg-sky-500 rounded-full shadow-glow" />
+                  <div>
+                    <h2 className="text-lg font-bold text-foreground">Terminal Overview</h2>
+                    <p className="text-[11px] text-muted-foreground">POS hardware across the network — stock, assignment and activity</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab("terminals")}
+                  className="text-[11px] font-semibold text-primary hover:underline"
+                >
+                  Open Terminals Management →
+                </button>
+              </div>
+              {/* Same component and the same counts the Terminals tab shows, so
+                  the two screens cannot drift on what "in stock" means. */}
+              <TerminalMetrics metrics={terminalMetrics} />
+            </div>
+
+
+            {/* PADLOCK INVENTORY PANEL */}
+            <div className="border border-border/80 bg-card rounded-3xl p-6 shadow-sm space-y-6">
+              <div className="flex items-center justify-between border-b pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-6 bg-blue-500 rounded-full shadow-glow" />
+                  <div>
+                    <h2 className="text-lg font-bold text-foreground">Digital Padlock Auditor</h2>
+                    <p className="text-[11px] text-muted-foreground">Operational status and location pin stats</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-xs bg-blue-50/50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 border-blue-200">
+                  <Lock className="w-3 h-3 mr-1" /> Smart Hardware Security
+                </Badge>
+              </div>
+
+              {/* Cards Grid */}
+              {loadingPadlocks ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[1, 2, 3, 4].map(i => (
+                    <Skeleton key={i} className="h-24 rounded-2xl" />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {[
+                    { label: "Registered Padlocks", value: padlockStats.total, sub: "Active smart lock tags", color: "text-foreground border-l-slate-300 dark:border-l-slate-800" },
+                    { label: "Available Registry", value: padlockStats.available, sub: "Available in warehouse pool", color: "text-emerald-600 dark:text-emerald-400 border-l-emerald-500 font-bold" },
+                    { label: "Currently Assigned", value: padlockStats.assigned, sub: "Actively tagged to trips", color: "text-indigo-600 dark:text-indigo-400 border-l-indigo-500 font-bold" },
+                    { label: "Damaged / Broken", value: padlockStats.broken, sub: "Flagged for repairs", color: "text-rose-600 dark:text-rose-400 border-l-rose-500" },
+                  ].map((c, idx) => (
+                    <div key={idx} className={`bg-card/45 border-l-4 ${c.color} border border-y-border border-r-border rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between h-28`}>
+                      <div className="text-[10px] text-muted-foreground uppercase font-black tracking-wider">{c.label}</div>
+                      <div className="font-mono text-2xl font-black tracking-tight mt-1">{c.value}</div>
+                      <div className="text-[10px] text-muted-foreground font-medium mt-1">{c.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Chart & Buffer Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+                <div className="lg:col-span-5 border rounded-2xl p-5 bg-card/30 flex flex-col items-center justify-center min-h-[300px]">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">Hardware Distribution</h3>
+                  {loadingPadlocks ? (
+                    <Skeleton className="w-48 h-48 rounded-full" />
+                  ) : padlockStats.total === 0 ? (
+                    <div className="text-xs text-muted-foreground italic">No registered padlocks in system</div>
+                  ) : (
+                    <div className="w-full h-56 relative flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={padlockChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={65}
+                            outerRadius={85}
+                            paddingAngle={4}
+                            dataKey="value"
+                          >
+                            {padlockChartData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip content={<CustomTooltip />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute text-center">
+                        <span className="text-2xl font-black tracking-tight">{padlockStats.total}</span>
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mt-0.5">Total</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Chart Legend */}
+                  <div className="flex flex-wrap justify-center gap-4 mt-2">
+                    {padlockChartData.map((d, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs font-bold">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+                        <span className="text-muted-foreground">{d.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="lg:col-span-7 border rounded-2xl p-6 bg-card/30 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-6">Lock Status Buffers</h3>
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-muted-foreground flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Operational Availability</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">{availabilityRate}%</span>
+                        </div>
+                        <Progress value={availabilityRate} className="h-2 bg-muted [&>div]:bg-emerald-500" />
+                        <p className="text-[10px] text-muted-foreground font-medium">Ready padlocks currently free in central lockers</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-muted-foreground flex items-center gap-1.5"><Key className="w-3.5 h-3.5 text-indigo-500" /> Active Assignment Rate</span>
+                          <span className="text-indigo-600 dark:text-indigo-400">{utilizationRate}%</span>
+                        </div>
+                        <Progress value={utilizationRate} className="h-2 bg-muted [&>div]:bg-indigo-600 dark:[&>div]:bg-indigo-400" />
+                        <p className="text-[10px] text-muted-foreground font-medium">Assigned to agents currently en route to destination</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-muted-foreground flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 text-rose-500" /> Out-of-Service Rate</span>
+                          <span className="text-rose-600 dark:text-rose-400">{damagedRate}%</span>
+                        </div>
+                        <Progress value={damagedRate} className="h-2 bg-muted [&>div]:bg-rose-500" />
+                        <p className="text-[10px] text-muted-foreground font-medium">Flagged damaged or broken, excluded from selection</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border-t pt-4 mt-6 flex justify-between items-center text-[11px] text-muted-foreground font-medium">
+                    <span className="flex items-center gap-1.5"><Settings2 className="w-3.5 h-3.5 text-primary" /> Damaged locks require technical audit and reset.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* BOOKLET INVENTORY PANEL */}
             <div className="border border-border/80 bg-card rounded-3xl p-6 shadow-sm space-y-6">
               <div className="flex items-center justify-between border-b pb-4">
@@ -656,129 +825,6 @@ export function Inventory() {
               </div>
             </div>
 
-            {/* PADLOCK INVENTORY PANEL */}
-            <div className="border border-border/80 bg-card rounded-3xl p-6 shadow-sm space-y-6">
-              <div className="flex items-center justify-between border-b pb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-6 bg-blue-500 rounded-full shadow-glow" />
-                  <div>
-                    <h2 className="text-lg font-bold text-foreground">Digital Padlock Auditor</h2>
-                    <p className="text-[11px] text-muted-foreground">Operational status and location pin stats</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-xs bg-blue-50/50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 border-blue-200">
-                  <Lock className="w-3 h-3 mr-1" /> Smart Hardware Security
-                </Badge>
-              </div>
-
-              {/* Cards Grid */}
-              {loadingPadlocks ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[1, 2, 3, 4].map(i => (
-                    <Skeleton key={i} className="h-24 rounded-2xl" />
-                  ))}
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  {[
-                    { label: "Registered Padlocks", value: padlockStats.total, sub: "Active smart lock tags", color: "text-foreground border-l-slate-300 dark:border-l-slate-800" },
-                    { label: "Available Registry", value: padlockStats.available, sub: "Available in warehouse pool", color: "text-emerald-600 dark:text-emerald-400 border-l-emerald-500 font-bold" },
-                    { label: "Currently Assigned", value: padlockStats.assigned, sub: "Actively tagged to trips", color: "text-indigo-600 dark:text-indigo-400 border-l-indigo-500 font-bold" },
-                    { label: "Damaged / Broken", value: padlockStats.broken, sub: "Flagged for repairs", color: "text-rose-600 dark:text-rose-400 border-l-rose-500" },
-                  ].map((c, idx) => (
-                    <div key={idx} className={`bg-card/45 border-l-4 ${c.color} border border-y-border border-r-border rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between h-28`}>
-                      <div className="text-[10px] text-muted-foreground uppercase font-black tracking-wider">{c.label}</div>
-                      <div className="font-mono text-2xl font-black tracking-tight mt-1">{c.value}</div>
-                      <div className="text-[10px] text-muted-foreground font-medium mt-1">{c.sub}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Chart & Buffer Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
-                <div className="lg:col-span-5 border rounded-2xl p-5 bg-card/30 flex flex-col items-center justify-center min-h-[300px]">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">Hardware Distribution</h3>
-                  {loadingPadlocks ? (
-                    <Skeleton className="w-48 h-48 rounded-full" />
-                  ) : padlockStats.total === 0 ? (
-                    <div className="text-xs text-muted-foreground italic">No registered padlocks in system</div>
-                  ) : (
-                    <div className="w-full h-56 relative flex items-center justify-center">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={padlockChartData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={65}
-                            outerRadius={85}
-                            paddingAngle={4}
-                            dataKey="value"
-                          >
-                            {padlockChartData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip content={<CustomTooltip />} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div className="absolute text-center">
-                        <span className="text-2xl font-black tracking-tight">{padlockStats.total}</span>
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mt-0.5">Total</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Chart Legend */}
-                  <div className="flex flex-wrap justify-center gap-4 mt-2">
-                    {padlockChartData.map((d, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs font-bold">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
-                        <span className="text-muted-foreground">{d.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="lg:col-span-7 border rounded-2xl p-6 bg-card/30 flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-6">Lock Status Buffers</h3>
-                    <div className="space-y-6">
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span className="text-muted-foreground flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Operational Availability</span>
-                          <span className="text-emerald-600 dark:text-emerald-400">{availabilityRate}%</span>
-                        </div>
-                        <Progress value={availabilityRate} className="h-2 bg-muted [&>div]:bg-emerald-500" />
-                        <p className="text-[10px] text-muted-foreground font-medium">Ready padlocks currently free in central lockers</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span className="text-muted-foreground flex items-center gap-1.5"><Key className="w-3.5 h-3.5 text-indigo-500" /> Active Assignment Rate</span>
-                          <span className="text-indigo-600 dark:text-indigo-400">{utilizationRate}%</span>
-                        </div>
-                        <Progress value={utilizationRate} className="h-2 bg-muted [&>div]:bg-indigo-600 dark:[&>div]:bg-indigo-400" />
-                        <p className="text-[10px] text-muted-foreground font-medium">Assigned to agents currently en route to destination</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span className="text-muted-foreground flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 text-rose-500" /> Out-of-Service Rate</span>
-                          <span className="text-rose-600 dark:text-rose-400">{damagedRate}%</span>
-                        </div>
-                        <Progress value={damagedRate} className="h-2 bg-muted [&>div]:bg-rose-500" />
-                        <p className="text-[10px] text-muted-foreground font-medium">Flagged damaged or broken, excluded from selection</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="border-t pt-4 mt-6 flex justify-between items-center text-[11px] text-muted-foreground font-medium">
-                    <span className="flex items-center gap-1.5"><Settings2 className="w-3.5 h-3.5 text-primary" /> Damaged locks require technical audit and reset.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </motion.div>
         )}
 

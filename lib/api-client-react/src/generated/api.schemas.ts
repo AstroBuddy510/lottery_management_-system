@@ -1548,8 +1548,17 @@ export interface TerminalAssignInput {
   notes?: string;
 }
 
-export interface TerminalReturnInput {
+export type TerminalUnassignInputCondition = typeof TerminalUnassignInputCondition[keyof typeof TerminalUnassignInputCondition];
+
+
+export const TerminalUnassignInputCondition = {
+  working: 'working',
+  faulty: 'faulty',
+} as const;
+
+export interface TerminalUnassignInput {
   notes?: string;
+  condition?: TerminalUnassignInputCondition;
 }
 
 export interface TerminalAssignmentRecord {
@@ -1569,7 +1578,7 @@ export interface TerminalAssignmentRecord {
   agencyName?: string | null;
   assignedAt: string;
   /** @nullable */
-  returnedAt?: string | null;
+  unassignedAt?: string | null;
   /** @nullable */
   notes?: string | null;
   assignedBy: string;

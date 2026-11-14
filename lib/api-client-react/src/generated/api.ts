@@ -121,7 +121,7 @@ import type {
   TerminalAssignInput,
   TerminalAssignmentRecord,
   TerminalInput,
-  TerminalReturnInput,
+  TerminalUnassignInput,
   TerminalWithStatus,
   TimeWindow,
   TimeWindowInput,
@@ -8184,38 +8184,38 @@ export function useListTerminalAssignments<TData = Awaited<ReturnType<typeof lis
 
 
 
-export const getReturnTerminalAssignmentUrl = (id: string,) => {
+export const getUnassignTerminalAssignmentUrl = (id: string,) => {
 
 
 
 
-  return `/api/inventory/terminal-assignments/${id}/return`
+  return `/api/inventory/terminal-assignments/${id}/unassign`
 }
 
 /**
- * @summary Record a terminal as handed back
+ * @summary End a terminal/writer pairing and record the date
  */
-export const returnTerminalAssignment = async (id: string,
-    terminalReturnInput: TerminalReturnInput, options?: RequestInit): Promise<TerminalAssignmentRecord> => {
+export const unassignTerminalAssignment = async (id: string,
+    terminalUnassignInput: TerminalUnassignInput, options?: RequestInit): Promise<TerminalAssignmentRecord> => {
 
-  return customFetch<TerminalAssignmentRecord>(getReturnTerminalAssignmentUrl(id),
+  return customFetch<TerminalAssignmentRecord>(getUnassignTerminalAssignmentUrl(id),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      terminalReturnInput,)
+      terminalUnassignInput,)
   }
 );}
 
 
 
 
-export const getReturnTerminalAssignmentMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof returnTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalReturnInput>}, TContext> => {
+export const getUnassignTerminalAssignmentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unassignTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalUnassignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unassignTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalUnassignInput>}, TContext> => {
 
-const mutationKey = ['returnTerminalAssignment'];
+const mutationKey = ['unassignTerminalAssignment'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -8225,10 +8225,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof returnTerminalAssignment>>, {id: string;data: BodyType<TerminalReturnInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unassignTerminalAssignment>>, {id: string;data: BodyType<TerminalUnassignInput>}> = (props) => {
           const {id,data} = props ?? {};
 
-          return  returnTerminalAssignment(id,data,requestOptions)
+          return  unassignTerminalAssignment(id,data,requestOptions)
         }
 
 
@@ -8238,22 +8238,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ReturnTerminalAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof returnTerminalAssignment>>>
-    export type ReturnTerminalAssignmentMutationBody = BodyType<TerminalReturnInput>
-    export type ReturnTerminalAssignmentMutationError = ErrorType<unknown>
+    export type UnassignTerminalAssignmentMutationResult = NonNullable<Awaited<ReturnType<typeof unassignTerminalAssignment>>>
+    export type UnassignTerminalAssignmentMutationBody = BodyType<TerminalUnassignInput>
+    export type UnassignTerminalAssignmentMutationError = ErrorType<unknown>
 
     /**
- * @summary Record a terminal as handed back
+ * @summary End a terminal/writer pairing and record the date
  */
-export const useReturnTerminalAssignment = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalReturnInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useUnassignTerminalAssignment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unassignTerminalAssignment>>, TError,{id: string;data: BodyType<TerminalUnassignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof returnTerminalAssignment>>,
+        Awaited<ReturnType<typeof unassignTerminalAssignment>>,
         TError,
-        {id: string;data: BodyType<TerminalReturnInput>},
+        {id: string;data: BodyType<TerminalUnassignInput>},
         TContext
       > => {
-      return useMutation(getReturnTerminalAssignmentMutationOptions(options));
+      return useMutation(getUnassignTerminalAssignmentMutationOptions(options));
     }
 
 export const getListPadlocksUrl = () => {

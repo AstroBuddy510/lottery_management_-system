@@ -929,7 +929,7 @@ function MapView({
  * carries a shape too and the title spells the state out - because a red/green
  * pair is the most common form of colour blindness.
  */
-function TerminalPin({ terminal }: { terminal: TerminalWithStatus }) {
+function TerminalPin({ terminal, highlighted = false }: { terminal: TerminalWithStatus; highlighted?: boolean }) {
   const active = terminal.isActive;
   const ring = active ? "#22c55e" : "#ef4444";
   return (
@@ -938,7 +938,7 @@ function TerminalPin({ terminal }: { terminal: TerminalWithStatus }) {
       style={{ transform: "translate(-50%, -100%)", display: "inline-flex", flexDirection: "column", alignItems: "center" }}
     >
       <div
-        className="flex items-center gap-1.5 bg-white rounded-xl shadow-lg border px-2 py-1 whitespace-nowrap"
+        className={`flex items-center gap-1.5 bg-white rounded-xl shadow-lg border px-2 py-1 whitespace-nowrap ${highlighted ? "ring-4 ring-sky-400/60 scale-110" : ""}`}
         style={{ borderColor: ring, borderWidth: 2 }}
       >
         <span
@@ -966,7 +966,7 @@ function TerminalPin({ terminal }: { terminal: TerminalWithStatus }) {
  * supervisor needs to know whether "six pins" means six terminals or six of
  * nineteen.
  */
-function TerminalMapView() {
+function TerminalMapView({ focusId }: { focusId?: string }) {
   const params = { activeWindowMinutes: 60 };
   const { data, isLoading, error } = useListTerminals(params, {
     query: { queryKey: getListTerminalsQueryKey(params), refetchInterval: 30_000, refetchOnWindowFocus: true },
@@ -997,6 +997,19 @@ function TerminalMapView() {
   }, [boundsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeCount = mapped.filter(t => t.isActive).length;
+  const focused = focusId ? mapped.find(t => t.id === focusId) : undefined;
+
+  /*
+   * Arriving from the registry's Location link, centre on that one terminal.
+   *
+   * Deliberately only on arrival: re-centring every time the 30-second refresh
+   * lands would drag the map back from wherever the viewer had panned to.
+   */
+  useEffect(() => {
+    if (!focused?.writerLat || !focused.writerLng) return;
+    setCenter([parseFloat(focused.writerLat), parseFloat(focused.writerLng)]);
+    setZoom(15);
+  }, [focused?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-4">
@@ -1013,6 +1026,14 @@ function TerminalMapView() {
           Active = the holding writer sold within the last 60 minutes. Refreshes every 30s.
         </span>
       </div>
+
+      {focusId && (
+        <div className={`rounded-xl border px-4 py-2.5 text-xs ${focused ? "border-sky-200 bg-sky-50 text-sky-800" : "border-amber-200 bg-amber-50/60 text-amber-800"}`}>
+          {focused
+            ? <>Showing <strong>{focused.serialNumber}</strong> with {focused.writerCode} — {focused.writerName}{focused.writerLocation ? ` at ${focused.writerLocation}` : ""}.</>
+            : <>That terminal could not be shown on the map — it is either unassigned or its writer has no location set.</>}
+        </div>
+      )}
 
       {(assignedNoCoords.length > 0 || inStock.length > 0) && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-xs text-amber-800">
@@ -1071,7 +1092,7 @@ function TerminalMapView() {
           >
             {mapped.map(t => (
               <Overlay key={t.id} anchor={[parseFloat(t.writerLat!), parseFloat(t.writerLng!)] as [number, number]}>
-                <TerminalPin terminal={t} />
+                <TerminalPin terminal={t} highlighted={t.id === focusId} />
               </Overlay>
             ))}
           </PigeonMap>
@@ -1149,7 +1170,20 @@ export function AgencyDashboard() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoAgent, setPhotoAgent] = useState<AgentWithUser | null>(null);
 
-  const [view, setView] = useState<ViewMode>("grid");
+  /*
+   * The registry links here as /agencies?view=terminals&focus=<id>, so the
+   * initial view and the focused pin come from the URL. Read once at mount:
+   * the view is state afterwards, and re-reading would fight the toggles.
+   */
+  const initialParams = useMemo(() => {
+    if (typeof window === "undefined") return { view: null as string | null, focus: null as string | null };
+    const q = new URLSearchParams(window.location.search);
+    return { view: q.get("view"), focus: q.get("focus") };
+  }, []);
+  const focusParam = initialParams.focus;
+  const [view, setView] = useState<ViewMode>(
+    initialParams.view === "terminals" ? "terminals" : "grid",
+  );
   const [filter, setFilter] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortMode>("name-asc");
@@ -1444,7 +1478,7 @@ export function AgencyDashboard() {
             <Pagination page={page} totalPages={totalPages} onPage={setPage} />
           </>
         ) : view === "terminals" ? (
-          <TerminalMapView />
+          <TerminalMapView focusId={focusParam ?? undefined} />
         ) : (
           <MapView agents={filteredAndSorted} onSelect={setSelected} activeAssignmentsMap={activeAssignmentsMap} />
         )}

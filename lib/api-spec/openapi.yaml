@@ -2379,11 +2379,11 @@ paths:
                 items:
                   $ref: "#/components/schemas/TerminalAssignmentRecord"
 
-  /inventory/terminal-assignments/{id}/return:
+  /inventory/terminal-assignments/{id}/unassign:
     post:
-      operationId: returnTerminalAssignment
+      operationId: unassignTerminalAssignment
       tags: [inventory]
-      summary: Record a terminal as handed back
+      summary: End a terminal/writer pairing and record the date
       security:
         - bearerAuth: []
       parameters:
@@ -2397,7 +2397,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TerminalReturnInput"
+              $ref: "#/components/schemas/TerminalUnassignInput"
       responses:
         "200":
           description: OK
@@ -4535,11 +4535,16 @@ components:
         notes:
           type: string
 
-    TerminalReturnInput:
+    TerminalUnassignInput:
       type: object
       properties:
         notes:
           type: string
+        # Decides where the device rests. "working" returns it to stock;
+        # "faulty" holds it in repair so it cannot be reissued broken.
+        condition:
+          type: string
+          enum: [working, faulty]
 
     TerminalAssignmentRecord:
       type: object
@@ -4567,7 +4572,7 @@ components:
           type: ["string", "null"]
         assignedAt:
           type: string
-        returnedAt:
+        unassignedAt:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]

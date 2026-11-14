@@ -92,7 +92,13 @@ export const posTerminalsTable = pgTable("pos_terminals", {
   model: varchar("model", { length: 100 }).notNull(),
   /** 15 digits on nearly every device; the column is wider so a 16/17-digit IMEISV still fits. */
   imei: varchar("imei", { length: 20 }).notNull().unique(),
-  /** "available", "assigned", "damaged", "lost", "retired" - mirrors padlocks. */
+  /**
+   * "available", "assigned", "repair", "damaged", "lost", "retired".
+   *
+   * "repair" is what a device unassigned as faulty rests in. Only "available"
+   * terminals are offered for assignment, so a known-broken unit cannot be
+   * handed to the next writer by someone who did not know.
+   */
   status: varchar("status", { length: 50 }).notNull().default("available"),
   notes: text("notes"),
   registeredAt: timestamp("registered_at", { withTimezone: true }).notNull().defaultNow(),
@@ -105,16 +111,23 @@ export const posTerminalsTable = pgTable("pos_terminals", {
 },
   (table) => [
     index("pos_terminals_status_idx").on(table.status),
+    // Every assignment reads the stock list, and stock is "status = available".
+    index("pos_terminals_available_idx")
+      .on(table.status)
+      .where(sql`${table.status} = 'available'`),
   ],
 );
 
 /**
  * Which writer holds which terminal, and who held it before.
  *
- * Append-and-close rather than overwrite: reassigning a device stamps
- * returnedAt on the old row and inserts a new one, so "who had this terminal in
- * September" stays answerable. A current holding is the row whose returnedAt is
- * still null.
+ * Append-and-close rather than overwrite: unassigning a device stamps
+ * unassignedAt on the old row, so "who had this terminal in September" stays
+ * answerable. A current holding is the row whose unassignedAt is still null.
+ *
+ * Not "returned": a terminal is not lent out and handed back, it stays with a
+ * writer indefinitely and the pairing ends when something changes - usually a
+ * fault. The column records the date that happened.
  *
  * The two partial unique indexes are what actually enforce "one terminal per
  * writer". Checking that in the route is not enough - two assignment requests
@@ -128,7 +141,7 @@ export const terminalAssignmentsTable = pgTable("terminal_assignments", {
   terminalId: uuid("terminal_id").notNull().references(() => posTerminalsTable.id),
   writerId: uuid("writer_id").notNull().references(() => writersTable.id),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
-  returnedAt: timestamp("returned_at", { withTimezone: true }),
+  unassignedAt: timestamp("unassigned_at", { withTimezone: true }),
   notes: text("notes"),
   assignedBy: uuid("assigned_by").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -140,10 +153,10 @@ export const terminalAssignmentsTable = pgTable("terminal_assignments", {
   (table) => [
     uniqueIndex("terminal_assignments_one_open_per_writer")
       .on(table.writerId)
-      .where(sql`${table.returnedAt} is null`),
+      .where(sql`${table.unassignedAt} is null`),
     uniqueIndex("terminal_assignments_one_open_per_terminal")
       .on(table.terminalId)
-      .where(sql`${table.returnedAt} is null`),
+      .where(sql`${table.unassignedAt} is null`),
     index("terminal_assignments_terminal_idx").on(table.terminalId, table.assignedAt),
     index("terminal_assignments_writer_idx").on(table.writerId, table.assignedAt),
   ],

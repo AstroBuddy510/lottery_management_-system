@@ -4,7 +4,7 @@ import {
   useCreateTerminal,
   useAssignTerminal,
   useListTerminalAssignments,
-  useReturnTerminalAssignment,
+  useUnassignTerminalAssignment,
   getListTerminalsQueryKey,
   getListTerminalAssignmentsQueryKey,
   type TerminalWithStatus,
@@ -24,7 +24,8 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Plus, Smartphone, UserCheck, RotateCcw } from "lucide-react";
+import { Plus, Smartphone, UserCheck, LinkIcon, Wrench, MapPin } from "lucide-react";
+import { Link } from "wouter";
 
 /**
  * How recently the holder must have sold for a terminal to read as active.
@@ -69,10 +70,20 @@ function fmtDate(iso: string | null | undefined): string {
  */
 function StatusDot({ terminal }: { terminal: TerminalWithStatus }) {
   if (!terminal.writerId) {
+    // A unit held for repairs is not stock, and calling it "In stock" told the
+    // reader it could be handed out when the row's own action said otherwise.
+    const resting: Record<string, [string, string, string]> = {
+      available: ["bg-slate-300", "text-slate-500", "In stock"],
+      repair:    ["bg-amber-500", "text-amber-700", "In repair"],
+      damaged:   ["bg-amber-600", "text-amber-800", "Damaged"],
+      lost:      ["bg-slate-500", "text-slate-600", "Lost"],
+      retired:   ["bg-slate-400", "text-slate-500", "Retired"],
+    };
+    const [dot, text, label] = resting[terminal.status] ?? ["bg-slate-300", "text-slate-500", terminal.status];
     return (
       <span className="inline-flex items-center gap-1.5">
-        <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block" aria-hidden="true" />
-        <span className="text-xs font-semibold text-slate-500">In stock</span>
+        <span className={`w-2.5 h-2.5 rounded-full inline-block ${dot}`} aria-hidden="true" />
+        <span className={`text-xs font-semibold ${text}`}>{label}</span>
       </span>
     );
   }
@@ -89,6 +100,52 @@ function StatusDot({ terminal }: { terminal: TerminalWithStatus }) {
       <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" aria-hidden="true" />
       <span className="text-xs font-semibold text-red-700">Inactive</span>
     </span>
+  );
+}
+
+export interface TerminalMetricsShape {
+  total: number;
+  assigned: number;
+  inStock: number;
+  repair: number;
+  outOfService: number;
+  active: number;
+  inactive: number;
+}
+
+/**
+ * The terminal estate in one row of figures.
+ *
+ * Exported because the Inventory overview shows the same numbers, and two
+ * copies of "what counts as in stock" is exactly how two screens end up
+ * disagreeing about how many terminals the company owns.
+ */
+export function TerminalMetrics({ metrics }: { metrics: TerminalMetricsShape }) {
+  const cards: [string, number, string, string, string][] = [
+    ["Total terminals", metrics.total, "text-slate-800", "bg-white border-slate-200", "Registered hardware"],
+    ["Assigned", metrics.assigned, "text-indigo-700", "bg-indigo-50 border-indigo-200", "With a writer"],
+    ["In stock", metrics.inStock, "text-slate-600", "bg-slate-50 border-slate-200", "Ready to assign"],
+    ["Active", metrics.active, "text-emerald-700", "bg-emerald-50 border-emerald-200", "Sold recently"],
+    ["Inactive", metrics.inactive, "text-red-700", "bg-red-50 border-red-200", "Assigned but silent"],
+    ["In repair", metrics.repair, "text-amber-700", "bg-amber-50 border-amber-200", "Held back as faulty"],
+  ];
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {cards.map(([label, count, text, box, sub]) => (
+        <div key={label} className={`rounded-xl border px-4 py-3 ${box}`}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+          <p className={`text-2xl font-bold font-mono ${text}`}>{count}</p>
+          <p className="text-[10px] text-muted-foreground">{sub}</p>
+        </div>
+      ))}
+      {metrics.outOfService > 0 && (
+        <div className="rounded-xl border px-4 py-3 bg-slate-100 border-slate-300 col-span-2 sm:col-span-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Out of service</p>
+          <p className="text-2xl font-bold font-mono text-slate-500">{metrics.outOfService}</p>
+          <p className="text-[10px] text-muted-foreground">Lost, damaged or retired</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -118,14 +175,16 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
 
   const createTerminal = useCreateTerminal();
   const assignTerminal = useAssignTerminal();
-  const returnAssignment = useReturnTerminalAssignment();
+  const unassignTerminal = useUnassignTerminalAssignment();
 
   const [form, setForm] = useState({ serialNumber: "", brand: "", model: "", imei: "", notes: "" });
   const [assignForm, setAssignForm] = useState({ terminalId: "", agentId: "", writerId: "", notes: "" });
 
   /** Only unheld, usable devices can be handed out. */
   const assignable = useMemo(
-    () => list.filter(t => !t.writerId && t.status !== "lost" && t.status !== "retired"),
+    // "available" only. A unit in repair is held back on purpose until someone
+    // says it works, which is the whole reason the status exists.
+    () => list.filter(t => !t.writerId && t.status === "available"),
     [list],
   );
 
@@ -133,7 +192,7 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
    * Writers who already hold a device.
    *
    * The writer picker lists only unassigned writers, so swapping a device is
-   * two deliberate steps - Return the old terminal, then assign the new one -
+   * two deliberate steps - unassign the old terminal, then assign the new one -
    * rather than one action that quietly pulls a terminal out of someone's
    * hands as a side effect.
    */
@@ -192,9 +251,18 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
     }
   }, [agentRoster, assignForm.writerId]);
 
-  const activeCount = list.filter(t => t.writerId && t.isActive).length;
-  const inactiveCount = list.filter(t => t.writerId && !t.isActive).length;
-  const stockCount = list.filter(t => !t.writerId).length;
+  const metrics = useMemo(() => {
+    const assigned = list.filter(t => !!t.writerId);
+    return {
+      total: list.length,
+      assigned: assigned.length,
+      inStock: list.filter(t => !t.writerId && t.status === "available").length,
+      repair: list.filter(t => t.status === "repair").length,
+      outOfService: list.filter(t => ["lost", "retired", "damaged"].includes(t.status)).length,
+      active: assigned.filter(t => t.isActive).length,
+      inactive: assigned.filter(t => !t.isActive).length,
+    };
+  }, [list]);
 
   const submitRegister = async () => {
     const imei = form.imei.replace(/[\s-]/g, "");
@@ -258,13 +326,29 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
     setAssignOpen(true);
   };
 
-  const handleReturn = async (assignmentId: string, serial: string) => {
+  /** The row whose pairing is being ended, while the dialog asks about condition. */
+  const [unassigning, setUnassigning] = useState<TerminalWithStatus | null>(null);
+  const [unassignCondition, setUnassignCondition] = useState<"working" | "faulty">("working");
+  const [unassignNotes, setUnassignNotes] = useState("");
+
+  const submitUnassign = async () => {
+    if (!unassigning?.assignmentId) return;
     try {
-      await returnAssignment.mutateAsync({ id: assignmentId, data: {} });
-      toast.success(`Terminal ${serial} returned to stock`);
+      await unassignTerminal.mutateAsync({
+        id: unassigning.assignmentId,
+        data: { condition: unassignCondition, notes: unassignNotes.trim() || undefined },
+      });
+      toast.success(
+        unassignCondition === "faulty"
+          ? `${unassigning.serialNumber} unassigned and held for repair`
+          : `${unassigning.serialNumber} unassigned and back in stock`,
+      );
+      setUnassigning(null);
+      setUnassignCondition("working");
+      setUnassignNotes("");
       invalidate();
     } catch (err: any) {
-      toast.error(err?.data?.error ?? "Failed to record return");
+      toast.error(err?.data?.error ?? "Failed to unassign terminal");
     }
   };
 
@@ -305,19 +389,10 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
         )}
       </div>
 
-      {/* Status summary */}
-      <div className="grid grid-cols-3 gap-3">
-        {([
-          ["Active", activeCount, "text-emerald-700", "bg-emerald-50 border-emerald-200"],
-          ["Inactive", inactiveCount, "text-red-700", "bg-red-50 border-red-200"],
-          ["In stock", stockCount, "text-slate-600", "bg-slate-50 border-slate-200"],
-        ] as [string, number, string, string][]).map(([label, count, text, box]) => (
-          <div key={label} className={`rounded-xl border px-4 py-3 ${box}`}>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-            <p className={`text-2xl font-bold font-mono ${text}`}>{count}</p>
-          </div>
-        ))}
-      </div>
+      {/* Status summary. Total first, then where the estate sits, then how much
+          of the assigned half is actually selling - each row answers the next
+          question the one above it raises. */}
+      <TerminalMetrics metrics={metrics} />
 
       <p className="text-[11px] text-muted-foreground">
         Active means the holding writer has sold within the last {ACTIVE_WINDOW_MINUTES} minutes. Sales are
@@ -332,24 +407,26 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
               <TableRow>
                 <TableHead className="font-bold">Status</TableHead>
                 <TableHead className="font-bold">Serial Number</TableHead>
-                <TableHead className="font-bold">Brand / Model</TableHead>
+                <TableHead className="font-bold">Brand</TableHead>
+                <TableHead className="font-bold">Model</TableHead>
                 <TableHead className="font-bold">IMEI</TableHead>
                 <TableHead className="font-bold">Assigned Writer</TableHead>
-                <TableHead className="font-bold">Last Sale</TableHead>
-                <TableHead className="font-bold">Registered</TableHead>
+                <TableHead className="font-bold">Last Sales</TableHead>
+                <TableHead className="font-bold">Location</TableHead>
+                <TableHead className="font-bold">Registration Date</TableHead>
                 {canManage && <TableHead className="font-bold text-right">Action</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 8 : 7} className="text-center py-12">
+                  <TableCell colSpan={canManage ? 10 : 9} className="text-center py-12">
                     <Skeleton className="h-6 w-1/2 mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : list.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canManage ? 8 : 7} className="text-center py-12 text-muted-foreground text-xs italic">
+                  <TableCell colSpan={canManage ? 10 : 9} className="text-center py-12 text-muted-foreground text-xs italic">
                     No POS terminals registered yet.
                   </TableCell>
                 </TableRow>
@@ -357,10 +434,8 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                 <TableRow key={t.id}>
                   <TableCell><StatusDot terminal={t} /></TableCell>
                   <TableCell className="font-mono text-sm font-semibold">{t.serialNumber}</TableCell>
-                  <TableCell className="text-sm">
-                    <div className="font-medium">{t.brand}</div>
-                    <div className="text-xs text-muted-foreground">{t.model}</div>
-                  </TableCell>
+                  <TableCell className="text-sm">{t.brand}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{t.model}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{t.imei}</TableCell>
                   <TableCell className="text-sm">
                     {t.writerId ? (
@@ -380,6 +455,28 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                       <div className="text-[10px]">{t.salesToday} today</div>
                     )}
                   </TableCell>
+                  {/* Location is the writer's, because that is where the device
+                      physically is. Clicking it opens the Agency Dashboard map
+                      focused on this pin rather than leaving someone to find one
+                      code among dozens. */}
+                  <TableCell className="text-xs">
+                    {t.writerId && t.writerLat && t.writerLng ? (
+                      <Link
+                        href={`/agencies?view=terminals&focus=${t.id}`}
+                        className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                        title={`Show ${t.serialNumber} on the terminal map`}
+                      >
+                        <MapPin className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate max-w-[150px]">{t.writerLocation ?? "View on map"}</span>
+                      </Link>
+                    ) : t.writerId ? (
+                      <span className="text-muted-foreground" title="This writer has no location set, so the terminal cannot be mapped">
+                        {t.writerLocation ?? "no location set"}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{fmtDate(t.registeredAt)}</TableCell>
                   {canManage && (
                     <TableCell className="text-right">
@@ -388,12 +485,17 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                           size="sm"
                           variant="ghost"
                           className="h-7 text-[11px]"
-                          onClick={() => handleReturn(t.assignmentId!, t.serialNumber)}
+                          onClick={() => { setUnassigning(t); setUnassignCondition("working"); setUnassignNotes(""); }}
                         >
-                          <RotateCcw className="w-3 h-3 mr-1" />
-                          Return
+                          <LinkIcon className="w-3 h-3 mr-1" />
+                          Unassign
                         </Button>
-                      ) : t.status === "lost" || t.status === "retired" ? (
+                      ) : t.status === "repair" ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-amber-700" title="Held back as faulty. Mark it repaired before it can be assigned again.">
+                          <Wrench className="w-3 h-3" />
+                          In repair
+                        </span>
+                      ) : t.status !== "available" ? (
                         <span className="text-[11px] text-muted-foreground capitalize">{t.status}</span>
                       ) : (
                         /* Assign from the row itself. Reaching the dialog from
@@ -427,7 +529,7 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                 <TableHead className="font-bold">Writer</TableHead>
                 <TableHead className="font-bold">Agency</TableHead>
                 <TableHead className="font-bold">Assigned</TableHead>
-                <TableHead className="font-bold">Returned</TableHead>
+                <TableHead className="font-bold">Unassigned</TableHead>
                 <TableHead className="font-bold">Notes</TableHead>
               </TableRow>
             </TableHeader>
@@ -451,8 +553,8 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
                   <TableCell className="text-xs text-muted-foreground">{h.agencyName ?? "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{fmtDate(h.assignedAt)}</TableCell>
                   <TableCell className="text-xs">
-                    {h.returnedAt
-                      ? <span className="text-muted-foreground">{fmtDate(h.returnedAt)}</span>
+                    {h.unassignedAt
+                      ? <span className="text-muted-foreground">{fmtDate(h.unassignedAt)}</span>
                       : <Badge className="text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200">Current</Badge>}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">{h.notes ?? "—"}</TableCell>
@@ -462,6 +564,73 @@ export function TerminalsManager({ canManage }: { canManage: boolean }) {
           </Table>
         </div>
       )}
+
+      {/* ─── Unassign dialog ─── */}
+      <Dialog open={!!unassigning} onOpenChange={o => { if (!o) setUnassigning(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LinkIcon className="w-4 h-4" /> Unassign Terminal
+            </DialogTitle>
+            <DialogDescription>
+              {unassigning && (
+                <>
+                  {unassigning.serialNumber} is with {unassigning.writerCode} — {unassigning.writerName}.
+                  Today's date is recorded as the unassignment date and the pairing stays in the history.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Condition of the device</Label>
+              {/* This is the question that decides whether the unit can be
+                  handed to someone else. Asked plainly, with the consequence
+                  spelled out, because a wrong answer here puts a broken
+                  terminal in a writer's hands next week. */}
+              <div className="grid grid-cols-1 gap-2">
+                {([
+                  ["working", "Working — return to stock", "Goes straight back into available stock and can be assigned to another writer."],
+                  ["faulty", "Faulty — hold for repairs", "Held in repair and kept out of the assignment list until someone marks it working again."],
+                ] as ["working" | "faulty", string, string][]).map(([value, label, help]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setUnassignCondition(value)}
+                    className={`text-left rounded-xl border px-4 py-3 transition-colors ${
+                      unassignCondition === value
+                        ? value === "faulty"
+                          ? "border-amber-400 bg-amber-50"
+                          : "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    <p className="text-sm font-semibold">{label}</p>
+                    <p className="text-[11px] text-muted-foreground">{help}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="unassign-notes">Notes (optional)</Label>
+              <Input
+                id="unassign-notes"
+                value={unassignNotes}
+                onChange={e => setUnassignNotes(e.target.value)}
+                placeholder={unassignCondition === "faulty" ? "What is wrong with it?" : "Anything worth recording"}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnassigning(null)}>Cancel</Button>
+            <Button onClick={submitUnassign} disabled={unassignTerminal.isPending}>
+              {unassignTerminal.isPending
+                ? "Unassigning…"
+                : unassignCondition === "faulty" ? "Unassign & hold for repair" : "Unassign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ─── Register dialog ─── */}
       <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>

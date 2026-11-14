@@ -23,7 +23,7 @@ import {
   UpdatePadlockAssignmentBody,
   CreateTerminalBody,
   AssignTerminalBody,
-  ReturnTerminalAssignmentBody,
+  UnassignTerminalAssignmentBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { uniqueViolation } from "../lib/pg-errors";
@@ -772,7 +772,7 @@ router.get(
           terminalAssignmentsTable,
           and(
             eq(terminalAssignmentsTable.terminalId, posTerminalsTable.id),
-            isNull(terminalAssignmentsTable.returnedAt),
+            isNull(terminalAssignmentsTable.unassignedAt),
           ),
         )
         .leftJoin(writersTable, eq(terminalAssignmentsTable.writerId, writersTable.id))
@@ -921,8 +921,15 @@ router.post(
         res.status(404).json({ error: "Terminal not found" });
         return;
       }
-      if (terminal.status === "lost" || terminal.status === "retired") {
-        res.status(409).json({ error: `Terminal ${terminal.serialNumber} is marked ${terminal.status}` });
+      // Only stock is assignable. A unit in repair is deliberately refused:
+      // the whole point of parking it there is that nobody hands it out again
+      // without someone first saying it works.
+      if (terminal.status !== "available") {
+        res.status(409).json({
+          error: terminal.status === "assigned"
+            ? `Terminal ${terminal.serialNumber} is already with a writer`
+            : `Terminal ${terminal.serialNumber} is marked ${terminal.status} and cannot be assigned`,
+        });
         return;
       }
 
@@ -961,11 +968,11 @@ router.post(
         // device can be put back in stock without having to guess which it was.
         const freedByWriter = await tx
           .update(terminalAssignmentsTable)
-          .set({ returnedAt: now })
+          .set({ unassignedAt: now })
           .where(
             and(
               eq(terminalAssignmentsTable.writerId, writerId),
-              isNull(terminalAssignmentsTable.returnedAt),
+              isNull(terminalAssignmentsTable.unassignedAt),
             ),
           )
           .returning({ terminalId: terminalAssignmentsTable.terminalId });
@@ -973,11 +980,11 @@ router.post(
         // And whoever was holding this terminal gives it up.
         await tx
           .update(terminalAssignmentsTable)
-          .set({ returnedAt: now })
+          .set({ unassignedAt: now })
           .where(
             and(
               eq(terminalAssignmentsTable.terminalId, terminalId),
-              isNull(terminalAssignmentsTable.returnedAt),
+              isNull(terminalAssignmentsTable.unassignedAt),
             ),
           );
 
@@ -1051,7 +1058,7 @@ const terminalAssignmentSelection = {
   writerPhone: writersTable.phone,
   agencyName: agentsTable.agencyName,
   assignedAt: terminalAssignmentsTable.assignedAt,
-  returnedAt: terminalAssignmentsTable.returnedAt,
+  unassignedAt: terminalAssignmentsTable.unassignedAt,
   notes: terminalAssignmentsTable.notes,
   assignedBy: terminalAssignmentsTable.assignedBy,
   createdAt: terminalAssignmentsTable.createdAt,
@@ -1081,16 +1088,31 @@ router.get(
 );
 
 router.post(
-  "/inventory/terminal-assignments/:id/return",
+  "/inventory/terminal-assignments/:id/unassign",
   requireAuth,
   requireRole("director", "administrator"),
   async (req, res) => {
     const id = req.params["id"] as string;
-    const parse = ReturnTerminalAssignmentBody.safeParse(req.body ?? {});
+    const parse = UnassignTerminalAssignmentBody.safeParse(req.body ?? {});
     if (!parse.success) {
       res.status(400).json({ error: "Invalid request body", details: parse.error.format() });
       return;
     }
+
+    /*
+     * Where the device rests afterwards.
+     *
+     * A terminal comes off a writer for a reason, and the common one is that
+     * it stopped working. Sending every unassigned unit straight back to
+     * "available" meant the next writer could be handed a device the last one
+     * had just reported broken, with nothing in the system to say so.
+     *
+     * Defaults to working, because an unassignment with no condition stated is
+     * an ordinary move rather than a fault, and parking healthy devices in
+     * repair would train people to ignore the status.
+     */
+    const faulty = parse.data.condition === "faulty";
+    const restingStatus = faulty ? "repair" : "available";
 
     try {
       const [existing] = await db
@@ -1102,8 +1124,8 @@ router.post(
         res.status(404).json({ error: "Terminal assignment not found" });
         return;
       }
-      if (existing.returnedAt) {
-        res.status(409).json({ error: "That terminal has already been handed back" });
+      if (existing.unassignedAt) {
+        res.status(409).json({ error: "That terminal has already been unassigned" });
         return;
       }
 
@@ -1111,14 +1133,14 @@ router.post(
         await tx
           .update(terminalAssignmentsTable)
           .set({
-            returnedAt: new Date(),
+            unassignedAt: new Date(),
             // Keep the note written at assignment if no new one is given.
             notes: parse.data.notes?.trim() || existing.notes,
           })
           .where(eq(terminalAssignmentsTable.id, id));
         await tx
           .update(posTerminalsTable)
-          .set({ status: "available" })
+          .set({ status: restingStatus })
           .where(eq(posTerminalsTable.id, existing.terminalId));
       });
 
@@ -1133,8 +1155,8 @@ router.post(
 
       res.json(record);
     } catch (error) {
-      console.error("Error returning terminal:", error);
-      res.status(500).json({ error: "Failed to record terminal return" });
+      console.error("Error unassigning terminal:", error);
+      res.status(500).json({ error: "Failed to unassign terminal" });
     }
   },
 );
