@@ -132,7 +132,7 @@ export function Calculations() {
     if (!runDate) return;
     const game = selectedRunGameId !== "_none" ? gameList.find(g => g.id === selectedRunGameId) : null;
     if (!game) {
-      toast({ title: "Please select a game event to run calculations", variant: "destructive" });
+      toast({ title: "Please select a game event to run draws", variant: "destructive" });
       return;
     }
     if (!isDrawNumbersValid) {
@@ -141,7 +141,7 @@ export function Calculations() {
     }
 
     const label = `${game.eventNumber} — ${game.name} (${runDate})`;
-    if (!confirm(`Run calculations for ${label}?\n\nThis will lock all gross and wins entries for ${runDate}.`)) return;
+    if (!confirm(`Run draws for ${label}?\n\nThis will lock all gross and wins entries for ${runDate}.`)) return;
     try {
       const result = await runMutation.mutateAsync({
         data: {
@@ -152,7 +152,7 @@ export function Calculations() {
         }
       });
       const count = (result as { calculated?: number })?.calculated ?? 0;
-      toast({ title: `Calculations complete — ${count} writer${count !== 1 ? "s" : ""} processed` });
+      toast({ title: `Draws complete — ${count} writer${count !== 1 ? "s" : ""} processed` });
       qc.invalidateQueries({ queryKey: getListCalculationsQueryKey({}) });
       qc.invalidateQueries({ queryKey: getListGamesQueryKey() });
       setWinningNumbers(["", "", "", "", ""]);
@@ -165,7 +165,7 @@ export function Calculations() {
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
         (err as Error)?.message;
       toast({
-        title: "Failed to run calculations",
+        title: "Failed to run draws",
         description: detail,
         variant: "destructive",
       });
@@ -243,7 +243,7 @@ export function Calculations() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Calculations</h1>
+          <h1 className="text-xl font-bold tracking-tight">Run Draws</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Process daily agent balances, claim payouts, and reserve allocations.
           </p>
@@ -257,7 +257,7 @@ export function Calculations() {
         <TabsList className="grid w-full max-w-[620px] grid-cols-3 bg-muted/40 p-1 rounded-xl">
           <TabsTrigger value="run" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Calculator className="w-4 h-4" />
-            Run Calculations
+            Run Draws
           </TabsTrigger>
           <TabsTrigger value="payouts" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Trophy className="w-4 h-4" />
@@ -276,7 +276,7 @@ export function Calculations() {
               <CardHeader className="pb-4">
                 <CardTitle className="text-base font-semibold">Select Game &amp; Run</CardTitle>
                 <CardDescription className="text-xs">
-                  Choose a game event from the calendar schedule to load its calculation properties.
+                  Choose a game event from the calendar schedule to load its draw properties.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -304,7 +304,7 @@ export function Calculations() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Calculation Date</Label>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Draw Date</Label>
                     <Input
                       type="date"
                       value={runDate}
@@ -392,7 +392,7 @@ export function Calculations() {
                     ) : (
                       <span className="flex items-center gap-1.5">
                         <Play className="w-4.5 h-4.5 fill-current" />
-                        Run Calculations
+                        Run Draws
                       </span>
                     )}
                   </Button>
@@ -462,7 +462,7 @@ export function Calculations() {
             <div className="rounded-xl border border-border/40 bg-muted/20 px-4 py-3.5 text-xs text-muted-foreground flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
               <span>
-                Calculations will process all gross and wins entries entered for <span className="font-semibold text-foreground font-mono">{runDate}</span>. Select a different game above to automatically jump to that event's date.
+                The draw will process all gross and wins entries entered for <span className="font-semibold text-foreground font-mono">{runDate}</span>. Select a different game above to automatically jump to that event's date.
               </span>
             </div>
           )}
@@ -479,7 +479,7 @@ export function Calculations() {
             <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-sm font-semibold">Ledger History Filters</CardTitle>
-                <CardDescription className="text-[11px]">Filter game calculation archives by specific event schedules or agent targets.</CardDescription>
+                <CardDescription className="text-[11px]">Filter game draw archives by specific event schedules or agent targets.</CardDescription>
               </div>
               {(filterAgentId || historyGameId !== "_all") && (
                 <Button
@@ -627,8 +627,8 @@ export function Calculations() {
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
                         {selectedHistoryGame
-                          ? `No calculations found for ${selectedHistoryGame.name} (${gameLiveDate(selectedHistoryGame)} – ${gameCloseDate(selectedHistoryGame)}).`
-                          : "No calculations found."}
+                          ? `No draws found for ${selectedHistoryGame.name} (${gameLiveDate(selectedHistoryGame)} – ${gameCloseDate(selectedHistoryGame)}).`
+                          : "No draws found."}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -661,7 +661,7 @@ export function Calculations() {
                                     <TableCell colSpan={8} className="py-2.5 px-4 font-bold text-xs text-indigo-900 dark:text-indigo-300">
                                       <div className="flex items-center gap-2">
                                         <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                                        <span>Calculations for {dateFormatted}</span>
+                                        <span>Draw for {dateFormatted}</span>
                                       </div>
                                     </TableCell>
                                   </TableRow>

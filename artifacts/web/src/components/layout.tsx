@@ -30,7 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Agency Staff Expenses", path: "/agency-staff-expenses", roles: ["cashier", "administrator", "director"] },
   { label: "Company Expenses", path: "/company-expenses", roles: ["cashier", "administrator", "director"] },
   { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier", "administrator"] },
-  { label: "Calculations", path: "/calculations", roles: ["director", "administrator"] },
+  { label: "Run Draws", path: "/calculations", roles: ["director", "administrator"] },
   { label: "Reports", path: "/reports", roles: ["director", "administrator", "cashier"] },
   { label: "Wins Debt", path: "/wins-debt", roles: ["director", "administrator"] },
   { label: "Reserve Fund", path: "/reserve", roles: ["director", "administrator"] },
