@@ -23,6 +23,7 @@ import {
   generateAgentReportPDF,
   generateOrgReportPDF,
   generateGameSalesByAgencyPDF,
+  generatePosWinsReportPDF,
 } from "@/lib/pdf-generator";
 import { TokenReportView } from "@/components/token-report";
 
@@ -996,6 +997,175 @@ function GameSalesView() {
   );
 }
 
+// ── POS Wins Report ───────────────────────────────────────────────────────────
+/*
+ * What was paid out on portal tickets, and what is still on its way.
+ *
+ * Only tickets sold through a writer's POS can appear here - a payout request
+ * exists for nothing else. Wins an agent typed in by hand stay in the Agent
+ * and Organisation reports. That is the separation this tab exists to show:
+ * every cedi on it was verified by the system against a ticket it issued,
+ * approved by a cashier, and confirmed by Paystack.
+ */
+
+type PosWinsReport = {
+  paid: { count: number; total: string };
+  byAgency: Array<{ agentCode: string; agencyName: string | null; count: number; total: string }>;
+  byCashier: Array<{ cashierName: string; count: number; total: string }>;
+  pipeline: Partial<Record<string, { count: number; total: string }>>;
+  wallet: { available: string; held: string };
+  disbursements: Array<{
+    payoutId: string; paidAt: string | null; amount: string; transferReference: string | null;
+    payeeMomoNumber: string | null; ticketNumber: string; gameName: string; eventNumber: string;
+    writerCode: string; writerName: string; agentCode: string; agencyName: string | null; cashierName: string | null;
+  }>;
+};
+
+function PosWinsReportView() {
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const { data: r, isLoading, error, refetch } = useQuery<PosWinsReport>({
+    queryKey: ["pos-wins-report", dateFrom, dateTo],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+      const res = await fetch(`/api/reports/pos-wins?${params}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    },
+  });
+
+  const stage = (key: string) => r?.pipeline[key] ?? { count: 0, total: "0" };
+  const unclaimed = { count: stage("pending").count + stage("approved").count, total: Number(stage("pending").total) + Number(stage("approved").total) };
+
+  return (
+    <div className="space-y-4 pt-4">
+      <ParamPanel onRun={() => void refetch()} loading={isLoading} buttonLabel="Refresh" hint="Payouts confirmed by Paystack in the period. The pipeline figures below are as of now.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">From</Label>
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 text-sm bg-background" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">To</Label>
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 text-sm bg-background" />
+          </div>
+        </div>
+        <DateShortcuts onSelect={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+      </ParamPanel>
+
+      {error && (
+        <div className="text-center py-8 text-sm text-red-600 border border-red-200 rounded-xl">
+          Failed to load report. Please try again.
+        </div>
+      )}
+
+      {r && (
+        <div className="space-y-4">
+          <ReportLetterhead
+            title="POS Wins Payment Report"
+            subtitle="Portal tickets only — verified, cashier-approved, paid by Paystack"
+            dateFrom={dateFrom} dateTo={dateTo}
+            onExportPDF={() => generatePosWinsReportPDF(dateFrom, dateTo, r.paid, r.byAgency, r.byCashier, r.disbursements, r.wallet)}
+          />
+
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {[
+              { label: "Paid in period", value: ghs(r.paid.total), sub: `${r.paid.count} payout${r.paid.count === 1 ? "" : "s"}`, cls: "text-green-600 dark:text-green-400" },
+              { label: "Awaiting claim", value: ghs(unclaimed.total), sub: `${unclaimed.count} winning ticket${unclaimed.count === 1 ? "" : "s"} not yet scanned`, cls: "" },
+              { label: "With cashier", value: ghs(Number(stage("verified").total) + Number(stage("processing").total)), sub: `${stage("verified").count + stage("processing").count} in payment`, cls: "text-blue-600 dark:text-blue-400" },
+              { label: "Awaiting funds", value: ghs(stage("awaiting_funds").total), sub: `${stage("awaiting_funds").count} not yet covered`, cls: stage("awaiting_funds").count ? "text-amber-600" : "" },
+              { label: "Flagged / withheld", value: ghs(Number(stage("rejected").total) + Number(stage("withheld").total)), sub: `${stage("rejected").count} in review · ${stage("withheld").count} withheld`, cls: stage("rejected").count ? "text-rose-600" : "" },
+            ].map(({ label, value, sub, cls }) => (
+              <div key={label} className="rounded-xl border bg-card px-3 py-2.5">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</div>
+                <div className={`font-mono font-bold text-sm ${cls}`}>{value}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {[
+              { title: "By agency", rows: r.byAgency.map(a => ({ key: a.agentCode, name: a.agencyName ?? a.agentCode, sub: a.agentCode, count: a.count, total: a.total })) },
+              { title: "By approving cashier", rows: r.byCashier.map(c => ({ key: c.cashierName, name: c.cashierName, sub: "", count: c.count, total: c.total })) },
+            ].map(block => (
+              <div key={block.title} className="rounded-xl border overflow-hidden">
+                <div className="bg-muted/40 px-4 py-2.5 border-b text-xs font-semibold uppercase tracking-wide text-muted-foreground">{block.title}</div>
+                <Table>
+                  <TableBody>
+                    {block.rows.length === 0 ? (
+                      <TableRow><TableCell className="text-sm text-muted-foreground text-center py-6">Nothing paid in this period.</TableCell></TableRow>
+                    ) : block.rows.map(row => (
+                      <TableRow key={row.key}>
+                        <TableCell>
+                          <div className="text-sm font-semibold">{row.name}</div>
+                          {row.sub && <div className="text-[10px] font-mono text-muted-foreground">{row.sub}</div>}
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">{row.count} payout{row.count === 1 ? "" : "s"}</TableCell>
+                        <TableCell className="text-right font-mono text-sm font-semibold">{ghs(row.total)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-xl border overflow-hidden">
+            <div className="bg-muted/40 px-4 py-2.5 border-b flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Disbursements</span>
+              <span className="text-xs text-muted-foreground">{r.disbursements.length} in period</span>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/20">
+                  <TableHead className="text-xs">Paid</TableHead>
+                  <TableHead className="text-xs">Ticket</TableHead>
+                  <TableHead className="text-xs">Writer</TableHead>
+                  <TableHead className="text-xs">MoMo wallet</TableHead>
+                  <TableHead className="text-xs">Approved by</TableHead>
+                  <TableHead className="text-xs">Paystack reference</TableHead>
+                  <TableHead className="text-right text-xs">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {r.disbursements.length === 0 ? (
+                  <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground text-center py-8">No POS wins were paid in this period.</TableCell></TableRow>
+                ) : r.disbursements.map(d => (
+                  <TableRow key={d.payoutId} className="hover:bg-muted/20">
+                    <TableCell className="text-xs whitespace-nowrap">{d.paidAt ? new Date(d.paidAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—"}</TableCell>
+                    <TableCell>
+                      <div className="font-mono text-xs font-semibold">{d.ticketNumber}</div>
+                      <div className="text-[10px] text-muted-foreground">{d.gameName} #{d.eventNumber}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-xs">{d.writerName}</div>
+                      <div className="text-[10px] font-mono text-muted-foreground">{d.writerCode} · {d.agentCode}</div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{d.payeeMomoNumber ?? "—"}</TableCell>
+                    <TableCell className="text-xs">{d.cashierName ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-[10px] text-muted-foreground">{d.transferReference}</TableCell>
+                    <TableCell className="text-right font-mono text-sm font-semibold">{ghs(d.amount)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <tfoot>
+                <tr className="border-t-2 bg-muted/30">
+                  <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground" colSpan={6}>Total paid</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-sm font-bold">{ghs(r.paid.total)}</td>
+                </tr>
+              </tfoot>
+            </Table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function Reports() {
@@ -1021,12 +1191,14 @@ export function Reports() {
           <TabsTrigger value="writer">Writer</TabsTrigger>
           <TabsTrigger value="agent">Agent</TabsTrigger>
           <TabsTrigger value="gamesales">Game Sales</TabsTrigger>
+          <TabsTrigger value="poswins">POS Wins</TabsTrigger>
           {isDirectorOrAdmin && <TabsTrigger value="org">Organisation</TabsTrigger>}
           {isDirectorOrAdmin && <TabsTrigger value="tokens">E-Tokens</TabsTrigger>}
         </TabsList>
         <TabsContent value="writer"><WriterReportView /></TabsContent>
         <TabsContent value="agent"><AgentReportView /></TabsContent>
         <TabsContent value="gamesales"><GameSalesView /></TabsContent>
+        <TabsContent value="poswins"><PosWinsReportView /></TabsContent>
         {isDirectorOrAdmin && <TabsContent value="org"><OrgReportView /></TabsContent>}
         {isDirectorOrAdmin && <TabsContent value="tokens"><TokenReportView /></TabsContent>}
       </Tabs>

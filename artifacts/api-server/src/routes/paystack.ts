@@ -6,6 +6,8 @@ import { dispatchSystemNotification } from "../lib/notify";
 import { paystackConfigured, paystackSecret, verifyWebhook } from "../lib/paystack";
 import { handlePurchaseWebhook } from "./writer-token-purchases";
 import { handleSettlementWebhook } from "./postpaid-settlement";
+import { handleTransferEvent } from "../lib/payout-disbursement";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -49,6 +51,28 @@ router.post("/paystack/webhook", async (req, res) => {
   const check = verifyWebhook(req);
   if (!check.ok) {
     res.status(check.status).json({ error: check.reason });
+    return;
+  }
+
+  /**
+   * Money going OUT. A transfer carries no metadata of ours, so it is told
+   * apart by its event name and matched by the reference we gave it.
+   *
+   * Answered 200 whatever happens inside: Paystack retries anything else, and
+   * the handler is idempotent and confirms with the API itself, so a failure
+   * here is better found by "Check status" than by a retry storm.
+   */
+  const eventName = (req.body as { event?: string })?.event ?? "";
+  if (eventName.startsWith("transfer.")) {
+    const reference = (req.body as { data?: { reference?: string } })?.data?.reference;
+    if (typeof reference === "string" && reference.length > 0) {
+      try {
+        await handleTransferEvent(eventName, reference);
+      } catch (err) {
+        logger.error({ err, eventName, reference }, "[PAYSTACK] transfer event could not be processed");
+      }
+    }
+    res.json({ received: true });
     return;
   }
 

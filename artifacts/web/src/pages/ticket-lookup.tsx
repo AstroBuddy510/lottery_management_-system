@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { cn, fmtGHS } from "@/lib/utils";
 import { TicketReceiptView, type TicketReceipt } from "@/components/ticket-receipt";
+import { FlaggedClaimsQueue } from "@/components/flagged-claims-queue";
 import {
   TicketAuditTimeline,
   AnomalyBadge,
@@ -134,8 +135,14 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
+/** A won ticket that has been claimed and is somewhere in the payment queue. */
+const IN_PAYMENT = ["verified", "awaiting_funds", "processing"];
+
 function statusTone(t: BrowseTicket): string {
   if (t.payoutStatus === "paid") return "bg-emerald-500/10 text-emerald-700 border-emerald-300/50";
+  if (t.payoutStatus === "rejected") return "bg-red-500/10 text-red-700 border-red-300/50";
+  if (t.payoutStatus === "withheld") return "bg-slate-500/10 text-slate-600 border-slate-300/50";
+  if (IN_PAYMENT.includes(t.payoutStatus ?? "")) return "bg-indigo-500/10 text-indigo-700 border-indigo-300/50";
   if (t.status === "won") return "bg-amber-400/10 text-amber-700 border-amber-300/60";
   if (t.status === "active") return "bg-blue-500/10 text-blue-700 border-blue-300/50";
   if (t.status === "void" || t.status === "cancelled")
@@ -145,6 +152,10 @@ function statusTone(t: BrowseTicket): string {
 
 function statusLabel(t: BrowseTicket): string {
   if (t.payoutStatus === "paid") return "REDEEMED";
+  // A cashier refused its payout; it is waiting on an administrator.
+  if (t.payoutStatus === "rejected") return "FLAGGED";
+  if (t.payoutStatus === "withheld") return "WITHHELD";
+  if (IN_PAYMENT.includes(t.payoutStatus ?? "")) return "WON · CLAIMED";
   return t.status.toUpperCase();
 }
 
@@ -152,7 +163,10 @@ export function TicketLookup() {
   const { user } = useAuth();
   const canSeeFraud = user?.role === "administrator" || user?.role === "director";
 
-  const [category, setCategory] = useState<CategoryKey>("all");
+  // Risk Management links straight to the flagged queue with ?tab=flagged.
+  const [category, setCategory] = useState<CategoryKey>(() =>
+    new URLSearchParams(window.location.search).get("tab") === "flagged" ? "flagged" : "all",
+  );
   const [input, setInput] = useState("");
   const [filter, setFilter] = useState("");
   const [scanQuery, setScanQuery] = useState<string | null>(null);
@@ -229,9 +243,18 @@ export function TicketLookup() {
   };
 
   const counts = browse.data?.counts ?? {};
+  // Payouts a cashier rejected count as flagged too, and are known without
+  // opening the tab - the queue shares this query, so it costs nothing extra.
+  const rejectedClaims = useQuery<{ requests: unknown[] }>({
+    queryKey: ["/api/pos-wins/flagged"],
+    queryFn: () => getJson("/api/pos-wins/flagged"),
+    enabled: canSeeFraud,
+    refetchInterval: 60_000,
+  });
+  const rejectedCount = rejectedClaims.data?.requests.length ?? 0;
   const flaggedCount = fraud.data
-    ? fraud.data.bySeverity.critical + fraud.data.bySeverity.high + fraud.data.bySeverity.medium
-    : undefined;
+    ? fraud.data.bySeverity.critical + fraud.data.bySeverity.high + fraud.data.bySeverity.medium + rejectedCount
+    : rejectedCount || undefined;
 
   const tickets = browse.data?.tickets ?? [];
 
@@ -348,14 +371,28 @@ export function TicketLookup() {
       )}
 
       {category === "flagged" ? (
-        <FraudPanel
-          data={fraud.data}
-          isLoading={fraud.isLoading}
-          onOpen={(ticketId) => {
-            setCategory("all");
-            setSelectedId(ticketId);
-          }}
-        />
+        <div className="space-y-6">
+          {/* What a person refused comes before what the rules noticed: these
+              are waiting on a decision, the anomalies below are a report. */}
+          {canSeeFraud && (
+            <FlaggedClaimsQueue
+              canAct={user?.role === "administrator"}
+              onOpenTicket={(ticketId) => {
+                setCategory("all");
+                setDate("");
+                setSelectedId(ticketId);
+              }}
+            />
+          )}
+          <FraudPanel
+            data={fraud.data}
+            isLoading={fraud.isLoading}
+            onOpen={(ticketId) => {
+              setCategory("all");
+              setSelectedId(ticketId);
+            }}
+          />
+        </div>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] xl:items-start">
           {/* ---- List ------------------------------------------------------ */}

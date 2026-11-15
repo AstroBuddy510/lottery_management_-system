@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, Home, Ticket, Wallet, User } from "lucide-react";
+import { LogOut, Home, Ticket, Wallet, User, Trophy } from "lucide-react";
 import { ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ClosingAlerts } from "@/components/closing-alerts";
@@ -99,6 +99,11 @@ export function WriterLayout({ children }: { children: ReactNode }) {
               <Ticket className="h-4 w-4" /> My Tickets
             </a>
           </Link>
+          <Link href="/writer/claims">
+            <a className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted text-sm font-medium">
+              <Trophy className="h-4 w-4" /> Claim Wins
+            </a>
+          </Link>
           <Link href="/writer/wallet">
             <a className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted text-sm font-medium">
               <Wallet className="h-4 w-4" /> Wallet & Ledger
@@ -154,6 +159,7 @@ export function WriterLayout({ children }: { children: ReactNode }) {
         <NavLink href="/writer/dashboard" icon={Home}>Home</NavLink>
         <NavLink href="/writer/place-bet" icon={Ticket}>Bet</NavLink>
         <NavLink href="/writer/tickets" icon={Ticket}>Tickets</NavLink>
+        <NavLink href="/writer/claims" icon={Trophy}>Claim</NavLink>
         <NavLink href="/writer/wallet" icon={Wallet}>Wallet</NavLink>
       </div>
     </div>

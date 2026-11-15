@@ -647,6 +647,177 @@ export async function generateTokenReportPDF(
   doc.save("etoken_supply_report.pdf");
 }
 
+// ─── 3b. POS WINS REPORT PDF ───
+/**
+ * POS wins paid over a period: the disbursements, then who they went through.
+ * Portal tickets only - wins an agent entered by hand never reach this report.
+ */
+export async function generatePosWinsReportPDF(
+  dateFrom: string,
+  dateTo: string,
+  paid: { count: number; total: string },
+  byAgency: Array<{ agentCode: string; agencyName: string | null; count: number; total: string }>,
+  byCashier: Array<{ cashierName: string; count: number; total: string }>,
+  disbursements: Array<{
+    paidAt: string | null; amount: string; ticketNumber: string; writerCode: string;
+    agentCode: string; gameName: string; eventNumber: string; cashierName: string | null;
+    payeeMomoNumber: string | null; transferReference: string | null;
+  }>,
+  wallet: { available: string; held: string },
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF({ orientation: "landscape" }) as any;
+
+  const startY = drawBrandHeader(
+    doc,
+    "POS Wins Payment Report",
+    [
+      { label: "Report ID", value: `PWP-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
+    ],
+    "Disbursed via Paystack",
+    [
+      `${paid.count} payout${paid.count === 1 ? "" : "s"} - ${fmt(paid.total)}`,
+      `Master Wallet available: ${fmt(wallet.available)}`,
+      `Held for claims in progress: ${fmt(wallet.held)}`,
+    ],
+    logoImg,
+  );
+
+  autoTable(doc, {
+    columns: [
+      { header: "Paid", dataKey: "paidAt" },
+      { header: "Ticket", dataKey: "ticket" },
+      { header: "Draw", dataKey: "draw" },
+      { header: "Writer", dataKey: "writer" },
+      { header: "Agency", dataKey: "agency" },
+      { header: "MoMo wallet", dataKey: "momo" },
+      { header: "Approved by", dataKey: "cashier" },
+      { header: "Reference", dataKey: "ref" },
+      { header: "Amount", dataKey: "amount" },
+    ],
+    body: disbursements.map((d) => ({
+      paidAt: d.paidAt ? new Date(d.paidAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }) : "-",
+      ticket: d.ticketNumber,
+      draw: `${d.gameName} #${d.eventNumber}`,
+      writer: d.writerCode,
+      agency: d.agentCode,
+      momo: d.payeeMomoNumber ?? "-",
+      cashier: d.cashierName ?? "-",
+      ref: d.transferReference ?? "-",
+      amount: fmt(d.amount),
+    })),
+    startY,
+    theme: "striped",
+    headStyles: { ...tableTheme.headStyles },
+    bodyStyles: { ...tableTheme.bodyStyles, fontSize: 7 },
+    columnStyles: { amount: { halign: "right" }, ref: { fontSize: 6 } },
+    margin: tableTheme.margin,
+  });
+
+  let nextY = doc.lastAutoTable.finalY + 10;
+  if (nextY > 150) { doc.addPage(); nextY = 20; }
+
+  autoTable(doc, {
+    columns: [
+      { header: "By agency", dataKey: "name" },
+      { header: "Payouts", dataKey: "count" },
+      { header: "Total", dataKey: "total" },
+    ],
+    body: byAgency.map((a) => ({ name: `${a.agentCode} - ${a.agencyName ?? ""}`, count: a.count, total: fmt(a.total) })),
+    startY: nextY,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: tableTheme.bodyStyles,
+    columnStyles: { count: { halign: "right" }, total: { halign: "right" } },
+    margin: { left: 14, right: 160 },
+  });
+  autoTable(doc, {
+    columns: [
+      { header: "By cashier", dataKey: "name" },
+      { header: "Payouts", dataKey: "count" },
+      { header: "Total", dataKey: "total" },
+    ],
+    body: byCashier.map((c) => ({ name: c.cashierName, count: c.count, total: fmt(c.total) })),
+    startY: nextY,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: tableTheme.bodyStyles,
+    columnStyles: { count: { halign: "right" }, total: { halign: "right" } },
+    margin: { left: 150, right: 14 },
+  });
+
+  drawSignatureBlock(doc, "Cashier Signatory", "Director Signatory");
+  doc.save("pos_wins_payment_report.pdf");
+}
+
+// ─── 3c. MASTER WALLET LEDGER PDF ───
+/** The Master Wallet's movements, as filed. Each row carries the balances it left. */
+export async function generateMasterWalletLedgerPDF(
+  dateFrom: string,
+  dateTo: string,
+  balances: { available: string; held: string; totalFunded: string; totalDisbursed: string },
+  entries: Array<{
+    createdAt: string; entryType: string; amount: string; availableAfter: string; heldAfter: string;
+    actorName: string | null; actorRole: string | null; reference: string | null; note: string | null;
+    ticketNumber: string | null;
+  }>,
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF({ orientation: "landscape" }) as any;
+  const label: Record<string, string> = { fund: "Funded", withdraw: "Withdrawn", hold: "Held", release: "Released", disburse: "Disbursed" };
+
+  const startY = drawBrandHeader(
+    doc,
+    "Master Wallet Ledger",
+    [
+      { label: "Report ID", value: `MWL-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
+    ],
+    "Position",
+    [
+      `Available: ${fmt(balances.available)}   Held: ${fmt(balances.held)}`,
+      `Funded to date: ${fmt(balances.totalFunded)}`,
+      `Disbursed to date: ${fmt(balances.totalDisbursed)}`,
+    ],
+    logoImg,
+  );
+
+  autoTable(doc, {
+    columns: [
+      { header: "When", dataKey: "when" },
+      { header: "Movement", dataKey: "type" },
+      { header: "Amount", dataKey: "amount" },
+      { header: "Available after", dataKey: "available" },
+      { header: "Held after", dataKey: "held" },
+      { header: "By", dataKey: "by" },
+      { header: "Ticket / reference", dataKey: "ref" },
+      { header: "Note", dataKey: "note" },
+    ],
+    body: entries.map((e) => ({
+      when: new Date(e.createdAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }),
+      type: label[e.entryType] ?? e.entryType,
+      amount: fmt(e.amount),
+      available: fmt(e.availableAfter),
+      held: fmt(e.heldAfter),
+      by: e.actorName ?? (e.actorRole === "writer" ? "Writer claim" : "System"),
+      ref: e.ticketNumber ?? e.reference ?? "-",
+      note: e.note ?? "",
+    })),
+    startY,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: { ...tableTheme.bodyStyles, fontSize: 7 },
+    columnStyles: { amount: { halign: "right" }, available: { halign: "right" }, held: { halign: "right" } },
+    margin: tableTheme.margin,
+  });
+
+  drawSignatureBlock(doc, "Prepared By", "Director Signatory");
+  doc.save("master_wallet_ledger.pdf");
+}
+
 // ─── 4a. GAME SALES BY AGENCY PDF ───
 /**
  * One game's sales over a period, by agency.

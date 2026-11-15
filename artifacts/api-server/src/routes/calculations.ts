@@ -28,7 +28,9 @@ const router = Router();
 router.post(
   "/calculations/run",
   requireAuth,
-  requireRole("director", "administrator"),
+  // The administrator runs draws. The director funds the Master Wallet that
+  // pays what a draw produces, and so does not also decide what it produces.
+  requireRole("administrator"),
   async (req, res) => {
     const parse = RunCalculationsBody.safeParse(req.body);
     if (!parse.success) {

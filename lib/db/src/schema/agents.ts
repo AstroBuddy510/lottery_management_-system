@@ -46,6 +46,27 @@ export const writersTable = pgTable("writers", {
   location: varchar("location", { length: 200 }),
   lat: numeric("lat", { precision: 9, scale: 6 }),
   lng: numeric("lng", { precision: 9, scale: 6 }),
+  /**
+   * Where a win is paid: the writer's registered mobile-money wallet.
+   *
+   * Kept apart from `phone` on purpose. The phone is how a writer signs in and
+   * is texted; the wallet is where money goes, and the two are often different
+   * SIMs. Paying to "whatever the phone number is" would send a disbursement
+   * to a number nobody ever confirmed was a wallet.
+   *
+   * `momoAccountName` is what the network says the wallet is registered to,
+   * resolved when the number is saved, so the cashier approving a payout sees
+   * a name and not just eleven digits. `paystackRecipientCode` is Paystack's
+   * handle for this exact number+network; it is cleared whenever either
+   * changes, so a stale recipient can never be paid.
+   */
+  momoNumber: varchar("momo_number", { length: 20 }),
+  /** Paystack's Ghana mobile-money codes: mtn, vod (Telecel), atl (AirtelTigo). */
+  momoProvider: varchar("momo_provider", { length: 10 }),
+  momoAccountName: varchar("momo_account_name", { length: 120 }),
+  paystackRecipientCode: varchar("paystack_recipient_code", { length: 60 }),
+  momoUpdatedAt: timestamp("momo_updated_at", { withTimezone: true }),
+  momoUpdatedBy: uuid("momo_updated_by").references(() => usersTable.id),
   operationModel: varchar("operation_model", { length: 10 }).notNull().default("postpaid"),
   registrationSource: varchar("registration_source", { length: 20 }).notNull().default("agent"),
   approvalStatus: varchar("approval_status", { length: 20 }).notNull().default("approved"),

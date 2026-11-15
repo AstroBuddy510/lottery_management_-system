@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { format, formatDistanceToNow } from "date-fns";
 import { ShieldAlert, Check, X, Flag, Radio, TrendingDown, Landmark, Loader2 } from "lucide-react";
 import { fmtGHS, cn } from "@/lib/utils";
+import { ClaimAttemptsPanel } from "@/components/flagged-claims-queue";
+import { apiGet } from "@/lib/api-fetch";
+import { Link } from "wouter";
 import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS } from "@/components/live-sales";
 import {
   SeverityBadge,
@@ -83,6 +86,40 @@ function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${localStorage.getItem("accessToken")}` };
 }
 
+/**
+ * The other kind of risk: not what a draw would cost, but who is trying to be
+ * paid for something they should not be. A cashier's rejections wait in Ticket
+ * Lookup → Flagged; the count here is the way in.
+ */
+function PayoutExceptions() {
+  const { data } = useQuery<{ requests: unknown[] }>({
+    queryKey: ["/api/pos-wins/flagged"],
+    queryFn: () => apiGet("/api/pos-wins/flagged"),
+    refetchInterval: 60_000,
+  });
+  const waiting = data?.requests.length ?? 0;
+
+  return (
+    <div className="space-y-4">
+      {waiting > 0 && (
+        <Link href="/ticket-lookup?tab=flagged">
+          <a className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50/70 px-4 py-3 text-sm text-red-800 hover:bg-red-50 transition-colors">
+            <span className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 shrink-0" />
+              <span>
+                <strong>{waiting}</strong> POS win payout{waiting === 1 ? "" : "s"} rejected by a cashier
+                {waiting === 1 ? " is" : " are"} waiting for you to clear or withhold.
+              </span>
+            </span>
+            <span className="text-xs font-bold whitespace-nowrap">Open flagged queue →</span>
+          </a>
+        </Link>
+      )}
+      <ClaimAttemptsPanel />
+    </div>
+  );
+}
+
 export function AdminRiskManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -154,6 +191,9 @@ export function AdminRiskManagement() {
           )}
         </div>
       </div>
+
+      {/* ---- Payout exceptions ------------------------------------------ */}
+      <PayoutExceptions />
 
       {exposureLoading && !exposure ? (
         <div className="flex items-center gap-2 rounded-xl border bg-card p-8 text-sm text-muted-foreground">

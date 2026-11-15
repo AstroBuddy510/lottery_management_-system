@@ -6,16 +6,22 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ChevronRight, ChevronDown, Loader2, Check, Trophy, ShieldAlert } from "lucide-react";
+import { ChevronRight, ChevronDown, Loader2, Send, Trophy, ShieldAlert } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 import { TicketReceiptView, useTicketReceipt } from "@/components/ticket-receipt";
 
 /**
- * Payout review, drilled down four levels:
- *   agent -> writer -> winning ticket -> full ticket detail + approve.
+ * The Winning Tickets registry, drilled down four levels:
+ *   agent -> writer -> winning ticket -> full ticket detail.
  * Each level loads only when opened, so a draw with many agents costs one
  * query up front rather than one per writer.
+ *
+ * This used to be where an administrator approved payouts. It is now a view:
+ * the people who run a draw publish its winners and tell the writers, and that
+ * is where their part ends. A win is paid when its writer claims it on their
+ * POS and a cashier approves it under POS Wins Payment.
  */
 
 interface DrawGame {
@@ -38,6 +44,7 @@ interface AgentRow {
   pendingCount: number;
   approvedCount: number;
   paidCount: number;
+  flaggedCount?: number;
 }
 
 interface WriterRow {
@@ -103,41 +110,30 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json();
 }
 
+/** The lifecycle, in the words an operator would use for each step. */
+const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
+  pending: { label: "Awaiting claim", tone: "bg-amber-500/10 text-amber-700 border-amber-200" },
+  awaiting_funds: { label: "Awaiting funds", tone: "bg-orange-500/10 text-orange-700 border-orange-200" },
+  verified: { label: "With cashier", tone: "bg-blue-500/10 text-blue-700 border-blue-200" },
+  processing: { label: "Transfer sent", tone: "bg-indigo-500/10 text-indigo-700 border-indigo-200" },
+  paid: { label: "Paid", tone: "bg-emerald-500/10 text-emerald-700 border-emerald-200" },
+  rejected: { label: "Flagged", tone: "bg-destructive/10 text-destructive border-destructive/20" },
+  withheld: { label: "Withheld", tone: "bg-slate-500/10 text-slate-600 border-slate-300" },
+  approved: { label: "Awaiting claim", tone: "bg-amber-500/10 text-amber-700 border-amber-200" },
+};
+
 function statusBadge(status: string) {
-  const tone =
-    status === "paid"
-      ? "bg-emerald-500/10 text-emerald-700 border-emerald-200"
-      : status === "approved"
-        ? "bg-blue-500/10 text-blue-700 border-blue-200"
-        : status === "rejected"
-          ? "bg-destructive/10 text-destructive border-destructive/20"
-          : "bg-amber-500/10 text-amber-700 border-amber-200";
-  return <Badge variant="outline" className={`${tone} text-[10px] font-bold`}>{status.toUpperCase()}</Badge>;
+  const cfg = STATUS_LABEL[status] ?? { label: status, tone: "bg-muted text-muted-foreground" };
+  return <Badge variant="outline" className={`${cfg.tone} text-[10px] font-bold uppercase`}>{cfg.label}</Badge>;
 }
 
 /** Level 3 + 4: a writer's winning tickets, each expandable to full detail. */
 function WriterTickets({ writerId, gameId }: { writerId: string; gameId: string }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
   const [openTicket, setOpenTicket] = useState<string | null>(null);
 
   const { data: tickets, isLoading } = useQuery<TicketRow[]>({
     queryKey: ["/api/payouts/writer-tickets", writerId, gameId],
     queryFn: () => getJson(`/api/payouts/writers/${writerId}/tickets?gameId=${encodeURIComponent(gameId)}`),
-  });
-
-  const approve = useMutation({
-    mutationFn: async (payoutId: string) => {
-      const res = await fetch(`/api/payouts/${payoutId}/approve`, { method: "PATCH", headers: authHeaders() });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Approval failed");
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Payout approved" });
-      qc.invalidateQueries({ queryKey: ["/api/payouts"] });
-      qc.invalidateQueries({ queryKey: ["/api/payouts/writer-tickets"] });
-    },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   if (isLoading) return <div className="py-4 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>;
@@ -154,7 +150,6 @@ function WriterTickets({ writerId, gameId }: { writerId: string; gameId: string 
             <TableHead className="text-xs text-right">Stake</TableHead>
             <TableHead className="text-xs text-right">Win</TableHead>
             <TableHead className="text-xs">Status</TableHead>
-            <TableHead className="text-xs text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -187,34 +182,6 @@ function WriterTickets({ writerId, gameId }: { writerId: string; gameId: string 
               <TableCell className="text-xs text-right tabular-nums">{fmtGHS(t.stakeAmount)}</TableCell>
               <TableCell className="text-xs text-right tabular-nums font-semibold">{fmtGHS(t.payoutAmount)}</TableCell>
               <TableCell>{statusBadge(t.status)}</TableCell>
-              <TableCell className="text-right">
-                {t.status === "pending" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    disabled={approve.isPending}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (flags.length) {
-                        const reasons = flags.map((a) => `\u2022 ${a.detail}`).join("\n");
-                        if (
-                          !confirm(
-                            `${t.ticketNumber} is flagged:\n\n${reasons}\n\nApprove ${fmtGHS(t.payoutAmount)} anyway?`,
-                          )
-                        ) {
-                          return;
-                        }
-                      }
-                      approve.mutate(t.payoutId);
-                    }}
-                  >
-                    <Check className="h-3 w-3 mr-1" /> Approve
-                  </Button>
-                ) : (
-                  <span className="text-[11px] text-muted-foreground">—</span>
-                )}
-              </TableCell>
             </TableRow>
             );
           })}
@@ -278,7 +245,7 @@ function AgentWriters({ agentId, gameId }: { agentId: string; gameId: string }) 
                 <span className="block text-sm font-bold tabular-nums">{fmtGHS(w.totalWins)}</span>
                 <span className="block text-[11px] text-muted-foreground">
                   {w.ticketCount} ticket{w.ticketCount === 1 ? "" : "s"}
-                  {w.pendingCount > 0 && ` · ${w.pendingCount} pending`}
+                  {w.pendingCount > 0 && ` · ${w.pendingCount} unclaimed`}
                 </span>
               </span>
             </button>
@@ -312,24 +279,41 @@ export function PayoutApprovals() {
   const grandTotal = (agents ?? []).reduce((sum, a) => sum + Number(a.totalWins), 0);
   const pendingTotal = (agents ?? []).reduce((sum, a) => sum + a.pendingCount, 0);
   const approvedTotal = (agents ?? []).reduce((sum, a) => sum + a.approvedCount, 0);
+  const paidTotal = (agents ?? []).reduce((sum, a) => sum + a.paidCount, 0);
 
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  /** The paying step: credits approved payouts and sends the win SMS. */
-  const processPayouts = useMutation({
+  const { user } = useAuth();
+  const canPublish = user?.role === "administrator";
+
+  /**
+   * Stage 02: tell each writer what they have to claim. Sends texts and moves
+   * no money - payment happens when the writer scans and a cashier approves.
+   */
+  const notifyWriters = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/game-results/${effectiveGameId}/process-payouts`, {
         method: "POST",
         headers: authHeaders(),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Processing failed");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Could not notify writers");
       return res.json();
     },
-    onSuccess: (r: { processedCount?: number; skippedCount?: number }) => {
+    onSuccess: (r: {
+      writersWithWinners: number; ticketsAwaitingClaim: number; smsSent: number; smsFailed: number;
+      smsStubbed: boolean; writersWithoutPhone: number; writersWithoutWallet: number;
+    }) => {
+      const gaps = [
+        r.smsStubbed ? "SMS gateway not configured - texts were logged, not sent" : null,
+        r.smsFailed ? `${r.smsFailed} text${r.smsFailed === 1 ? "" : "s"} failed` : null,
+        r.writersWithoutPhone ? `${r.writersWithoutPhone} writer${r.writersWithoutPhone === 1 ? " has" : "s have"} no phone` : null,
+        r.writersWithoutWallet ? `${r.writersWithoutWallet} ha${r.writersWithoutWallet === 1 ? "s" : "ve"} no MoMo wallet and cannot be paid yet` : null,
+      ].filter(Boolean);
       toast({
-        title: `Processed ${r?.processedCount ?? 0} payout${r?.processedCount === 1 ? "" : "s"}`,
-        description: r?.skippedCount ? `${r.skippedCount} skipped — see response for reasons.` : undefined,
+        title: `${r.writersWithWinners} writer${r.writersWithWinners === 1 ? "" : "s"} notified of ${r.ticketsAwaitingClaim} winning ticket${r.ticketsAwaitingClaim === 1 ? "" : "s"}`,
+        description: gaps.length ? gaps.join(" · ") : `${r.smsSent} text${r.smsSent === 1 ? "" : "s"} sent.`,
+        variant: r.smsStubbed || r.smsFailed ? "destructive" : undefined,
       });
       qc.invalidateQueries({ queryKey: ["/api/payouts"] });
     },
@@ -342,10 +326,11 @@ export function PayoutApprovals() {
         <div>
           <CardTitle className="flex items-center gap-2 text-base">
             <Trophy className="h-4 w-4 text-amber-500" />
-            Payout Approvals
+            Winning Tickets
           </CardTitle>
           <CardDescription>
-            Agent → writer → ticket. Approving authorises a payout; it does not credit the writer.
+            Agent → writer → ticket. Publishing notifies the writers; no money moves here. A win is
+            paid when its writer scans the ticket and a cashier approves it under POS Wins Payment.
           </CardDescription>
         </div>
         {(games?.length ?? 0) > 0 && (
@@ -382,24 +367,35 @@ export function PayoutApprovals() {
                   <span className="font-semibold tabular-nums">{fmtGHS(grandTotal)}</span>
                 </span>
                 <span>
-                  <span className="text-muted-foreground">Pending approvals: </span>
+                  <span className="text-muted-foreground">Awaiting claim: </span>
                   <span className="font-semibold tabular-nums">{pendingTotal}</span>
                 </span>
                 <span>
-                  <span className="text-muted-foreground">Approved, awaiting payment: </span>
+                  <span className="text-muted-foreground">Claimed, in payment: </span>
                   <span className="font-semibold tabular-nums">{approvedTotal}</span>
                 </span>
-                <Button
-                  size="sm"
-                  className="ml-auto h-8"
-                  disabled={approvedTotal === 0 || processPayouts.isPending}
-                  onClick={() => processPayouts.mutate()}
-                >
-                  {processPayouts.isPending
-                    ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                    : <Check className="h-3.5 w-3.5 mr-1.5" />}
-                  Process Payouts &amp; SMS
-                </Button>
+                <span>
+                  <span className="text-muted-foreground">Paid: </span>
+                  <span className="font-semibold tabular-nums">{paidTotal}</span>
+                </span>
+                {canPublish ? (
+                  <Button
+                    size="sm"
+                    className="ml-auto h-8"
+                    disabled={pendingTotal === 0 || notifyWriters.isPending}
+                    onClick={() => notifyWriters.mutate()}
+                    title={pendingTotal === 0 ? "Every winning ticket in this draw has been claimed" : undefined}
+                  >
+                    {notifyWriters.isPending
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      : <Send className="h-3.5 w-3.5 mr-1.5" />}
+                    Process Payouts &amp; SMS
+                  </Button>
+                ) : (
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    Only an administrator publishes a draw's winners.
+                  </span>
+                )}
               </div>
             )}
 
@@ -432,7 +428,7 @@ export function PayoutApprovals() {
                           <span className="block text-lg font-bold tabular-nums">{fmtGHS(a.totalWins)}</span>
                           <span className="block text-xs text-muted-foreground">
                             {a.ticketCount} ticket{a.ticketCount === 1 ? "" : "s"}
-                            {a.pendingCount > 0 && ` · ${a.pendingCount} pending`}
+                            {a.pendingCount > 0 && ` · ${a.pendingCount} unclaimed`}
                           </span>
                         </span>
                       </button>

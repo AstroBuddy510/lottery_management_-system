@@ -87,7 +87,16 @@ type TicketRow = Awaited<ReturnType<ReturnType<typeof baseQuery>["execute"]>>[nu
  * A ticket may match more than one payout row; keep the furthest along so a
  * ticket never shows as unpaid because an earlier rejected claim sorted first.
  */
-const PAYOUT_RANK: Record<string, number> = { rejected: 0, pending: 1, approved: 2, paid: 3 };
+const PAYOUT_RANK: Record<string, number> = {
+  withheld: 0,
+  rejected: 0,
+  pending: 1,
+  approved: 2,
+  awaiting_funds: 2,
+  verified: 3,
+  processing: 4,
+  paid: 5,
+};
 
 function dedupe(rows: TicketRow[]): TicketRow[] {
   const byId = new Map<string, TicketRow>();

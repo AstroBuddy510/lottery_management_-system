@@ -29,3 +29,4 @@ export * from "./hedge-settings";
 export * from "./ticket-events";
 export * from "./writer-model-requests";
 export * from "./auth-throttle";
+export * from "./master-wallet";

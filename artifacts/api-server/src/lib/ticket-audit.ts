@@ -19,7 +19,11 @@ export type TicketEventType =
   | "claim_rejected"
   | "paid"
   | "voided"
-  | "cancelled";
+  | "cancelled"
+  | "claim_submitted"
+  | "claim_resolved"
+  | "claim_withheld"
+  | "transfer_failed";
 
 export interface RecordEventInput {
   ticketId: string;
@@ -324,15 +328,26 @@ export function detectTicketAnomalies(tickets: AuditTicket[], events: AuditEvent
         detail: `Paid ${paidCount} times on one ticket.`,
         at: iso(claims[claims.length - 1]?.occurredAt),
       });
-    } else if (claims.filter((e) => e.eventType === "claim_approved").length > 1) {
-      found.push({
-        code: "repeat_claim_attempts",
-        severity: "high",
-        ticketId: t.id,
-        ticketNumber: t.ticketNumber,
-        detail: `Claim approved ${claims.filter((e) => e.eventType === "claim_approved").length} times on one ticket.`,
-        at: iso(claims[claims.length - 1]?.occurredAt),
-      });
+    } else {
+      /*
+       * One approval per ticket - plus one for every transfer Paystack is on
+       * record as having failed. A cashier approving again after a refused
+       * transfer is the system working, not a second claim, and flagging it
+       * would bury the real thing under a row for every network hiccup. An
+       * approval with no failure before it to explain it still is one.
+       */
+      const approvals = claims.filter((e) => e.eventType === "claim_approved").length;
+      const failedTransfers = list.filter((e) => e.eventType === "transfer_failed").length;
+      if (approvals > 1 + failedTransfers) {
+        found.push({
+          code: "repeat_claim_attempts",
+          severity: "high",
+          ticketId: t.id,
+          ticketNumber: t.ticketNumber,
+          detail: `Claim approved ${approvals} times on one ticket${failedTransfers ? `, with only ${failedTransfers} failed transfer${failedTransfers === 1 ? "" : "s"} to account for it` : ""}.`,
+          at: iso(claims[claims.length - 1]?.occurredAt),
+        });
+      }
     }
 
     // Still being checked after it was paid - someone trying a spent ticket.

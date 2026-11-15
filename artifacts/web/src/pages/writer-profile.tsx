@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fmtGHS } from "@/lib/utils";
+import { WriterMomoCard } from "@/components/writer-momo-card";
 import { tileProvider, hasTileKey, TILE_ATTRIBUTION } from "@/lib/map-tiles";
 import {
   MapPin, Smartphone, Phone, KeyRound, AlertTriangle, Building2, Clock,
@@ -208,6 +209,8 @@ export function WriterProfile() {
               </div>
             </CardContent>
           </Card>
+
+          <WriterMomoCard writerId={writerId} />
 
           <Card>
             <CardContent className="p-4 space-y-3">

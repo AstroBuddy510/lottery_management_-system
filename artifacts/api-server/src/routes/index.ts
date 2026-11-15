@@ -39,6 +39,7 @@ import payoutApprovalsRouter from "./payout-approvals";
 import dashboardSummaryRouter from "./dashboard-summary";
 import writerTokenPurchasesRouter from "./writer-token-purchases";
 import tokenSupplyRouter from "./token-supply";
+import posWinsRouter from "./pos-wins";
 
 const router: IRouter = Router();
 
@@ -82,5 +83,6 @@ router.use(payoutApprovalsRouter);
 router.use(dashboardSummaryRouter);
 router.use(writerTokenPurchasesRouter);
 router.use(tokenSupplyRouter);
+router.use(posWinsRouter);
 
 export default router;

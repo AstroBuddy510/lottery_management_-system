@@ -25,9 +25,10 @@ const router = Router();
 /**
  * Payout review, drilled down agent -> writer -> ticket.
  *
- * Every level reads payout_requests, which ticket settlement creates when a
- * draw's declared numbers are posted. Approving marks a request authorised;
- * it does not move money - crediting stays the separate paying step.
+ * Every level reads payout_requests - the Winning Tickets registry - which
+ * ticket settlement creates when a draw's declared numbers are posted. This is
+ * a view of the registry and nothing more; claiming, approving and paying all
+ * happen elsewhere.
  */
 
 const REVIEW_ROLES = ["director", "administrator", "cashier"] as const;
@@ -57,8 +58,10 @@ router.get(
         ticketCount: sql<number>`count(*)::int`,
         totalWins: sql<string>`coalesce(sum(${payoutRequestsTable.payoutAmount}), 0)::text`,
         pendingCount: sql<number>`count(*) filter (where ${payoutRequestsTable.status} = 'pending')::int`,
-        approvedCount: sql<number>`count(*) filter (where ${payoutRequestsTable.status} = 'approved')::int`,
+        // Claimed and somewhere between the POS and the writer's wallet.
+        approvedCount: sql<number>`count(*) filter (where ${payoutRequestsTable.status} in ('verified', 'awaiting_funds', 'processing'))::int`,
         paidCount: sql<number>`count(*) filter (where ${payoutRequestsTable.status} = 'paid')::int`,
+        flaggedCount: sql<number>`count(*) filter (where ${payoutRequestsTable.status} in ('rejected', 'withheld'))::int`,
       })
       .from(payoutRequestsTable)
       .innerJoin(agentsTable, eq(payoutRequestsTable.agentId, agentsTable.id))
@@ -127,7 +130,7 @@ router.get(
         payoutId: payoutRequestsTable.id,
         status: payoutRequestsTable.status,
         payoutAmount: payoutRequestsTable.payoutAmount,
-        approvedBy: payoutRequestsTable.approvedBy,
+        claimedAt: payoutRequestsTable.claimedAt,
         paidAt: payoutRequestsTable.paidAt,
         /**
          * What this writer still owed on their postpaid account when the draw
@@ -244,109 +247,14 @@ router.get("/payouts/games", requireAuth, requireRole(...REVIEW_ROLES), async (_
   res.json(rows);
 });
 
-/**
- * Approve one payout request. Authorisation only - no money moves here, so
- * the person who approves and the person who pays stay distinguishable.
+/*
+ * There is no approve endpoint here any more, and that is the change.
+ *
+ * This file used to let a director or administrator mark a request approved,
+ * one at a time or a whole writer at once. Under the POS wins flow the people
+ * who run the draw do not release its payouts: a request is approved by a
+ * cashier, after the writer has claimed it, in routes/pos-wins.ts. What stays
+ * here is the read-only drill-down of the Winning Tickets registry.
  */
-router.patch(
-  "/payouts/:payoutId/approve",
-  requireAuth,
-  requireRole("director", "administrator"),
-  async (req, res) => {
-    const payoutId = req.params["payoutId"] as string;
-
-    const [existing] = await db
-      .select()
-      .from(payoutRequestsTable)
-      .where(eq(payoutRequestsTable.id, payoutId))
-      .limit(1);
-
-    if (!existing) {
-      res.status(404).json({ error: "Payout request not found" });
-      return;
-    }
-    if (existing.status !== "pending") {
-      res.status(409).json({ error: `Payout is already ${existing.status}` });
-      return;
-    }
-
-    // Re-check status in the WHERE so two reviewers cannot both approve.
-    const [updated] = await db
-      .update(payoutRequestsTable)
-      .set({ status: "approved", approvedBy: req.user!.userId })
-      .where(and(eq(payoutRequestsTable.id, payoutId), eq(payoutRequestsTable.status, "pending")))
-      .returning();
-
-    if (!updated) {
-      res.status(409).json({ error: "Payout was reviewed by someone else" });
-      return;
-    }
-
-    await recordTicketEvent(db, {
-      ticketId: updated.ticketId,
-      eventType: "claim_approved",
-      actorUserId: req.user!.userId,
-      actorRole: req.user!.role,
-      source: "admin",
-      note: `Payout ${updated.payoutAmount} approved`,
-    });
-
-    res.json(updated);
-  },
-);
-
-/** Approve every pending request for one writer in one step. */
-router.patch(
-  "/payouts/writers/:writerId/approve-all",
-  requireAuth,
-  requireRole("director", "administrator"),
-  async (req, res) => {
-    const writerId = req.params["writerId"] as string;
-    const gameId = typeof req.query["gameId"] === "string" ? req.query["gameId"] : undefined;
-
-    let ids: string[] | undefined;
-    if (gameId) {
-      const scoped = await db
-        .select({ id: payoutRequestsTable.id })
-        .from(payoutRequestsTable)
-        .innerJoin(gameResultsTable, eq(payoutRequestsTable.gameResultId, gameResultsTable.id))
-        .where(
-          and(
-            eq(payoutRequestsTable.writerId, writerId),
-            eq(payoutRequestsTable.status, "pending"),
-            eq(gameResultsTable.gameId, gameId),
-          ),
-        );
-      ids = scoped.map((r) => r.id);
-      if (ids.length === 0) {
-        res.json({ approved: 0 });
-        return;
-      }
-    }
-
-    const updated = await db
-      .update(payoutRequestsTable)
-      .set({ status: "approved", approvedBy: req.user!.userId })
-      .where(
-        ids
-          ? and(inArray(payoutRequestsTable.id, ids), eq(payoutRequestsTable.status, "pending"))
-          : and(eq(payoutRequestsTable.writerId, writerId), eq(payoutRequestsTable.status, "pending")),
-      )
-      .returning();
-
-    for (const row of updated) {
-      await recordTicketEvent(db, {
-        ticketId: row.ticketId,
-        eventType: "claim_approved",
-        actorUserId: req.user!.userId,
-        actorRole: req.user!.role,
-        source: "admin",
-        note: `Approved in bulk for writer`,
-      });
-    }
-
-    res.json({ approved: updated.length });
-  },
-);
 
 export default router;

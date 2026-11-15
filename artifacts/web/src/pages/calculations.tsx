@@ -20,6 +20,7 @@ import {
   ArrowUpDown
 } from "lucide-react";
 import { PayoutApprovals } from "@/pages/payout-approvals";
+import { useAuth } from "@/lib/auth";
 
 function fmtGHS(v: number, bold = true) {
   return (
@@ -50,6 +51,10 @@ export function Calculations() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { writerMap, agentList } = useWriterLookup();
+  // Draws are run by the administrator. The director funds the wallet that
+  // pays what a draw produces, so can read this page and not run one.
+  const { user } = useAuth();
+  const canRunDraws = user?.role === "administrator";
 
   const [selectedRunGameId, setSelectedRunGameId] = useState("_none");
   const [runDate, setRunDate] = useState(new Date().toISOString().split("T")[0]);
@@ -253,6 +258,14 @@ export function Calculations() {
         </Badge>
       </div>
 
+      {!canRunDraws && (
+        <div className="rounded-xl border bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
+          You can review draws, winning tickets and history here. Running a draw and publishing its
+          winners is done by an administrator - the role that funds the Master Wallet does not also
+          decide what it pays.
+        </div>
+      )}
+
       <Tabs defaultValue="run" className="space-y-6">
         <TabsList className="grid w-full max-w-[620px] grid-cols-3 bg-muted/40 p-1 rounded-xl">
           <TabsTrigger value="run" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
@@ -381,7 +394,8 @@ export function Calculations() {
                 <div className="flex items-center gap-4 pt-3 border-t border-border/40">
                   <Button
                     onClick={handleRun}
-                    disabled={runMutation.isPending || selectedRunGameId === "_none" || !runDate || !isDrawNumbersValid}
+                    disabled={!canRunDraws || runMutation.isPending || selectedRunGameId === "_none" || !runDate || !isDrawNumbersValid}
+                    title={canRunDraws ? undefined : "Only an administrator runs draws"}
                     className="h-10 rounded-xl px-5 font-semibold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-600/90 hover:to-violet-600/90 text-white shadow-md shadow-indigo-200 dark:shadow-none hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none"
                   >
                     {runMutation.isPending ? (

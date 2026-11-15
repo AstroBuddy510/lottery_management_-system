@@ -66,6 +66,9 @@ const WriterDashboard = lazy(() => import("@/pages/writer-dashboard").then((m) =
 const WriterPlaceBet = lazy(() => import("@/pages/writer-place-bet").then((m) => ({ default: m.WriterPlaceBet })));
 const WriterTickets = lazy(() => import("@/pages/writer-tickets").then((m) => ({ default: m.WriterTickets })));
 const WriterWallet = lazy(() => import("@/pages/writer-wallet").then((m) => ({ default: m.WriterWallet })));
+const WriterClaims = lazy(() => import("@/pages/writer-claims").then((m) => ({ default: m.WriterClaims })));
+const MasterWallet = lazy(() => import("@/pages/master-wallet").then((m) => ({ default: m.MasterWallet })));
+const PosWinsPayment = lazy(() => import("@/pages/pos-wins-payment").then((m) => ({ default: m.PosWinsPayment })));
 const AdminRiskManagement = lazy(() => import("@/pages/admin-risk-management").then((m) => ({ default: m.AdminRiskManagement })));
 const TicketLookup = lazy(() => import("@/pages/ticket-lookup").then((m) => ({ default: m.TicketLookup })));
 
@@ -200,6 +203,26 @@ function Router() {
              <ProtectedRoute component={WriterWallet} roles={['writer']} bare />
           </WriterLayout>
         )}
+      </Route>
+      <Route path="/writer/claims">
+        {() => (
+          <WriterLayout>
+             <ProtectedRoute component={WriterClaims} roles={['writer']} bare />
+          </WriterLayout>
+        )}
+      </Route>
+
+      {/* Treasury. The Director funds it; the Administrator may look. The
+          cashier is deliberately absent - they release money, so they do not
+          also get to see how much there is to release beyond their own queue. */}
+      <Route path="/master-wallet">
+        {() => <ProtectedRoute component={MasterWallet} roles={['director', 'administrator']} />}
+      </Route>
+
+      {/* The cashier's gate. Director and Administrator can open it to audit
+          the queue; the page gives them no approve or reject. */}
+      <Route path="/pos-wins-payment">
+        {() => <ProtectedRoute component={PosWinsPayment} roles={['cashier', 'director', 'administrator']} />}
       </Route>
 
       <Route path="/settings">

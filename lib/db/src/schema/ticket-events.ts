@@ -24,6 +24,12 @@ export const ticketEventTypeEnum = pgEnum("ticket_event_type", [
   "paid",
   "voided",
   "cancelled",
+  // The POS claim lifecycle. Appended, never reordered: Postgres adds enum
+  // members at the end and existing rows keep their meaning.
+  "claim_submitted", // scanned on the POS and accepted into the queue
+  "claim_resolved",  // an administrator cleared a rejection and re-queued it
+  "claim_withheld",  // an administrator dropped it; the payout is cancelled
+  "transfer_failed", // Paystack refused or reversed the disbursement
 ]);
 
 export const ticketEventsTable = pgTable(
