@@ -16,7 +16,8 @@ import {
 } from "@workspace/api-client-react";
 import { generatePadlockAssignmentsPDF } from "@/lib/pdf-generator";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
-import { TerminalsManager, TerminalMetrics } from "@/components/terminals-manager";
+import { TerminalsManager } from "@/components/terminals-manager";
+import { TerminalOverviewPanel } from "@/components/terminal-overview-panel";
 import { useListTerminals, getListTerminalsQueryKey, type TerminalWithStatus } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
@@ -89,7 +90,7 @@ export function Inventory() {
      Terminals tab reads. Same query key, so React Query serves one request
      for both rather than two that can disagree. */
   const terminalParams = { activeWindowMinutes: 60 };
-  const { data: terminalData } = useListTerminals(terminalParams, {
+  const { data: terminalData, isLoading: loadingTerminals } = useListTerminals(terminalParams, {
     query: { queryKey: getListTerminalsQueryKey(terminalParams), refetchInterval: 30_000 },
   });
   const terminalMetrics = useMemo(() => {
@@ -561,28 +562,16 @@ export function Inventory() {
             transition={{ duration: 0.3 }}
             className="space-y-8"
           >
-            {/* TERMINAL INVENTORY PANEL */}
-            <div className="border border-border/80 bg-card rounded-3xl p-6 shadow-sm space-y-6">
-              <div className="flex items-center justify-between border-b pb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-6 bg-sky-500 rounded-full shadow-glow" />
-                  <div>
-                    <h2 className="text-lg font-bold text-foreground">Terminal Overview</h2>
-                    <p className="text-[11px] text-muted-foreground">POS hardware across the network — stock, assignment and activity</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setActiveTab("terminals")}
-                  className="text-[11px] font-semibold text-primary hover:underline"
-                >
-                  Open Terminals Management →
-                </button>
-              </div>
-              {/* Same component and the same counts the Terminals tab shows, so
-                  the two screens cannot drift on what "in stock" means. */}
-              <TerminalMetrics metrics={terminalMetrics} />
-            </div>
-
+            {/* TERMINAL INVENTORY PANEL - drawn like the padlock auditor below it.
+                The figure cards use the same counts the Terminals tab shows, so
+                the two screens cannot drift on what "in stock" means. */}
+            <TerminalOverviewPanel
+              terminals={Array.isArray(terminalData) ? terminalData : []}
+              metrics={terminalMetrics}
+              loading={loadingTerminals}
+              activeWindowMinutes={terminalParams.activeWindowMinutes}
+              onOpenManagement={() => setActiveTab("terminals")}
+            />
 
             {/* PADLOCK INVENTORY PANEL */}
             <div className="border border-border/80 bg-card rounded-3xl p-6 shadow-sm space-y-6">
