@@ -752,6 +752,178 @@ export async function generatePosWinsReportPDF(
   doc.save("pos_wins_payment_report.pdf");
 }
 
+// ─── 3d. SALES BY CHANNEL PDF ───
+/** One row of the Sales by Channel breakdown, already grouped as on screen. */
+export type SalesChannelGroupRow = {
+  key: string; name: string; sub: string;
+  prepaid: string; prepaidTickets: number;
+  postpaid: string; postpaidTickets: number;
+  manual: string; manualEntries: number;
+  total: string;
+  payable: string; collected: string; outstanding: string; notYetDue: string;
+};
+
+export async function generateSalesChannelsReportPDF(opts: {
+  dateFrom: string;
+  dateTo: string;
+  agencyLabel: string;
+  groupLabel: string;
+  summary: {
+    prepaid: { amount: string; tickets: number };
+    postpaid: { amount: string; tickets: number };
+    manual: { amount: string; entries: number };
+    total: string;
+    unconfirmedLate: { amount: string; entries: number };
+    postpaidCollection: { commission: string; payable: string; collected: string; outstanding: string; notYetDue: string };
+    writerCount: number;
+    agencyCount: number;
+  };
+  rows: SalesChannelGroupRow[];
+}) {
+  const { dateFrom, dateTo, agencyLabel, groupLabel, summary: s, rows } = opts;
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF({ orientation: "landscape" }) as any;
+  const total = Number(s.total);
+  const share = (v: string) => (total > 0 ? `${((Number(v) / total) * 100).toFixed(1)}%` : "-");
+
+  const startY = drawBrandHeader(
+    doc,
+    "Sales by Channel",
+    [
+      { label: "Report ID", value: `SBC-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}` : "All periods" },
+      { label: "Grouped By", value: groupLabel },
+    ],
+    "Scope",
+    [
+      agencyLabel || "All agencies",
+      `${s.writerCount} writer${s.writerCount === 1 ? "" : "s"} across ${s.agencyCount} agenc${s.agencyCount === 1 ? "y" : "ies"}`,
+      `Total sales: ${fmt(s.total)}`,
+    ],
+    logoImg,
+  );
+
+  const pageWidth = doc.internal.pageSize.width;
+  const half = (pageWidth - 30 - 8) / 2;
+
+  autoTable(doc, {
+    columns: [
+      { header: "Channel", dataKey: "channel" },
+      { header: "Sales", dataKey: "amount" },
+      { header: "Share", dataKey: "share" },
+      { header: "Count", dataKey: "count" },
+    ],
+    body: [
+      { channel: "POS prepaid (e-tokens)", amount: fmt(s.prepaid.amount), share: share(s.prepaid.amount), count: `${s.prepaid.tickets} tickets` },
+      { channel: "POS postpaid (credit)", amount: fmt(s.postpaid.amount), share: share(s.postpaid.amount), count: `${s.postpaid.tickets} tickets` },
+      { channel: "Manual (agent entry)", amount: fmt(s.manual.amount), share: share(s.manual.amount), count: `${s.manual.entries} entries` },
+      { channel: "Total", amount: fmt(s.total), share: total > 0 ? "100%" : "-", count: "" },
+    ],
+    startY,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: tableTheme.bodyStyles,
+    columnStyles: { channel: { halign: "left" }, amount: { halign: "right" }, share: { halign: "right" }, count: { halign: "right" } },
+    didParseCell: (data: any) => {
+      if (data.section === "head" && data.column.dataKey === "channel") data.cell.styles.halign = "left";
+      if (data.section === "body" && data.row.index === 3) data.cell.styles.fontStyle = "bold";
+    },
+    margin: { left: 15, right: 15 + half + 8 },
+  });
+  const leftEnd = doc.lastAutoTable.finalY;
+
+  autoTable(doc, {
+    columns: [
+      { header: "Postpaid collection", dataKey: "label" },
+      { header: "Amount", dataKey: "amount" },
+    ],
+    body: [
+      { label: "Writers' commission", amount: fmt(s.postpaidCollection.commission) },
+      { label: "Payable to company", amount: fmt(s.postpaidCollection.payable) },
+      { label: "Collected", amount: fmt(s.postpaidCollection.collected) },
+      { label: "Outstanding", amount: fmt(s.postpaidCollection.outstanding) },
+      { label: "Not yet due (betting still open)", amount: fmt(s.postpaidCollection.notYetDue) },
+    ],
+    startY,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: tableTheme.bodyStyles,
+    columnStyles: { label: { halign: "left" }, amount: { halign: "right" } },
+    didParseCell: (data: any) => {
+      if (data.section === "head" && data.column.dataKey === "label") data.cell.styles.halign = "left";
+    },
+    margin: { left: 15 + half + 8, right: 15 },
+  });
+
+  let nextY = Math.max(leftEnd, doc.lastAutoTable.finalY) + 6;
+  if (s.unconfirmedLate.entries > 0) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(150, 90, 0);
+    doc.text(
+      `Not counted: ${s.unconfirmedLate.entries} late manual entr${s.unconfirmedLate.entries === 1 ? "y" : "ies"} (${fmt(s.unconfirmedLate.amount)}) awaiting administrator confirmation.`,
+      15, nextY,
+    );
+    nextY += 6;
+  }
+
+  autoTable(doc, {
+    columns: [
+      { header: groupLabel, dataKey: "name" },
+      { header: "Prepaid", dataKey: "prepaid" },
+      { header: "Tkts", dataKey: "prepaidTickets" },
+      { header: "Postpaid", dataKey: "postpaid" },
+      { header: "Tkts", dataKey: "postpaidTickets" },
+      { header: "Manual", dataKey: "manual" },
+      { header: "Entries", dataKey: "manualEntries" },
+      { header: "Total", dataKey: "total" },
+      { header: "PP payable", dataKey: "payable" },
+      { header: "Collected", dataKey: "collected" },
+      { header: "Outstanding", dataKey: "outstanding" },
+    ],
+    body: [
+      ...rows.map((r) => ({
+        name: r.sub ? `${r.name}\n${r.sub}` : r.name,
+        prepaid: fmt(r.prepaid), prepaidTickets: r.prepaidTickets,
+        postpaid: fmt(r.postpaid), postpaidTickets: r.postpaidTickets,
+        manual: fmt(r.manual), manualEntries: r.manualEntries,
+        total: fmt(r.total),
+        payable: fmt(r.payable), collected: fmt(r.collected), outstanding: fmt(r.outstanding),
+      })),
+      {
+        name: "TOTAL",
+        prepaid: fmt(s.prepaid.amount), prepaidTickets: s.prepaid.tickets,
+        postpaid: fmt(s.postpaid.amount), postpaidTickets: s.postpaid.tickets,
+        manual: fmt(s.manual.amount), manualEntries: s.manual.entries,
+        total: fmt(s.total),
+        payable: fmt(s.postpaidCollection.payable), collected: fmt(s.postpaidCollection.collected),
+        outstanding: fmt(s.postpaidCollection.outstanding),
+      },
+    ],
+    startY: nextY,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: { ...tableTheme.bodyStyles, fontSize: 7.5, halign: "right" },
+    columnStyles: { name: { halign: "left", cellWidth: 52 } },
+    didParseCell: (data: any) => {
+      if (data.section === "head" && data.column.dataKey === "name") data.cell.styles.halign = "left";
+      if (data.section === "body" && data.row.index === rows.length) {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.fillColor = [235, 241, 250];
+      }
+    },
+    margin: { left: 15, right: 15 },
+  });
+
+  // The signatures sit at the foot of the last page; give them a page of
+  // their own rather than printing them over the end of the table.
+  if (doc.lastAutoTable.finalY > doc.internal.pageSize.height - 45) doc.addPage();
+  drawSignatureBlock(doc, "Prepared By (Accounts)", "Director Signatory");
+  const stamp = dateFrom || dateTo ? `${dateFrom || "start"}_to_${dateTo || "today"}` : "all_time";
+  doc.save(`sales_by_channel_${stamp}.pdf`);
+}
+
 // ─── 3c. MASTER WALLET LEDGER PDF ───
 /** The Master Wallet's movements, as filed. Each row carries the balances it left. */
 export async function generateMasterWalletLedgerPDF(

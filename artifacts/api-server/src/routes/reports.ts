@@ -17,6 +17,7 @@ import { eq, and, gte, lte, desc, asc, inArray, sql } from "drizzle-orm";
 import { GetWriterReportParams, GetAgentReportParams } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
+import { quoteDueLedgers } from "../lib/postpaid";
 
 const router = Router();
 
@@ -1116,6 +1117,235 @@ router.get(
       })),
     });
   }
+);
+
+// ── GET /reports/sales-channels ───────────────────────────────────────────────
+/**
+ * Every sale in a period, by the way it was made.
+ *
+ *   prepaid   a POS ticket paid for from the writer's e-token float. Marked by
+ *             the token transaction the sale debited - the only thing that
+ *             says, per ticket, how it was paid. The writer's current
+ *             operation model is not used: a writer moved from prepaid to
+ *             postpaid last week still sold prepaid before that.
+ *   postpaid  a POS ticket sold on credit, owed back through the postpaid
+ *             ledger.
+ *   manual    a gross figure an agent keyed in for a writer. Late entries an
+ *             administrator has not confirmed are left out, as the daily
+ *             calculation leaves them out, and reported on their own.
+ *
+ * Cancelled and void tickets are not sales and are not counted.
+ *
+ * The answer comes back at writer x game-name grain, so the page can regroup
+ * by agency, writer or game without asking again. That grain is bounded by
+ * the roster times the game names, not by the number of tickets.
+ *
+ * Postpaid collection comes from the postpaid ledger, which is what the
+ * cashier settles against: commission and payable are the figures frozen when
+ * betting closed, collected is what has been recorded as paid in, and
+ * anything whose betting has not closed yet is "not yet due" rather than
+ * outstanding.
+ */
+router.get(
+  "/reports/sales-channels",
+  requireAuth,
+  requireRole("director", "administrator", "cashier"),
+  async (req, res) => {
+    const isDate = (v: unknown): v is string =>
+      typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+    const rawFrom = req.query["dateFrom"];
+    const rawTo = req.query["dateTo"];
+    if ((rawFrom && !isDate(rawFrom)) || (rawTo && !isDate(rawTo))) {
+      res.status(400).json({ error: "Dates must be YYYY-MM-DD" });
+      return;
+    }
+    const from = isDate(rawFrom) ? rawFrom : null;
+    const to = isDate(rawTo) ? rawTo : null;
+    if (from && to && from > to) {
+      res.status(400).json({ error: "The From date is after the To date" });
+      return;
+    }
+    const agentId = typeof req.query["agentId"] === "string" && /^[0-9a-f-]{36}$/i.test(req.query["agentId"])
+      ? req.query["agentId"]
+      : null;
+
+    // Ledgers whose betting has shut get their figures frozen now, so the
+    // report does not call money "not yet due" that the writer already owes.
+    await quoteDueLedgers(db);
+
+    const agencyFilter = agentId ? sql`and w.agent_id = ${agentId}` : sql``;
+    const ticketFrom = from ? sql`and t.created_at >= ${from}::date` : sql``;
+    const ticketTo = to ? sql`and t.created_at < (${to}::date + 1)` : sql``;
+    const entryFrom = from ? sql`and e.entry_date >= ${from}::date` : sql``;
+    const entryTo = to ? sql`and e.entry_date <= ${to}::date` : sql``;
+    const ledgerFrom = from ? sql`and l.ledger_date >= ${from}::date` : sql``;
+    const ledgerTo = to ? sql`and l.ledger_date <= ${to}::date` : sql``;
+
+    const [sold, keyed, ledger] = await Promise.all([
+      db.execute(sql`
+        select t.writer_id, g.name as game_name,
+               coalesce(sum(t.stake_amount) filter (where t.token_transaction_id is not null), 0)::text as prepaid,
+               count(*) filter (where t.token_transaction_id is not null)::int                          as prepaid_tickets,
+               coalesce(sum(t.stake_amount) filter (where t.token_transaction_id is null), 0)::text     as postpaid,
+               count(*) filter (where t.token_transaction_id is null)::int                              as postpaid_tickets
+          from tickets t
+          join writers w on w.id = t.writer_id
+          join games g on g.id = t.game_id
+         where t.status not in ('cancelled', 'void')
+           ${ticketFrom} ${ticketTo} ${agencyFilter}
+         group by t.writer_id, g.name`),
+      db.execute(sql`
+        select e.writer_id, coalesce(g.name, 'No game recorded') as game_name,
+               coalesce(sum(e.gross_amount) filter (where not (e.is_late and not e.admin_confirmed)), 0)::text as manual,
+               count(*) filter (where not (e.is_late and not e.admin_confirmed))::int                        as manual_entries,
+               coalesce(sum(e.gross_amount) filter (where e.is_late and not e.admin_confirmed), 0)::text       as unconfirmed,
+               count(*) filter (where e.is_late and not e.admin_confirmed)::int                                as unconfirmed_entries
+          from gross_entries e
+          join writers w on w.id = e.writer_id
+          left join games g on g.id = e.game_id
+         where true ${entryFrom} ${entryTo} ${agencyFilter}
+         group by e.writer_id, coalesce(g.name, 'No game recorded')`),
+      db.execute(sql`
+        select l.writer_id, g.name as game_name,
+               coalesce(sum(l.commission_amount) filter (where l.commission_pct is not null), 0)::text as commission,
+               -- Settled before rates were frozen per draw: the old figure was net_balance.
+               coalesce(sum(case
+                 when l.commission_pct is not null then l.amount_payable
+                 when l.settlement_status = 'settled' then l.net_balance
+                 else 0 end), 0)::text as payable,
+               coalesce(sum(case
+                 when l.settlement_status = 'settled' and l.commission_pct is null then l.net_balance
+                 when l.settlement_status = 'settled' then greatest(l.amount_payable, l.amount_paid)
+                 else l.amount_paid end), 0)::text as collected,
+               coalesce(sum(case
+                 when l.settlement_status = 'settled' then 0
+                 when l.commission_pct is null then 0
+                 else greatest(l.amount_payable - l.amount_paid, 0) end), 0)::text as outstanding,
+               coalesce(sum(l.total_stakes) filter (where l.commission_pct is null and l.settlement_status <> 'settled'), 0)::text as not_yet_due
+          from postpaid_daily_ledger l
+          join writers w on w.id = l.writer_id
+          join games g on g.id = l.game_id
+         where true ${ledgerFrom} ${ledgerTo} ${agencyFilter}
+         group by l.writer_id, g.name`),
+    ]);
+
+    type Cell = {
+      writerId: string; gameName: string;
+      prepaid: number; prepaidTickets: number; postpaid: number; postpaidTickets: number;
+      manual: number; manualEntries: number; unconfirmed: number; unconfirmedEntries: number;
+      commission: number; payable: number; collected: number; outstanding: number; notYetDue: number;
+    };
+    const cells = new Map<string, Cell>();
+    const cell = (writerId: string, gameName: string): Cell => {
+      const key = `${writerId}\u0000${gameName}`;
+      let c = cells.get(key);
+      if (!c) {
+        c = {
+          writerId, gameName,
+          prepaid: 0, prepaidTickets: 0, postpaid: 0, postpaidTickets: 0,
+          manual: 0, manualEntries: 0, unconfirmed: 0, unconfirmedEntries: 0,
+          commission: 0, payable: 0, collected: 0, outstanding: 0, notYetDue: 0,
+        };
+        cells.set(key, c);
+      }
+      return c;
+    };
+    // Money is summed in pesewas, so a long period does not drift by a cedi.
+    const pes = (v: unknown) => Math.round(Number(v ?? 0) * 100);
+    type Raw = Record<string, unknown>;
+    for (const r of sold.rows as Raw[]) {
+      const c = cell(String(r["writer_id"]), String(r["game_name"]));
+      c.prepaid += pes(r["prepaid"]); c.prepaidTickets += Number(r["prepaid_tickets"]);
+      c.postpaid += pes(r["postpaid"]); c.postpaidTickets += Number(r["postpaid_tickets"]);
+    }
+    for (const r of keyed.rows as Raw[]) {
+      const c = cell(String(r["writer_id"]), String(r["game_name"]));
+      c.manual += pes(r["manual"]); c.manualEntries += Number(r["manual_entries"]);
+      c.unconfirmed += pes(r["unconfirmed"]); c.unconfirmedEntries += Number(r["unconfirmed_entries"]);
+    }
+    for (const r of ledger.rows as Raw[]) {
+      const c = cell(String(r["writer_id"]), String(r["game_name"]));
+      c.commission += pes(r["commission"]); c.payable += pes(r["payable"]);
+      c.collected += pes(r["collected"]); c.outstanding += pes(r["outstanding"]);
+      c.notYetDue += pes(r["not_yet_due"]);
+    }
+
+    const writerIds = [...new Set([...cells.values()].map((c) => c.writerId))];
+    const writers = writerIds.length
+      ? await db
+          .select({
+            id: writersTable.id,
+            fullCode: writersTable.fullCode,
+            fullName: writersTable.fullName,
+            agentId: writersTable.agentId,
+            agentCode: agentsTable.fullCode,
+            agencyName: agentsTable.agencyName,
+            agentName: usersTable.fullName,
+          })
+          .from(writersTable)
+          .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
+          .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+          .where(inArray(writersTable.id, writerIds))
+      : [];
+    const writerById = new Map(writers.map((w) => [w.id, w]));
+
+    const cedis = (p: number) => (p / 100).toFixed(2);
+    const rows = [...cells.values()]
+      .map((c) => {
+        const w = writerById.get(c.writerId);
+        return {
+          writerId: c.writerId,
+          writerCode: w?.fullCode ?? "-",
+          writerName: w?.fullName ?? "Unknown writer",
+          agentId: w?.agentId ?? null,
+          agentCode: w?.agentCode ?? "-",
+          agencyName: w?.agencyName || w?.agentName || null,
+          gameName: c.gameName,
+          prepaid: cedis(c.prepaid),
+          prepaidTickets: c.prepaidTickets,
+          postpaid: cedis(c.postpaid),
+          postpaidTickets: c.postpaidTickets,
+          manual: cedis(c.manual),
+          manualEntries: c.manualEntries,
+          total: cedis(c.prepaid + c.postpaid + c.manual),
+          unconfirmed: cedis(c.unconfirmed),
+          unconfirmedEntries: c.unconfirmedEntries,
+          postpaidCommission: cedis(c.commission),
+          postpaidPayable: cedis(c.payable),
+          postpaidCollected: cedis(c.collected),
+          postpaidOutstanding: cedis(c.outstanding),
+          postpaidNotYetDue: cedis(c.notYetDue),
+        };
+      })
+      .sort((a, b) => a.agentCode.localeCompare(b.agentCode) || a.writerCode.localeCompare(b.writerCode) || a.gameName.localeCompare(b.gameName));
+
+    const sum = (k: keyof Cell) => [...cells.values()].reduce((s, c) => s + (c[k] as number), 0);
+    const prepaid = sum("prepaid");
+    const postpaid = sum("postpaid");
+    const manual = sum("manual");
+    const selling = [...cells.values()].filter((c) => c.prepaid + c.postpaid + c.manual > 0);
+
+    res.json({
+      period: { dateFrom: from, dateTo: to },
+      summary: {
+        prepaid: { amount: cedis(prepaid), tickets: sum("prepaidTickets") },
+        postpaid: { amount: cedis(postpaid), tickets: sum("postpaidTickets") },
+        manual: { amount: cedis(manual), entries: sum("manualEntries") },
+        total: cedis(prepaid + postpaid + manual),
+        unconfirmedLate: { amount: cedis(sum("unconfirmed")), entries: sum("unconfirmedEntries") },
+        postpaidCollection: {
+          commission: cedis(sum("commission")),
+          payable: cedis(sum("payable")),
+          collected: cedis(sum("collected")),
+          outstanding: cedis(sum("outstanding")),
+          notYetDue: cedis(sum("notYetDue")),
+        },
+        writerCount: new Set(selling.map((c) => c.writerId)).size,
+        agencyCount: new Set(selling.map((c) => writerById.get(c.writerId)?.agentId).filter(Boolean)).size,
+      },
+      rows,
+    });
+  },
 );
 
 export default router;

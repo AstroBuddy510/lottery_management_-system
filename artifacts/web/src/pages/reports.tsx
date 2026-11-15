@@ -24,6 +24,8 @@ import {
   generateOrgReportPDF,
   generateGameSalesByAgencyPDF,
   generatePosWinsReportPDF,
+  generateSalesChannelsReportPDF,
+  type SalesChannelGroupRow,
 } from "@/lib/pdf-generator";
 import { TokenReportView } from "@/components/token-report";
 
@@ -1166,6 +1168,289 @@ function PosWinsReportView() {
   );
 }
 
+// ── Sales Channels ────────────────────────────────────────────────────────────
+
+type SalesChannelRow = {
+  writerId: string; writerCode: string; writerName: string;
+  agentId: string | null; agentCode: string; agencyName: string | null;
+  gameName: string;
+  prepaid: string; prepaidTickets: number;
+  postpaid: string; postpaidTickets: number;
+  manual: string; manualEntries: number;
+  total: string;
+  unconfirmed: string; unconfirmedEntries: number;
+  postpaidCommission: string; postpaidPayable: string; postpaidCollected: string;
+  postpaidOutstanding: string; postpaidNotYetDue: string;
+};
+
+type SalesChannelsReport = {
+  period: { dateFrom: string | null; dateTo: string | null };
+  summary: {
+    prepaid: { amount: string; tickets: number };
+    postpaid: { amount: string; tickets: number };
+    manual: { amount: string; entries: number };
+    total: string;
+    unconfirmedLate: { amount: string; entries: number };
+    postpaidCollection: { commission: string; payable: string; collected: string; outstanding: string; notYetDue: string };
+    writerCount: number;
+    agencyCount: number;
+  };
+  rows: SalesChannelRow[];
+};
+
+type ChannelGrouping = "agency" | "writer" | "game";
+
+const CHANNEL_COLORS = {
+  prepaid: "bg-sky-500",
+  postpaid: "bg-amber-500",
+  manual: "bg-violet-500",
+} as const;
+
+/**
+ * Roll the writer x game rows up to the chosen grouping. Summed in pesewas so
+ * the totals in the table foot equal the cards above it to the pesewa.
+ */
+function groupChannelRows(rows: SalesChannelRow[], by: ChannelGrouping): SalesChannelGroupRow[] {
+  const p = (v: string) => Math.round(Number(v) * 100);
+  const groups = new Map<string, SalesChannelGroupRow & { _p: Record<string, number> }>();
+  for (const r of rows) {
+    const key = by === "agency" ? (r.agentId ?? r.agentCode) : by === "writer" ? r.writerId : r.gameName;
+    let g = groups.get(key);
+    if (!g) {
+      g = {
+        key,
+        name: by === "agency" ? (r.agencyName ?? r.agentCode) : by === "writer" ? r.writerName : r.gameName,
+        sub: by === "agency" ? r.agentCode : by === "writer" ? `${r.writerCode} · ${r.agentCode}` : "",
+        prepaid: "0", prepaidTickets: 0, postpaid: "0", postpaidTickets: 0, manual: "0", manualEntries: 0, total: "0",
+        payable: "0", collected: "0", outstanding: "0", notYetDue: "0",
+        _p: { prepaid: 0, postpaid: 0, manual: 0, payable: 0, collected: 0, outstanding: 0, notYetDue: 0 },
+      };
+      groups.set(key, g);
+    }
+    g._p.prepaid += p(r.prepaid); g._p.postpaid += p(r.postpaid); g._p.manual += p(r.manual);
+    g._p.payable += p(r.postpaidPayable); g._p.collected += p(r.postpaidCollected);
+    g._p.outstanding += p(r.postpaidOutstanding); g._p.notYetDue += p(r.postpaidNotYetDue);
+    g.prepaidTickets += r.prepaidTickets; g.postpaidTickets += r.postpaidTickets; g.manualEntries += r.manualEntries;
+  }
+  const c = (n: number) => (n / 100).toFixed(2);
+  return [...groups.values()]
+    .map(({ _p, ...g }) => ({
+      ...g,
+      prepaid: c(_p.prepaid), postpaid: c(_p.postpaid), manual: c(_p.manual),
+      total: c(_p.prepaid + _p.postpaid + _p.manual),
+      payable: c(_p.payable), collected: c(_p.collected), outstanding: c(_p.outstanding), notYetDue: c(_p.notYetDue),
+    }))
+    // Rows with only unconfirmed late entries carry no counted sales.
+    .filter(g => [g.total, g.payable, g.collected, g.notYetDue].some(v => Number(v) !== 0))
+    .sort((a, b) => Number(b.total) - Number(a.total) || a.name.localeCompare(b.name));
+}
+
+function ChannelMix({ prepaid, postpaid, manual }: { prepaid: number; postpaid: number; manual: number }) {
+  const total = prepaid + postpaid + manual;
+  if (total <= 0) return <div className="h-1.5 rounded-full bg-muted" />;
+  return (
+    <div className="flex h-1.5 rounded-full overflow-hidden bg-muted" title={`Prepaid ${Math.round(prepaid / total * 100)}% · Postpaid ${Math.round(postpaid / total * 100)}% · Manual ${Math.round(manual / total * 100)}%`}>
+      {prepaid > 0 && <div className={CHANNEL_COLORS.prepaid} style={{ width: `${prepaid / total * 100}%` }} />}
+      {postpaid > 0 && <div className={CHANNEL_COLORS.postpaid} style={{ width: `${postpaid / total * 100}%` }} />}
+      {manual > 0 && <div className={CHANNEL_COLORS.manual} style={{ width: `${manual / total * 100}%` }} />}
+    </div>
+  );
+}
+
+function SalesChannelsView() {
+  const [dateFrom, setDateFrom] = useState(firstOfMonth());
+  const [dateTo, setDateTo] = useState(todayStr());
+  const [agentId, setAgentId] = useState("");
+  const [groupBy, setGroupBy] = useState<ChannelGrouping>("agency");
+
+  const { data: agents } = useListAgents({});
+  const agentList = Array.isArray(agents) ? agents : [];
+
+  const { data: r, isLoading, isFetching, error, refetch } = useQuery<SalesChannelsReport>({
+    queryKey: ["sales-channels", dateFrom, dateTo, agentId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+      if (agentId) params.set("agentId", agentId);
+      const res = await fetch(`/api/reports/sales-channels?${params}`, { headers: authHeaders() });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
+      return body;
+    },
+  });
+
+  const grouped = useMemo(() => (r ? groupChannelRows(r.rows, groupBy) : []), [r, groupBy]);
+  const s = r?.summary;
+  const total = Number(s?.total ?? 0);
+  const share = (v: string | undefined) => (total > 0 ? `${Math.round(Number(v ?? 0) / total * 100)}%` : "—");
+  const agencyLabel = agentId ? (() => { const a = agentList.find(x => x.id === agentId); return a ? `${a.agencyName ?? a.user?.fullName ?? a.fullCode} (${a.fullCode})` : ""; })() : "";
+  const groupLabel = { agency: "Agency", writer: "Writer", game: "Game" }[groupBy];
+
+  return (
+    <div className="space-y-4 pt-4">
+      <ParamPanel onRun={() => void refetch()} loading={isLoading || isFetching} buttonLabel="Refresh"
+        hint="POS prepaid, POS postpaid and agent-keyed sales for the period. Cancelled and void tickets are not counted.">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">From</Label>
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-9 text-sm bg-background" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">To</Label>
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-9 text-sm bg-background" />
+          </div>
+          <div className="space-y-1.5 min-w-0">
+            <Label className="text-xs text-muted-foreground">Agency (optional)</Label>
+            <Select value={agentId || "_all"} onValueChange={v => setAgentId(v === "_all" ? "" : v)}>
+              <SelectTrigger className="h-9 text-sm bg-background"><SelectValue placeholder="All agencies" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_all">All agencies</SelectItem>
+                {agentList.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.agencyName ?? a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DateShortcuts onSelect={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+      </ParamPanel>
+
+      {error && (
+        <div className="text-center py-8 text-sm text-red-600 border border-red-200 rounded-xl">
+          {(error as Error).message || "Failed to load report. Please try again."}
+        </div>
+      )}
+
+      {r && s && (
+        <div className="space-y-4">
+          <ReportLetterhead
+            title="Sales by Channel"
+            subtitle={agencyLabel ? `${agencyLabel} · by ${groupLabel.toLowerCase()}` : `All agencies · by ${groupLabel.toLowerCase()}`}
+            dateFrom={dateFrom} dateTo={dateTo}
+            onExportPDF={() => generateSalesChannelsReportPDF({ dateFrom, dateTo, agencyLabel, groupLabel, summary: s, rows: grouped })}
+          />
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: "Total sales", value: ghs(s.total), sub: `${s.writerCount} writer${s.writerCount === 1 ? "" : "s"} · ${s.agencyCount} agenc${s.agencyCount === 1 ? "y" : "ies"}`, dot: "" },
+              { label: "POS prepaid", value: ghs(s.prepaid.amount), sub: `${share(s.prepaid.amount)} · ${s.prepaid.tickets.toLocaleString()} ticket${s.prepaid.tickets === 1 ? "" : "s"} · e-tokens`, dot: CHANNEL_COLORS.prepaid },
+              { label: "POS postpaid", value: ghs(s.postpaid.amount), sub: `${share(s.postpaid.amount)} · ${s.postpaid.tickets.toLocaleString()} ticket${s.postpaid.tickets === 1 ? "" : "s"} · on credit`, dot: CHANNEL_COLORS.postpaid },
+              { label: "Manual (agent entry)", value: ghs(s.manual.amount), sub: `${share(s.manual.amount)} · ${s.manual.entries.toLocaleString()} entr${s.manual.entries === 1 ? "y" : "ies"}`, dot: CHANNEL_COLORS.manual },
+            ].map(({ label, value, sub, dot }) => (
+              <div key={label} className="rounded-xl border bg-card px-3 py-2.5 min-w-0">
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                  {dot && <span className={`w-2 h-2 rounded-full ${dot}`} />}{label}
+                </div>
+                <div className="font-mono font-bold text-sm truncate">{value}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-xl border bg-card px-4 py-3">
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-2">
+              <span className={`w-2 h-2 rounded-full ${CHANNEL_COLORS.postpaid}`} />Postpaid collection
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {[
+                { label: "Writers' commission", value: s.postpaidCollection.commission, cls: "text-muted-foreground" },
+                { label: "Payable to company", value: s.postpaidCollection.payable, cls: "" },
+                { label: "Collected", value: s.postpaidCollection.collected, cls: "text-emerald-700 dark:text-emerald-400" },
+                { label: "Outstanding", value: s.postpaidCollection.outstanding, cls: Number(s.postpaidCollection.outstanding) > 0 ? "text-red-600 dark:text-red-400" : "" },
+                { label: "Not yet due", value: s.postpaidCollection.notYetDue, cls: "text-muted-foreground" },
+              ].map(x => (
+                <div key={x.label} className="min-w-0">
+                  <div className="text-[10px] text-muted-foreground">{x.label}</div>
+                  <div className={`font-mono text-sm font-semibold truncate ${x.cls}`}>{ghs(x.value)}</div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2">"Not yet due" is postpaid selling on draws whose betting has not closed, so nothing is owed on it yet.</p>
+          </div>
+
+          {s.unconfirmedLate.entries > 0 && (
+            <div className="rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-500/10 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-300">
+              {s.unconfirmedLate.entries} late manual entr{s.unconfirmedLate.entries === 1 ? "y" : "ies"} worth {ghs(s.unconfirmedLate.amount)} {s.unconfirmedLate.entries === 1 ? "is" : "are"} waiting for an administrator to confirm and {s.unconfirmedLate.entries === 1 ? "is" : "are"} not counted above.
+            </div>
+          )}
+
+          <div className="rounded-xl border overflow-hidden">
+            <div className="bg-muted/40 px-4 py-2.5 border-b flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">By {groupLabel.toLowerCase()} · {grouped.length}</span>
+              <div className="inline-flex rounded-lg border bg-background p-0.5">
+                {(["agency", "writer", "game"] as const).map(g => (
+                  <button key={g} onClick={() => setGroupBy(g)}
+                    className={`text-[11px] font-semibold px-3 py-1 rounded-md transition-colors ${groupBy === g ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}>
+                    {{ agency: "Agency", writer: "Writer", game: "Game" }[g]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/20">
+                    <TableHead className="text-xs">{groupLabel}</TableHead>
+                    <TableHead className="text-right text-xs"><span className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${CHANNEL_COLORS.prepaid}`} />Prepaid</span></TableHead>
+                    <TableHead className="text-right text-xs"><span className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${CHANNEL_COLORS.postpaid}`} />Postpaid</span></TableHead>
+                    <TableHead className="text-right text-xs"><span className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${CHANNEL_COLORS.manual}`} />Manual</span></TableHead>
+                    <TableHead className="text-right text-xs">Total</TableHead>
+                    <TableHead className="text-right text-xs whitespace-nowrap">Postpaid payable</TableHead>
+                    <TableHead className="text-right text-xs">Collected</TableHead>
+                    <TableHead className="text-right text-xs">Outstanding</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {grouped.length === 0 ? (
+                    <TableRow><TableCell colSpan={8} className="text-sm text-muted-foreground text-center py-8">No sales in this period.</TableCell></TableRow>
+                  ) : grouped.map(g => (
+                    <TableRow key={g.key} className="hover:bg-muted/20">
+                      <TableCell className="min-w-[160px]">
+                        <div className="text-sm font-semibold">{g.name}</div>
+                        {g.sub && <div className="text-[10px] font-mono text-muted-foreground">{g.sub}</div>}
+                        <div className="mt-1.5 w-28"><ChannelMix prepaid={Number(g.prepaid)} postpaid={Number(g.postpaid)} manual={Number(g.manual)} /></div>
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="font-mono text-sm">{ghs(g.prepaid)}</div>
+                        <div className="text-[10px] text-muted-foreground">{g.prepaidTickets} tkt</div>
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="font-mono text-sm">{ghs(g.postpaid)}</div>
+                        <div className="text-[10px] text-muted-foreground">{g.postpaidTickets} tkt</div>
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="font-mono text-sm">{ghs(g.manual)}</div>
+                        <div className="text-[10px] text-muted-foreground">{g.manualEntries} entr{g.manualEntries === 1 ? "y" : "ies"}</div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(g.total)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-muted-foreground whitespace-nowrap">{ghs(g.payable)}</TableCell>
+                      <TableCell className="text-right font-mono text-sm text-emerald-700 dark:text-emerald-400 whitespace-nowrap">{ghs(g.collected)}</TableCell>
+                      <TableCell className={`text-right font-mono text-sm whitespace-nowrap ${Number(g.outstanding) > 0 ? "text-red-600 dark:text-red-400 font-semibold" : "text-muted-foreground"}`}>{ghs(g.outstanding)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <tfoot>
+                  <tr className="border-t-2 bg-muted/30">
+                    <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground">Total</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold whitespace-nowrap">{ghs(s.prepaid.amount)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold whitespace-nowrap">{ghs(s.postpaid.amount)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold whitespace-nowrap">{ghs(s.manual.amount)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(s.total)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold whitespace-nowrap">{ghs(s.postpaidCollection.payable)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold whitespace-nowrap">{ghs(s.postpaidCollection.collected)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold whitespace-nowrap">{ghs(s.postpaidCollection.outstanding)}</td>
+                  </tr>
+                </tfoot>
+              </Table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function Reports() {
@@ -1187,11 +1472,12 @@ export function Reports() {
       </div>
 
       <Tabs defaultValue="writer">
-        <TabsList className="mb-1">
+        <TabsList className="mb-1 h-auto flex-wrap justify-start">
           <TabsTrigger value="writer">Writer</TabsTrigger>
           <TabsTrigger value="agent">Agent</TabsTrigger>
           <TabsTrigger value="gamesales">Game Sales</TabsTrigger>
           <TabsTrigger value="poswins">POS Wins</TabsTrigger>
+          <TabsTrigger value="channels">Sales Channels</TabsTrigger>
           {isDirectorOrAdmin && <TabsTrigger value="org">Organisation</TabsTrigger>}
           {isDirectorOrAdmin && <TabsTrigger value="tokens">E-Tokens</TabsTrigger>}
         </TabsList>
@@ -1199,6 +1485,7 @@ export function Reports() {
         <TabsContent value="agent"><AgentReportView /></TabsContent>
         <TabsContent value="gamesales"><GameSalesView /></TabsContent>
         <TabsContent value="poswins"><PosWinsReportView /></TabsContent>
+        <TabsContent value="channels"><SalesChannelsView /></TabsContent>
         {isDirectorOrAdmin && <TabsContent value="org"><OrgReportView /></TabsContent>}
         {isDirectorOrAdmin && <TabsContent value="tokens"><TokenReportView /></TabsContent>}
       </Tabs>
