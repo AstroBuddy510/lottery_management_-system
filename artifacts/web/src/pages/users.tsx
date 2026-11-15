@@ -44,6 +44,14 @@ const ROLES = [
 
 const ROLE_LABELS: Record<string, string> = Object.fromEntries(ROLES.map(r => [r.value, r.label]));
 
+/** The server's own reason for refusing, when it gave one. */
+function serverReason(err: unknown): string | undefined {
+  const data = (err as { data?: { error?: unknown } } | null)?.data;
+  return typeof data?.error === "string" ? data.error : undefined;
+}
+
+const DIRECTOR_ONLY = "Only a Director can reset, edit or remove a Director's account";
+
 const ROLE_COLORS: Record<string, string> = {
   director: "bg-indigo-500/10 text-indigo-700 border-indigo-200/50 dark:bg-indigo-500/5 dark:text-indigo-300 dark:border-indigo-500/20",
   administrator: "bg-rose-500/10 text-rose-700 border-rose-200/50 dark:bg-rose-500/5 dark:text-rose-300 dark:border-rose-500/20",
@@ -376,6 +384,15 @@ function UsersTab() {
   const deactivateMutation = useDeactivateUser();
   const regenPinMutation = useRegeneratePin();
 
+  // The server refuses a non-director any action on a director's account
+  // (a reset PIN is shown to whoever reset it, which would be a way into the
+  // Director's role and the Master Wallet). Say so here instead of offering
+  // buttons that can only fail.
+  const { user: me } = useAuth();
+  const iAmDirector = me?.role === "director";
+  const directorOnly = (u: User) => u.role === "director" && !iAmDirector;
+  const assignableRoles = iAmDirector ? ROLES : ROLES.filter(r => r.value !== "director");
+
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [createForm, setCreateForm] = useState<CreateForm>({ fullName: "", phone: "", role: "cashier" });
@@ -440,8 +457,8 @@ function UsersTab() {
       setCreateForm({ fullName: "", phone: "", role: "cashier" });
       invalidateAll();
       setNewPin({ pin: result.pin, name: result.fullName });
-    } catch {
-      toast({ title: "Failed to create user", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to create user", description: serverReason(err), variant: "destructive" });
     }
   };
 
@@ -458,8 +475,8 @@ function UsersTab() {
       toast({ title: "User updated successfully" });
       setEditUser(null);
       invalidateAll();
-    } catch {
-      toast({ title: "Failed to update user", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to update user", description: serverReason(err), variant: "destructive" });
     }
   };
 
@@ -469,8 +486,8 @@ function UsersTab() {
       await deactivateMutation.mutateAsync({ id: u.id });
       toast({ title: "User deactivated" });
       invalidateAll();
-    } catch {
-      toast({ title: "Failed to deactivate user", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to deactivate user", description: serverReason(err), variant: "destructive" });
     }
   };
 
@@ -491,8 +508,8 @@ function UsersTab() {
         });
       }
       invalidateAll();
-    } catch {
-      toast({ title: "Failed to delete user", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to delete user", description: serverReason(err), variant: "destructive" });
     }
   };
 
@@ -501,8 +518,8 @@ function UsersTab() {
     try {
       const result = await regenPinMutation.mutateAsync({ id: u.id });
       setNewPin({ pin: result.pin, name: u.fullName });
-    } catch {
-      toast({ title: "Failed to regenerate PIN", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Failed to regenerate PIN", description: serverReason(err), variant: "destructive" });
     }
   };
 
@@ -621,6 +638,11 @@ function UsersTab() {
                     : "—"}
                 </TableCell>
                 <TableCell>
+                  {directorOnly(u) ? (
+                    <div className="flex justify-end pr-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground italic" title={DIRECTOR_ONLY}>Managed by a Director</span>
+                    </div>
+                  ) : (
                   <div className="flex gap-1.5 justify-end pr-2">
                     <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-border/40 hover:bg-muted/50 transition-colors" onClick={() => openEdit(u)}>Edit</Button>
                     <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-amber-500/20 text-amber-600 hover:bg-amber-500/10 hover:text-amber-700 dark:hover:text-amber-400 transition-colors" onClick={() => handleRegeneratePin(u)}>Reset PIN</Button>
@@ -631,6 +653,7 @@ function UsersTab() {
                     )}
                     <Button size="sm" variant="outline" className="h-7 text-[10px] px-2.5 font-bold rounded-lg border-red-500/30 text-red-600 hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400 transition-colors" onClick={() => handleDelete(u)}>Delete</Button>
                   </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -666,7 +689,7 @@ function UsersTab() {
               <Label className="text-xs">Role</Label>
               <Select value={createForm.role} onValueChange={v => setCreateForm(f => ({ ...f, role: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>{ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{assignableRoles.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <DialogFooter>
@@ -700,7 +723,7 @@ function UsersTab() {
               <Label className="text-xs">Role</Label>
               <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>{ROLES.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{assignableRoles.map(r => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
