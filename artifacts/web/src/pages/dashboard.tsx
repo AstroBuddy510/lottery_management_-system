@@ -418,6 +418,12 @@ function DirectorDashboard() {
     return gameList.filter(g => g.status !== "live");
   }, [gameList]);
 
+  // Most recent draw first, by when it closed rather than by event number.
+  const closedGamesNewestFirst = useMemo(
+    () => [...otherGames].sort((a, b) => new Date(b.closeAt).getTime() - new Date(a.closeAt).getTime()),
+    [otherGames],
+  );
+
   const currentGame = useMemo(() => {
     return liveGames[0] ?? null;
   }, [liveGames]);
@@ -692,19 +698,36 @@ function DirectorDashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <Select value={selectedGameId || "_live"} onValueChange={handleGameSelect}>
               <SelectTrigger className="h-9 text-xs w-[220px] bg-background"><SelectValue placeholder="Select game…" /></SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem value="_live">{currentGame ? `Current: ${currentGame.name} #${currentGame.eventNumber}` : "Current game (live)"}</SelectItem>
-                {liveGames.length > 0 && (
+              {/* A long season of draws: the menu has a fixed height and a visible
+                  scrollbar, and the current event stays pinned at the top while
+                  the closed and offline draws scroll beneath it. */}
+              <SelectContent align="end" className="select-scroll w-[300px] max-h-[min(22rem,var(--radix-select-content-available-height))]">
+                <SelectItem value="_live" className="sticky top-0 z-10 bg-popover font-semibold border-b rounded-none mb-1">
+                  {currentGame ? (
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="truncate">Current: {currentGame.name}</span>
+                      <span className="font-mono text-[10px] opacity-70 shrink-0">#{currentGame.eventNumber}</span>
+                    </span>
+                  ) : "Current game (none live)"}
+                </SelectItem>
+                {liveGames.length > 1 && (
                   <SelectGroup>
-                    <SelectLabel className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Live</SelectLabel>
+                    <SelectLabel className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 dark:text-emerald-400">Live · {liveGames.length}</SelectLabel>
                     {liveGames.map(g => <SelectItem key={g.id} value={g.id}><span className="font-mono text-xs text-muted-foreground mr-1.5">#{g.eventNumber}</span>{g.name}</SelectItem>)}
                   </SelectGroup>
                 )}
-                {otherGames.length > 0 && (
+                {closedGamesNewestFirst.length > 0 && (
                   <SelectGroup>
-                    <SelectLabel className="text-xs font-bold text-muted-foreground">Closed / offline</SelectLabel>
-                    {[...otherGames].sort((a, b) => b.eventNumber.localeCompare(a.eventNumber)).map(g => (
-                      <SelectItem key={g.id} value={g.id}><span className="font-mono text-xs text-muted-foreground mr-1.5">#{g.eventNumber}</span>{g.name}</SelectItem>
+                    <SelectLabel className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Closed / offline · {closedGamesNewestFirst.length}</SelectLabel>
+                    {closedGamesNewestFirst.map(g => (
+                      <SelectItem key={g.id} value={g.id}>
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="truncate">{g.name}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground shrink-0">#{g.eventNumber}</span>
+                          <span className="text-[10px] text-muted-foreground shrink-0">· {new Date(g.closeAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                        </span>
+                      </SelectItem>
                     ))}
                   </SelectGroup>
                 )}

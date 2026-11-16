@@ -201,3 +201,25 @@
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Select menus that opt in with .select-scroll show a real scrollbar.
+ * Radix hides the viewport's scrollbar and relies on hover arrows, which
+ * nobody finds on a list of a hundred past draws.
+ */
+.select-scroll [data-radix-select-viewport] {
+  scrollbar-width: thin !important;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+}
+.select-scroll [data-radix-select-viewport]::-webkit-scrollbar {
+  display: block !important;
+  width: 8px;
+}
+.select-scroll [data-radix-select-viewport]::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.35);
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--popover));
+}
+.select-scroll [data-radix-select-viewport]::-webkit-scrollbar-track {
+  background: transparent;
+}
