@@ -3,13 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getServerNow } from "../lib/time-sync";
 import { LiveSalesSection } from "@/components/live-sales";
+import { businessDate, businessWeekday, useBusinessNow, drawState, pickCurrentGame, isOnBusinessDay, DRAW_STATE_LABEL, type DrawState } from "@/lib/business-day";
 import { useAuth } from "@/lib/auth";
 import { AgentDashboard } from "@/pages/agent-dashboard";
 import { CountdownTimer } from "@/pages/games";
 import {
   useListAgents, useGetReserveBalance, useGetUnreadCount,
   useListCalculations, useListPayments, useListGrossEntries,
-  useListWinsEntries, useListSales, useListGames, useListTimeWindows,
+  useListWinsEntries, useListSales, useListGames, getListGamesQueryKey, useListTimeWindows,
   getGetUnreadCountQueryKey, getListCalculationsQueryKey,
   getListGrossEntriesQueryKey, getListWinsEntriesQueryKey,
   getListPaymentsQueryKey, getGetReserveBalanceQueryKey,
@@ -383,8 +384,11 @@ function useUnifiedSummary(gameId: string | undefined, date: string | undefined)
 
 function DirectorDashboard() {
   const [, navigate] = useLocation();
-  const today = new Date(getServerNow()).toISOString().split("T")[0];
-  const todayDow = new Date(getServerNow()).getDay();
+  // The company's own day (Accra), ticking, so a dashboard left open overnight
+  // moves into the new day by itself instead of carrying yesterday's draw.
+  const now = useBusinessNow();
+  const today = businessDate(now);
+  const todayName = businessWeekday(now);
 
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [page, setPage] = useState(1);
@@ -398,7 +402,9 @@ function DirectorDashboard() {
   );
   const { data: payments } = useListPayments({}, { query: { queryKey: getListPaymentsQueryKey({}), refetchInterval: 60_000 } });
   const { data: reserve } = useGetReserveBalance({ query: { queryKey: getGetReserveBalanceQueryKey(), refetchInterval: 60_000 } });
-  const { data: games } = useListGames();
+  // Polled: a game switched live (or closed) elsewhere has to show here
+  // without anyone reloading the page.
+  const { data: games } = useListGames({ query: { queryKey: getListGamesQueryKey(), refetchInterval: 15_000 } });
   const { agentList, allWriters } = useWriterLookup();
 
   const { data: liveGross } = useListGrossEntries(
@@ -422,13 +428,26 @@ function DirectorDashboard() {
   const gameList = Array.isArray(games) ? games : [];
   const expensesList = Array.isArray(rawExpenses) ? rawExpenses : [];
 
+  const calculatedGameIds = useMemo(
+    () => new Set(calcList.map(c => c.gameId).filter((id): id is string => !!id)),
+    [calcList],
+  );
+  const stateOf = (g: (typeof gameList)[number]): DrawState => drawState(g, now, calculatedGameIds.has(g.id));
+
+  // Live means taking bets now: marked live and not yet past its close.
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
-  }, [gameList]);
+    return gameList.filter(g => drawState(g, now, calculatedGameIds.has(g.id)) === "live");
+  }, [gameList, now, calculatedGameIds]);
 
   const otherGames = useMemo(() => {
-    return gameList.filter(g => g.status !== "live");
-  }, [gameList]);
+    const live = new Set(liveGames.map(g => g.id));
+    return gameList.filter(g => !live.has(g.id));
+  }, [gameList, liveGames]);
+
+  const todaysGames = useMemo(
+    () => gameList.filter(g => isOnBusinessDay(g, today)).sort((a, b) => new Date(a.closeAt).getTime() - new Date(b.closeAt).getTime()),
+    [gameList, today],
+  );
 
   // Most recent draw first, by when it closed rather than by event number.
   const closedGamesNewestFirst = useMemo(
@@ -436,9 +455,11 @@ function DirectorDashboard() {
     [otherGames],
   );
 
-  const currentGame = useMemo(() => {
-    return liveGames[0] ?? null;
-  }, [liveGames]);
+  // A game live right now, else today's own draw - never a previous day's.
+  const currentGame = useMemo(
+    () => pickCurrentGame(gameList, now, calculatedGameIds),
+    [gameList, now, calculatedGameIds],
+  );
 
   const displayGame = useMemo(() => {
     if (!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") return currentGame;
@@ -452,19 +473,14 @@ function DirectorDashboard() {
       setSelectedDate("");
     } else {
       const g = gameList.find(g => g.id === id);
-      if (g) setSelectedDate(new Date(g.closeAt).toISOString().split("T")[0]);
+      if (g) setSelectedDate(businessDate(g.closeAt));
     }
   };
 
-  const mostRecentDate = useMemo(() => {
-    if (!calcList.length) return today;
-    return calcList.reduce((m, c) => {
-      const d = c.calcDate?.split("T")[0] ?? "";
-      return d > m ? d : m;
-    }, "");
-  }, [calcList, today]);
-
-  const viewDate = selectedDate || (displayGame ? new Date(displayGame.closeAt).toISOString().split("T")[0] : mostRecentDate);
+  // With no draw selected the dashboard is about today. It used to fall back
+  // to the most recent calculated day, which put Saturday's figures under a
+  // Monday heading.
+  const viewDate = selectedDate || (displayGame ? businessDate(displayGame.closeAt) : today);
 
   const dateCalcs = useMemo(() =>
     calcList.filter(c => c.calcDate?.startsWith(viewDate) && (!displayGame || c.gameId === displayGame.id)),
@@ -693,17 +709,33 @@ function DirectorDashboard() {
                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
                   <span className="text-base font-black tracking-tight truncate">{displayGame.name}</span>
                   <span className="font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">#{displayGame.eventNumber}</span>
-                  {displayGame.status === "live" ? (
+                  {stateOf(displayGame) === "live" ? (
                     <>
                       <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-white"><span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />LIVE</span>
                       <CountdownTimer closeAt={displayGame.closeAt} status={displayGame.status} className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full" />
                     </>
                   ) : (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground uppercase">{displayGame.status}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      stateOf(displayGame) === "awaiting_live" || stateOf(displayGame) === "betting_closed" || stateOf(displayGame) === "pending_calc"
+                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                        : "bg-muted text-muted-foreground"}`}>{DRAW_STATE_LABEL[stateOf(displayGame)]}</span>
+                  )}
+                  {isLiveView && businessDate(displayGame.closeAt) !== today && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400">Draws {new Date(displayGame.closeAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Africa/Accra" })}</span>
                   )}
                 </div>
               ) : (
-                <div className="text-sm font-semibold text-muted-foreground mt-0.5">No game is live for {DAY_NAMES[todayDow]}</div>
+                <div className="text-sm font-semibold text-muted-foreground mt-0.5">No game scheduled for {todayName}</div>
+              )}
+              {isLiveView && todaysGames.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Today</span>
+                  {todaysGames.map(g => (
+                    <span key={g.id} className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-background text-muted-foreground">
+                      {g.name} · <span className={stateOf(g) === "live" ? "text-emerald-600 dark:text-emerald-400" : ""}>{DRAW_STATE_LABEL[stateOf(g)]}</span>
+                    </span>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -718,11 +750,11 @@ function DirectorDashboard() {
                 <SelectItem value="_live" className="sticky top-0 z-10 bg-popover font-semibold border-b rounded-none mb-1">
                   {currentGame ? (
                     <span className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${stateOf(currentGame) === "live" ? "bg-emerald-500" : "bg-muted-foreground"}`} />
                       <span className="truncate">Current: {currentGame.name}</span>
                       <span className="font-mono text-[10px] opacity-70 shrink-0">#{currentGame.eventNumber}</span>
                     </span>
-                  ) : "Current game (none live)"}
+                  ) : `Today (${todayName}) · no draw`}
                 </SelectItem>
                 {liveGames.length > 1 && (
                   <SelectGroup>
@@ -1280,8 +1312,8 @@ function CashierDashboard() {
 }
 
 function EntryDashboard({ type }: { type: "gross" | "wins" }) {
-  const today = new Date(getServerNow()).toISOString().split("T")[0];
-  const todayDow = new Date(getServerNow()).getDay();
+  const now = useBusinessNow();
+  const today = businessDate(now);
   const isGross = type === "gross";
 
   const { data: rawGross } = useListGrossEntries(
@@ -1292,14 +1324,14 @@ function EntryDashboard({ type }: { type: "gross" | "wins" }) {
     {},
     { query: { queryKey: getListWinsEntriesQueryKey({}), enabled: !isGross, refetchInterval: 30_000 } }
   );
-  const { data: games } = useListGames();
+  const { data: games } = useListGames({ query: { queryKey: getListGamesQueryKey(), refetchInterval: 15_000 } });
   const { data: unread } = useGetUnreadCount({ query: { queryKey: getGetUnreadCountQueryKey() } });
   const { writerMap } = useWriterLookup();
 
   const gameList = Array.isArray(games) ? games : [];
   const liveGames = useMemo(() => {
-    return gameList.filter(g => g.status === "live");
-  }, [gameList]);
+    return gameList.filter(g => drawState(g, now, false) === "live");
+  }, [gameList, now]);
 
   const grossList = Array.isArray(rawGross) ? rawGross : [];
   const winsList = Array.isArray(rawWins) ? rawWins : [];
