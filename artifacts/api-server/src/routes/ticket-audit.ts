@@ -170,6 +170,9 @@ router.get("/tickets/browse", ...staffOnly, async (req, res) => {
   const q = typeof req.query["q"] === "string" ? req.query["q"].trim() : "";
   const gameId = typeof req.query["gameId"] === "string" ? req.query["gameId"] : "";
   const limit = Math.min(Number(req.query["limit"]) || 100, 300);
+  // Paging. The lookup screen used to show the newest 100 of a day and stop;
+  // a busy day has thousands. Offset is capped only to keep a typo sane.
+  const offset = Math.max(0, Math.min(Math.floor(Number(req.query["offset"]) || 0), 1_000_000));
 
   // Absent means every day. The screen sends today's date by default, so the
   // wide read only happens when someone deliberately clears the filter.
@@ -197,19 +200,46 @@ router.get("/tickets/browse", ...staffOnly, async (req, res) => {
     category === "flagged" ? undefined : categoryFilter(category),
   ].filter(Boolean);
 
-  const rows = dedupe(
-    await baseQuery()
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(ticketsTable.createdAt))
-      // The flagged view filters after the fact, so it needs a wider read.
-      .limit(category === "flagged" ? Math.max(limit, 300) : limit),
-  );
+  const where = conditions.length ? and(...conditions) : undefined;
 
   if (category !== "flagged") {
-    const counts = await categoryCounts(scopedAgentId, gameId, date);
-    res.json({ category, date: date ?? null, tickets: rows.slice(0, limit), counts });
+    const [rows, totalRows, counts] = await Promise.all([
+      baseQuery()
+        .where(where)
+        // Ties broken by id so a page boundary never repeats or skips a ticket
+        // sold in the same instant as its neighbour.
+        .orderBy(desc(ticketsTable.createdAt), desc(ticketsTable.id))
+        .limit(limit)
+        .offset(offset),
+      // The same filter, counted - including the search, which the per-tab
+      // counts deliberately ignore.
+      db
+        .select({ n: sql<number>`count(distinct ${ticketsTable.id})::int` })
+        .from(ticketsTable)
+        .innerJoin(writersTable, eq(ticketsTable.writerId, writersTable.id))
+        .leftJoin(payoutRequestsTable, eq(payoutRequestsTable.ticketId, ticketsTable.id))
+        .where(where),
+      categoryCounts(scopedAgentId, gameId, date),
+    ]);
+    res.json({
+      category,
+      date: date ?? null,
+      tickets: dedupe(rows),
+      counts,
+      total: totalRows[0]?.n ?? 0,
+      offset,
+      limit,
+    });
     return;
   }
+
+  const rows = dedupe(
+    await baseQuery()
+      .where(where)
+      .orderBy(desc(ticketsTable.createdAt))
+      // The flagged view filters after the fact, so it needs a wider read.
+      .limit(Math.max(limit, 300)),
+  );
 
   const anomalies = await anomaliesFor(rows);
   const flagged = new Set(anomalies.map((a) => a.ticketId));
