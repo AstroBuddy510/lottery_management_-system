@@ -31,7 +31,7 @@ import {
   Wallet, Trophy, Percent, TrendingUp, Shield, DollarSign,
   Search, LayoutGrid, List, ChevronRight, ArrowRight,
   Clock, Activity, FileText, AlertCircle, RefreshCw,
-  ArrowUpRight, ArrowDownRight, Users, Sparkles, Building, ChevronLeft, CheckCircle2,
+  ArrowUpRight, ArrowDownRight, Users, Sparkles, Building, ChevronLeft, CheckCircle2, ChevronsLeft, ChevronsRight,
 } from "lucide-react";
 
 // Recharts charting library for premium business analytics
@@ -42,8 +42,8 @@ import {
 
 
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
-const PAGE_SIZE_GRID = 6;
-const PAGE_SIZE_LIST = 10;
+/** Six agencies a page, whether shown as cards or as table rows. */
+const AGENCIES_PER_PAGE = 6;
 
 const AVATAR_COLORS = [
   "bg-blue-600","bg-emerald-600","bg-violet-600","bg-orange-500","bg-pink-600","bg-teal-600","bg-cyan-600","bg-rose-600",
@@ -285,22 +285,34 @@ function AgentListRow({ stat, onClick }: { stat: AgentStat; onClick: () => void 
   );
 }
 
-function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
-  if (totalPages <= 1) return null;
+function Pagination({ page, totalPages, onPage, total, pageSize, noun }: {
+  page: number; totalPages: number; onPage: (p: number) => void; total: number; pageSize: number; noun: string;
+}) {
+  if (total === 0) return null;
   const list: (number | "…")[] = [];
   for (let i = 1; i <= totalPages; i++) {
     if (i === 1 || i === totalPages || Math.abs(i - page) <= 1) list.push(i);
     else if (list[list.length - 1] !== "…") list.push("…");
   }
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
   const btn = "h-8 w-8 inline-flex items-center justify-center rounded-lg border bg-background text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:pointer-events-none";
   return (
-    <div className="flex items-center justify-center gap-1 pt-1">
-      <button type="button" aria-label="Previous page" className={btn} disabled={page === 1} onClick={() => onPage(page - 1)}><ChevronLeft className="w-4 h-4" /></button>
-      {list.map((n, i) => n === "…" ? <span key={`g${i}`} className="px-1 text-xs text-muted-foreground">…</span> : (
-        <button key={n} type="button" onClick={() => onPage(n)} aria-current={n === page ? "page" : undefined}
-          className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-semibold ${n === page ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{n}</button>
-      ))}
-      <button type="button" aria-label="Next page" className={btn} disabled={page === totalPages} onClick={() => onPage(page + 1)}><ChevronRight className="w-4 h-4" /></button>
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t pt-4">
+      <span className="text-xs text-muted-foreground">
+        Showing <span className="font-semibold text-foreground">{from}–{to}</span> of <span className="font-semibold text-foreground">{total}</span> {noun}
+        <span className="hidden sm:inline"> · {pageSize} per page</span>
+      </span>
+      <div className="flex items-center gap-1">
+        <button type="button" aria-label="First page" title="First page" className={btn} disabled={page === 1} onClick={() => onPage(1)}><ChevronsLeft className="w-4 h-4" /></button>
+        <button type="button" aria-label="Previous page" title="Previous page" className={btn} disabled={page === 1} onClick={() => onPage(page - 1)}><ChevronLeft className="w-4 h-4" /></button>
+        {list.map((n, i) => n === "…" ? <span key={`g${i}`} className="px-1 text-xs text-muted-foreground">…</span> : (
+          <button key={n} type="button" onClick={() => onPage(n)} aria-current={n === page ? "page" : undefined}
+            className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-semibold ${n === page ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{n}</button>
+        ))}
+        <button type="button" aria-label="Next page" title="Next page" className={btn} disabled={page === totalPages} onClick={() => onPage(page + 1)}><ChevronRight className="w-4 h-4" /></button>
+        <button type="button" aria-label="Last page" title="Last page" className={btn} disabled={page === totalPages} onClick={() => onPage(totalPages)}><ChevronsRight className="w-4 h-4" /></button>
+      </div>
     </div>
   );
 }
@@ -649,13 +661,14 @@ function DirectorDashboard() {
     );
   }, [agentStats, search]);
 
-  const pageSize = viewMode === "grid" ? PAGE_SIZE_GRID : PAGE_SIZE_LIST;
+  const pageSize = AGENCIES_PER_PAGE;
   const totalPages = Math.max(1, Math.ceil(filteredAgentStats.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pagedStats = filteredAgentStats.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const handlePage = (p: number) => setPage(p);
-  const handleViewMode = (mode: "grid" | "list") => { setViewMode(mode); setPage(1); };
+  // Same six a page in both views, so switching keeps your place.
+  const handleViewMode = (mode: "grid" | "list") => { setViewMode(mode); };
 
   const isLiveView = !selectedGameId || selectedGameId === "_live" || selectedGameId === "_none";
   const winShare = totals.gross > 0 ? (totals.wins / totals.gross) * 100 : 0;
@@ -897,7 +910,7 @@ function DirectorDashboard() {
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input type="search" placeholder="Agency name or code…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="h-8 pl-8 text-xs w-[200px]" />
+              <Input type="search" placeholder="Agency name or code" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="h-8 pl-8 pr-3 text-xs md:text-xs w-[240px] placeholder:text-center" />
             </div>
             <div className="flex items-center rounded-lg border p-0.5 bg-muted/40">
               <button type="button" onClick={() => handleViewMode("grid")} title="Cards" className={`p-1.5 rounded-md ${viewMode === "grid" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}><LayoutGrid className="w-3.5 h-3.5" /></button>
@@ -913,7 +926,7 @@ function DirectorDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
               {pagedStats.map(stat => <AgentGridCard key={stat.agent.id} stat={stat} onClick={() => navigate(`/agents/${stat.agent.id}/detail`)} />)}
             </div>
-            <Pagination page={safePage} totalPages={totalPages} onPage={handlePage} />
+            <Pagination page={safePage} totalPages={totalPages} onPage={handlePage} total={filteredAgentStats.length} pageSize={pageSize} noun="agencies" />
           </div>
         ) : (
           <div className="space-y-4">
@@ -936,7 +949,7 @@ function DirectorDashboard() {
                 </tbody>
               </table>
             </div>
-            <Pagination page={safePage} totalPages={totalPages} onPage={handlePage} />
+            <Pagination page={safePage} totalPages={totalPages} onPage={handlePage} total={filteredAgentStats.length} pageSize={pageSize} noun="agencies" />
           </div>
         )}
       </Panel>
