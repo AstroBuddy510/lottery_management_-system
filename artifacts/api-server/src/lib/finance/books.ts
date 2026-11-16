@@ -1,6 +1,8 @@
 import { db, finAuditLogTable } from "@workspace/db";
 import { sql, type SQL } from "drizzle-orm";
 import { logger } from "../logger";
+import { reserveLedgerTotals } from "./reserve";
+import { releaseExpiredWinnings } from "./winnings";
 
 /**
  * The company's books, generated from the records that caused them.
@@ -193,6 +195,19 @@ const GENERATORS: Array<{ name: string; q: SQL }> = [
       ${DONE}`,
   },
   {
+    // Cash put up towards wins the reserve could not cover, and any refund
+    // of it. Money received for a purpose - never income.
+    name: "winnings shortfall contributions",
+    q: sql`${INSERT}
+      SELECT c.received_at, CASE WHEN c.entry_type = 'refund' THEN 'out' ELSE 'in' END, c.amount, c.account_id, c.method,
+             'shortfall_contribution', 'winnings_contribution', c.id::text, 'main',
+             c.contributor_type, c.contributor_id, c.contributor_name, c.reference,
+             CASE WHEN c.entry_type = 'refund' THEN 'Refund of contribution: ' ELSE 'Contribution towards wins: ' END || c.purpose,
+             c.received_by
+        FROM winnings_contributions c
+      ${DONE}`,
+  },
+  {
     // What Paystack kept. Booked once its actual figure is known.
     name: "payment processing fees",
     q: sql`${INSERT}
@@ -235,6 +250,9 @@ export async function syncBooks(force = false): Promise<number> {
       await db.transaction(async (tx) => {
         // One sync at a time, across every server instance.
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('fin_sync_books'))`);
+        // Wins past their claim window leave the liability before anything
+        // reads it.
+        added += await releaseExpiredWinnings(tx);
         for (const g of GENERATORS) {
           const r = await tx.execute(g.q);
           added += r.rowCount ?? 0;
@@ -291,20 +309,10 @@ export async function moneyAccountBalances(exec: Exec = db, asOf?: string) {
   });
 }
 
-/**
- * The reserve, from its two sources and nothing else: what the draw
- * calculations set aside, less what has been drawn to cover deficits. The
- * reserve_fund table's own running figures are not read - they are what
- * drifted.
- */
+/** The reserve, as its ledger has it. See ./reserve.ts. */
 export async function reserveBalance(exec: Exec = db) {
-  const r = await exec.execute(sql`
-    SELECT (SELECT coalesce(sum(reserve_amount), 0) FROM daily_calculations) AS contributed,
-           (SELECT coalesce(sum(amount_drawn), 0) FROM reserve_allocations) AS drawn`);
-  const row = r.rows[0] as Record<string, unknown>;
-  const contributed = toNum(row.contributed);
-  const drawn = toNum(row.drawn);
-  return { contributed, drawn, balance: round2(contributed - drawn) };
+  const t = await reserveLedgerTotals(exec);
+  return { contributed: t.contributed, drawn: t.drawn, balance: t.balance };
 }
 
 /** Each fund's balance: its movements, except the reserve, which is derived. */

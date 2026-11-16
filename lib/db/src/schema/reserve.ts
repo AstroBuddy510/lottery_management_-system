@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, decimal, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, date, decimal, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { writersTable } from "./agents";
@@ -26,6 +26,17 @@ export const reserveAllocationsTable = pgTable("reserve_allocations", {
   amountDrawn: decimal("amount_drawn", { precision: 12, scale: 2 }).notNull(),
   reason: text("reason"),
   reserveBalanceAfter: decimal("reserve_balance_after", { precision: 12, scale: 2 }).notNull(),
+  /** The draw this was taken for. Blank on older rows where that was ambiguous. */
+  gameId: uuid("game_id"),
+  /** "auto" when a calculation drew it, "manual" when applied from the Reserve page. */
+  source: varchar("source", { length: 10 }).notNull().default("auto"),
+  /**
+   * A draw is never deleted. Re-calculating a draw supersedes its earlier
+   * automatic draws, which then stop counting against the reserve.
+   */
+  supersededAt: timestamp("superseded_at", { withTimezone: true }),
+  supersededReason: text("superseded_reason"),
+  createdBy: uuid("created_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

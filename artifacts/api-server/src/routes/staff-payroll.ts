@@ -18,6 +18,7 @@ import {
   FundSalaryWalletBody
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { syncBooks, financialPosition } from "../lib/finance/books";
 import { addDays, endOfMonth, startOfMonth, format, isAfter, isBefore } from "date-fns";
 
 const router = Router();
@@ -327,31 +328,19 @@ router.post("/staff-payroll/wallet/fund", requireAuth, requireRole("director", "
       return;
     }
 
-    const result = await db.transaction(async (tx) => {
-      // Deduct from reserve fund
-      const reserveRecords = await tx
-        .select()
-        .from(reserveFundTable)
-        .orderBy(desc(reserveFundTable.periodDate));
-      
-      if (reserveRecords.length > 0) {
-        const latest = reserveRecords[0];
-        const latestBalance = parseFloat(latest.balance);
-        if (latestBalance < fundAmount) {
-          throw new Error("Insufficient reserve funds to fund the salary wallet");
-        }
-        await tx
-          .update(reserveFundTable)
-          .set({
-            balance: (latestBalance - fundAmount).toFixed(2),
-            totalAllocated: (parseFloat(latest.totalAllocated) + fundAmount).toFixed(2),
-            updatedAt: new Date(),
-          })
-          .where(eq(reserveFundTable.id, latest.id));
-      } else {
-        throw new Error("No reserve fund period record found to draw from");
-      }
+    // Salary money is set aside out of the company's own unallocated funds -
+    // never out of the reserve, which exists to cover winning deficits. The
+    // allocation divides money the company holds; it cannot create any.
+    await syncBooks(true);
+    const position = await financialPosition();
+    if (fundAmount > position.unallocated + 0.005) {
+      res.status(409).json({
+        error: `Only GH₵${position.unallocated.toFixed(2)} of the company's money is not already set aside. Record the money in Finance & Statements first, or release another allocation.`,
+      });
+      return;
+    }
 
+    const result = await db.transaction(async (tx) => {
       const wallet = await getWallet();
       const newBalance = parseFloat(wallet.balance) + fundAmount;
       const newTotalFunded = parseFloat(wallet.totalFunded) + fundAmount;

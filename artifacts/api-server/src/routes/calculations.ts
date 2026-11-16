@@ -12,7 +12,8 @@ import {
   agentDebtReductionsTable,
   gamesTable,
 } from "@workspace/db";
-import { eq, and, gte, lte, desc, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, desc, inArray, sql } from "drizzle-orm";
+import { reserveLedgerTotals, recomputeReserveFund } from "../lib/finance/reserve";
 import { RunCalculationsBody } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
@@ -140,202 +141,190 @@ router.post(
       return;
     }
 
-    const periodMonth = calcDate.slice(0, 7);
-    const periodDate = `${periodMonth}-01`;
-    const [reserveFund] = await db
-      .select()
-      .from(reserveFundTable)
-      .where(eq(reserveFundTable.periodDate, periodDate))
-      .limit(1);
-    let reserveBalance = reserveFund ? parseFloat(reserveFund.balance) : 0;
+    const runGameId = gameId && gameId !== "undefined" && gameId !== "null" ? gameId : null;
+    const runWriterIds = allWriterIds;
 
-    const results: (typeof dailyCalculationsTable.$inferSelect)[] = [];
-    const allocations: Array<{
-      writerId: string;
-      amountDrawn: number;
-      allocationDate: string;
-      reserveBalanceAfter: number;
-    }> = [];
+    /*
+     * Everything that changes money for this draw happens in one transaction:
+     * either the whole draw is booked, or none of it is.
+     *
+     * A draw can be run again (a corrected entry, a late wins figure). Before
+     * this change a second run added its reserve contributions, its reserve
+     * draws and its agency debt changes on top of the first run's - the
+     * reserve and the agency balances drifted by exactly the amounts of every
+     * re-run. Now a re-run first undoes its own previous run: its automatic
+     * reserve draws are superseded (kept, no longer counted) and its agency
+     * debt changes are reversed, and only then is the draw booked afresh.
+     */
+    const booked = await db.transaction(async (tx) => {
+      // One run of a given draw at a time.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`calc:${calcDate}:${runGameId ?? "day"}`}))`);
 
-    for (const writerId of allWriterIds) {
-      const gross = grossMap.get(writerId) ?? 0;
-      const wins = winsMap.get(writerId) ?? 0;
-      const calc = calculateWriter(gross, wins, commissionPct, reservePct);
+      // ── Undo this draw's previous run ──
+      const thisDraw = runGameId
+        ? sql`(a.game_id = ${runGameId} OR (a.game_id IS NULL AND a.writer_id IN (
+              SELECT c.writer_id FROM daily_calculations c WHERE c.calc_date = ${calcDate} AND c.game_id = ${runGameId})))`
+        : sql`(a.game_id IS NULL AND a.writer_id IN (${sql.join(runWriterIds.map((w) => sql`${w}::uuid`), sql`, `)}))`;
+      await tx.execute(sql`
+        UPDATE reserve_allocations a
+           SET superseded_at = now(),
+               superseded_reason = 'Superseded: this draw was calculated again on ' || to_char(now() AT TIME ZONE 'Africa/Accra', 'DD Mon YYYY HH24:MI')
+         WHERE a.source = 'auto' AND a.superseded_at IS NULL AND a.allocation_date = ${calcDate} AND ${thisDraw}`);
 
-      let finalWriterBalance = calc.writerBalance;
+      const previous = await tx.execute(sql`
+        SELECT id, agent_id, reduction_amount FROM agent_debt_reductions
+         WHERE calc_date = ${calcDate} AND superseded_at IS NULL
+           AND ${runGameId ? sql`game_id = ${runGameId}` : sql`game_id IS NULL AND false`}
+         FOR UPDATE`);
+      for (const p of previous.rows as Array<{ id: string; agent_id: string; reduction_amount: string }>) {
+        await tx.execute(sql`UPDATE agents SET outstanding_debt = outstanding_debt + ${p.reduction_amount}::numeric WHERE id = ${p.agent_id}`);
+        await tx.execute(sql`UPDATE agent_debt_reductions SET superseded_at = now(), superseded_reason = 'Reversed: this draw was calculated again' WHERE id = ${p.id}`);
+      }
 
-      if (finalWriterBalance < 0 && reserveBalance > 0) {
-        const drawAmount = Math.min(Math.abs(finalWriterBalance), reserveBalance);
-        reserveBalance -= drawAmount;
-        finalWriterBalance += drawAmount;
-        allocations.push({
-          writerId,
-          amountDrawn: drawAmount,
+      if (runGameId) {
+        await tx.delete(dailyCalculationsTable).where(eq(dailyCalculationsTable.gameId, runGameId));
+      } else {
+        await tx.delete(dailyCalculationsTable).where(
+          and(eq(dailyCalculationsTable.calcDate, calcDate), inArray(dailyCalculationsTable.writerId, runWriterIds)),
+        );
+      }
+
+      // The reserve available to cover deficits, from the ledger itself:
+      // everything ever set aside by calculations, less the draws still
+      // standing. Worked in pesewas so no float residue reaches the books.
+      const reserveNow = await reserveLedgerTotals(tx);
+      let reserveCents = Math.max(0, Math.round(reserveNow.balance * 100));
+
+      const results: (typeof dailyCalculationsTable.$inferSelect)[] = [];
+      const allocations: Array<{ writerId: string; amountDrawn: string; reserveBalanceAfter: string }> = [];
+
+      for (const writerId of runWriterIds) {
+        const gross = grossMap.get(writerId) ?? 0;
+        const wins = winsMap.get(writerId) ?? 0;
+        const calc = calculateWriter(gross, wins, commissionPct, reservePct);
+
+        let balanceCents = Math.round(calc.writerBalance * 100);
+        if (balanceCents < 0 && reserveCents > 0) {
+          const drawCents = Math.min(-balanceCents, reserveCents);
+          reserveCents -= drawCents;
+          balanceCents += drawCents;
+          allocations.push({
+            writerId,
+            amountDrawn: (drawCents / 100).toFixed(2),
+            reserveBalanceAfter: (reserveCents / 100).toFixed(2),
+          });
+        }
+
+        const [saved] = await tx
+          .insert(dailyCalculationsTable)
+          .values({
+            writerId,
+            calcDate,
+            gameId: runGameId,
+            grossSales: calc.grossSales.toFixed(2),
+            commissionPct: String(calc.commissionPct),
+            commissionAmount: calc.commissionAmount.toFixed(2),
+            netGross: calc.netGross.toFixed(2),
+            winsAmount: calc.winsAmount.toFixed(2),
+            reservePct: String(calc.reservePct),
+            reserveAmount: calc.reserveAmount.toFixed(2),
+            writerBalance: (balanceCents / 100).toFixed(2),
+          })
+          .returning();
+        results.push(saved!);
+
+        await tx
+          .update(grossEntriesTable)
+          .set({ locked: true })
+          .where(and(
+            eq(grossEntriesTable.writerId, writerId),
+            eq(grossEntriesTable.entryDate, calcDate),
+            runGameId ? eq(grossEntriesTable.gameId, runGameId) : undefined,
+          ));
+        await tx
+          .update(winsEntriesTable)
+          .set({ locked: true })
+          .where(and(
+            eq(winsEntriesTable.writerId, writerId),
+            eq(winsEntriesTable.entryDate, calcDate),
+            runGameId ? eq(winsEntriesTable.gameId, runGameId) : undefined,
+          ));
+      }
+
+      for (const alloc of allocations) {
+        await tx.insert(reserveAllocationsTable).values({
+          writerId: alloc.writerId,
           allocationDate: calcDate,
-          reserveBalanceAfter: reserveBalance,
+          amountDrawn: alloc.amountDrawn,
+          reason: "Auto-draw: negative writer balance",
+          reserveBalanceAfter: alloc.reserveBalanceAfter,
+          gameId: runGameId,
+          source: "auto",
+          createdBy: req.user!.userId,
         });
       }
 
-      await db
-        .delete(dailyCalculationsTable)
-        .where(
-          and(
-            eq(dailyCalculationsTable.writerId, writerId),
-            eq(dailyCalculationsTable.calcDate, calcDate),
-            gameId && gameId !== "undefined" && gameId !== "null" ? eq(dailyCalculationsTable.gameId, gameId) : undefined,
-          ),
-        );
+      // The month-by-month summary the Reserve page shows is rebuilt from the
+      // ledger, never added to.
+      await recomputeReserveFund(tx);
 
-      const [saved] = await db
-        .insert(dailyCalculationsTable)
-        .values({
-          writerId,
+      // ── Agency balances ──
+      const writerAgentRows = await tx
+        .select({ writerId: writersTable.id, agentId: writersTable.agentId })
+        .from(writersTable)
+        .where(inArray(writersTable.id, runWriterIds));
+      const writerToAgent = new Map(writerAgentRows.map((r) => [r.writerId, r.agentId]));
+      const agentDailyNetCents = new Map<string, number>();
+      for (const r of results) {
+        const agentId = writerToAgent.get(r.writerId);
+        if (!agentId) continue;
+        agentDailyNetCents.set(agentId, (agentDailyNetCents.get(agentId) ?? 0) + Math.round(parseFloat(r.writerBalance) * 100));
+      }
+
+      const debtReductionSummary: Array<{ agentId: string; netGross: string; reduction: string; debtBefore: string; debtAfter: string; surplus: string | null }> = [];
+      for (const [agentId, netCents] of agentDailyNetCents) {
+        if (netCents === 0) continue;
+        const [agentRow] = await tx
+          .select({ id: agentsTable.id, outstandingDebt: agentsTable.outstandingDebt })
+          .from(agentsTable)
+          .where(eq(agentsTable.id, agentId))
+          .for("update")
+          .limit(1);
+        if (!agentRow) continue;
+        const currentCents = Math.round(parseFloat(agentRow.outstandingDebt || "0") * 100);
+        const newCents = currentCents - netCents;
+        const debtSinceVal = newCents < 0 ? (currentCents >= 0 ? new Date() : undefined) : null;
+        await tx
+          .update(agentsTable)
+          .set({ outstandingDebt: (newCents / 100).toFixed(2), debtSince: debtSinceVal })
+          .where(eq(agentsTable.id, agentId));
+        const row = {
+          agentId,
+          netGross: (netCents / 100).toFixed(2),
+          reduction: (netCents / 100).toFixed(2),
+          debtBefore: (currentCents / 100).toFixed(2),
+          debtAfter: (newCents / 100).toFixed(2),
+          surplus: null,
+        };
+        await tx.insert(agentDebtReductionsTable).values({
+          agentId,
           calcDate,
-          gameId: (gameId && gameId !== "undefined" && gameId !== "null") ? gameId : null,
-          grossSales: String(calc.grossSales),
-          commissionPct: String(calc.commissionPct),
-          commissionAmount: String(calc.commissionAmount),
-          netGross: String(calc.netGross),
-          winsAmount: String(calc.winsAmount),
-          reservePct: String(calc.reservePct),
-          reserveAmount: String(calc.reserveAmount),
-          writerBalance: String(finalWriterBalance),
-        })
-        .returning();
+          gameId: runGameId,
+          netGrossAmount: row.netGross,
+          reductionAmount: row.reduction,
+          debtBefore: row.debtBefore,
+          debtAfter: row.debtAfter,
+          surplus: null,
+        });
+        debtReductionSummary.push(row);
+      }
 
-      results.push(saved);
+      return { results, allocations, debtReductionSummary, agentIds: [...agentDailyNetCents.keys()] };
+    });
 
-      await db
-        .update(grossEntriesTable)
-        .set({ locked: true })
-        .where(
-          and(
-            eq(grossEntriesTable.writerId, writerId),
-            eq(grossEntriesTable.entryDate, calcDate),
-            gameId && gameId !== "undefined" && gameId !== "null" ? eq(grossEntriesTable.gameId, gameId) : undefined,
-          ),
-        );
-      await db
-        .update(winsEntriesTable)
-        .set({ locked: true })
-        .where(
-          and(
-            eq(winsEntriesTable.writerId, writerId),
-            eq(winsEntriesTable.entryDate, calcDate),
-            gameId && gameId !== "undefined" && gameId !== "null" ? eq(winsEntriesTable.gameId, gameId) : undefined,
-          ),
-        );
-    }
+    const { results, allocations, debtReductionSummary } = booked;
 
-    for (const alloc of allocations) {
-      await db.insert(reserveAllocationsTable).values({
-        writerId: alloc.writerId,
-        allocationDate: alloc.allocationDate,
-        amountDrawn: String(alloc.amountDrawn),
-        reason: "Auto-draw: negative writer balance",
-        reserveBalanceAfter: String(alloc.reserveBalanceAfter),
-      });
-    }
-
-    const totalContributedNew = results.reduce(
-      (sum, r) => sum + parseFloat(r!.reserveAmount),
-      0,
-    );
-    const totalAllocatedNew = allocations.reduce(
-      (sum, a) => sum + a.amountDrawn,
-      0,
-    );
-
-    if (reserveFund) {
-      await db
-        .update(reserveFundTable)
-        .set({
-          totalContributed: String(
-            parseFloat(reserveFund.totalContributed) + totalContributedNew,
-          ),
-          totalAllocated: String(
-            parseFloat(reserveFund.totalAllocated) + totalAllocatedNew,
-          ),
-          balance: String(reserveBalance + totalContributedNew),
-        })
-        .where(eq(reserveFundTable.id, reserveFund.id));
-    } else {
-      await db.insert(reserveFundTable).values({
-        periodDate,
-        totalContributed: String(totalContributedNew),
-        totalAllocated: String(totalAllocatedNew),
-        balance: String(totalContributedNew - totalAllocatedNew),
-      });
-    }
-
-    // ── Automated balance adjustment from daily calculations ───────────────────
-    // Group results by agent, sum writerBalance per agent, then update outstandingDebt
-    const writerAgentRows = await db
-      .select({ writerId: writersTable.id, agentId: writersTable.agentId })
-      .from(writersTable)
-      .where(inArray(writersTable.id, allWriterIds));
-
-    const writerToAgent = new Map(writerAgentRows.map((r) => [r.writerId, r.agentId]));
-
-    // Sum writerBalance per agent across all their writers to get daily net profit/loss
-    const agentDailyNet = new Map<string, number>();
-    for (const r of results) {
-      if (!r) continue;
-      const agentId = writerToAgent.get(r.writerId);
-      if (!agentId) continue;
-      agentDailyNet.set(agentId, (agentDailyNet.get(agentId) ?? 0) + parseFloat(r.writerBalance));
-    }
-
-    const debtReductionSummary: Array<{
-      agentId: string; netGross: string; reduction: string; debtBefore: string; debtAfter: string; surplus: string | null;
-    }> = [];
-
-    for (const [agentId, dailyNet] of agentDailyNet) {
-      if (Math.abs(dailyNet) < 0.005) continue;
-
-      const [agentRow] = await db
-        .select({ id: agentsTable.id, outstandingDebt: agentsTable.outstandingDebt })
-        .from(agentsTable)
-        .where(eq(agentsTable.id, agentId))
-        .limit(1);
-
-      if (!agentRow) continue;
-      const currentDebt = parseFloat(agentRow.outstandingDebt || "0");
-      const newDebt = currentDebt - dailyNet;
-
-      const debtSinceVal = newDebt < 0 
-        ? (currentDebt >= 0 ? new Date() : undefined) 
-        : null;
-
-      await db
-        .update(agentsTable)
-        .set({
-          outstandingDebt: newDebt.toFixed(2),
-          debtSince: debtSinceVal,
-        })
-        .where(eq(agentsTable.id, agentId));
-
-      await db.insert(agentDebtReductionsTable).values({
-        agentId,
-        calcDate,
-        netGrossAmount: dailyNet.toFixed(2),
-        reductionAmount: dailyNet.toFixed(2),
-        debtBefore: currentDebt.toFixed(2),
-        debtAfter: newDebt.toFixed(2),
-        surplus: null,
-      });
-
-      debtReductionSummary.push({
-        agentId,
-        netGross: dailyNet.toFixed(2),
-        reduction: dailyNet.toFixed(2),
-        debtBefore: currentDebt.toFixed(2),
-        debtAfter: newDebt.toFixed(2),
-        surplus: null,
-      });
-    }
     // ─────────────────────────────────────────────────────────────────────────
-
     // Dispatch deficit alerts to affected agents
     const deficitWriterIds = results
       .filter((r) => r && parseFloat(r.writerBalance) < 0)
@@ -381,7 +370,7 @@ router.post(
     }
 
     // Verify ledger and escalate conflicts for all affected agents
-    for (const [agentId] of agentDailyNet) {
+    for (const agentId of booked.agentIds) {
       verifyLedgerAndEscalate(agentId, req.user!.userId).catch(console.error);
     }
 

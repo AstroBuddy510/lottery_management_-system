@@ -10,7 +10,8 @@ import {
   usersTable,
   dailyCalculationsTable,
 } from "@workspace/db";
-import { eq, and, gte, lte, desc, lt, sql, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, desc, lt, sql, inArray, isNull } from "drizzle-orm";
+import { recomputeReserveFund, reserveLedgerTotals } from "../lib/finance/reserve";
 import { requireAuth, requireRole } from "../middleware/auth";
 
 const router = Router();
@@ -20,6 +21,9 @@ router.get(
   requireAuth,
   requireRole("director", "administrator"),
   async (req, res) => {
+    // Rebuilt from the ledger on every read, so the summary can never
+    // disagree with the draws and calculations it summarises.
+    await recomputeReserveFund(db);
     const records = await db
       .select()
       .from(reserveFundTable)
@@ -45,6 +49,10 @@ router.get(
   async (req, res) => {
     const { writerId, dateFrom, dateTo } = req.query as Record<string, string>;
     const conditions = [];
+    // Superseded draws (a draw calculated twice) are kept for the record but
+    // no longer count; they are listed only when asked for.
+    if ((req.query as Record<string, string>)["includeSuperseded"] !== "1")
+      conditions.push(isNull(reserveAllocationsTable.supersededAt));
     if (writerId)
       conditions.push(eq(reserveAllocationsTable.writerId, writerId));
     if (dateFrom)
@@ -60,6 +68,10 @@ router.get(
         amountDrawn: reserveAllocationsTable.amountDrawn,
         reason: reserveAllocationsTable.reason,
         reserveBalanceAfter: reserveAllocationsTable.reserveBalanceAfter,
+        source: reserveAllocationsTable.source,
+        gameId: reserveAllocationsTable.gameId,
+        supersededAt: reserveAllocationsTable.supersededAt,
+        supersededReason: reserveAllocationsTable.supersededReason,
         createdAt: reserveAllocationsTable.createdAt,
         writerFullCode: writersTable.fullCode,
         writerFullName: writersTable.fullName,
@@ -101,7 +113,7 @@ router.get(
       .where(lt(dailyCalculationsTable.writerBalance, "0"))
       .orderBy(dailyCalculationsTable.calcDate);
 
-    const allAllocations = await db.select().from(reserveAllocationsTable);
+    const allAllocations = await db.select().from(reserveAllocationsTable).where(isNull(reserveAllocationsTable.supersededAt));
 
     const autoCovered = new Map<string, number>();
     const manualCovered = new Map<string, number>();
@@ -312,14 +324,12 @@ router.post(
   async (req, res) => {
     const { strategy, maxAmount } = AllocateReserveBodySchema.parse(req.body);
 
-    const reserveRecords = await db
-      .select()
-      .from(reserveFundTable)
-      .orderBy(desc(reserveFundTable.periodDate));
-    const currentBalance = reserveRecords.reduce(
-      (s, r) => s + parseFloat(r.balance),
-      0,
-    );
+    // What the reserve actually holds, from its ledger.
+    const currentBalance = (await reserveLedgerTotals(db)).balance;
+    if (currentBalance <= 0.005) {
+      res.status(409).json({ error: `The reserve holds GH₵${currentBalance.toFixed(2)}; there is nothing to apply.` });
+      return;
+    }
 
     const calcs = await db
       .select({
@@ -329,13 +339,14 @@ router.post(
         agentId: agentsTable.id,
         grossSales: dailyCalculationsTable.grossSales,
         writerBalance: dailyCalculationsTable.writerBalance,
+        gameId: dailyCalculationsTable.gameId,
       })
       .from(dailyCalculationsTable)
       .innerJoin(writersTable, eq(dailyCalculationsTable.writerId, writersTable.id))
       .innerJoin(agentsTable, eq(writersTable.agentId, agentsTable.id))
       .where(lt(dailyCalculationsTable.writerBalance, "0"));
 
-    const allAllocations = await db.select().from(reserveAllocationsTable);
+    const allAllocations = await db.select().from(reserveAllocationsTable).where(isNull(reserveAllocationsTable.supersededAt));
     const autoCovered = new Map<string, number>();
     const manualCovered = new Map<string, number>();
     for (const a of allAllocations) {
@@ -388,6 +399,9 @@ router.post(
         amountDrawn: toApply.toFixed(2),
         reason: `Smart Debt Management — ${strategy === "fifo" ? "FIFO" : strategy === "lifo" ? "LIFO" : "Best Performer"} strategy · calc date ${debt.calcDate}`,
         reserveBalanceAfter: runningBalance.toFixed(2),
+        gameId: debt.gameId ?? null,
+        source: "manual",
+        createdBy: req.user!.userId,
       });
 
       remaining -= toApply;
@@ -402,16 +416,9 @@ router.post(
 
     const totalApplied = applied.reduce((s, a) => s + parseFloat(a.amountApplied), 0);
 
-    if (totalApplied > 0.005 && reserveRecords.length > 0) {
-      const latest = reserveRecords[0];
-      await db
-        .update(reserveFundTable)
-        .set({
-          totalAllocated: (parseFloat(latest.totalAllocated) + totalApplied).toFixed(2),
-          balance: (parseFloat(latest.balance) - totalApplied).toFixed(2),
-        })
-        .where(eq(reserveFundTable.id, latest.id));
-    }
+    // Each draw belongs to the month of the deficit it covered; the summary
+    // is rebuilt rather than adding everything to the current month.
+    await recomputeReserveFund(db);
 
     res.json({
       allocatedCount: applied.length,

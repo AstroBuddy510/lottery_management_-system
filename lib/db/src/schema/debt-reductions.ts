@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, numeric, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, date, numeric, timestamp, text } from "drizzle-orm/pg-core";
 import { agentsTable } from "./agents";
 
 export const agentDebtReductionsTable = pgTable("agent_debt_reductions", {
@@ -10,6 +10,10 @@ export const agentDebtReductionsTable = pgTable("agent_debt_reductions", {
   debtBefore: numeric("debt_before", { precision: 12, scale: 2 }).notNull(),
   debtAfter: numeric("debt_after", { precision: 12, scale: 2 }).notNull(),
   surplus: numeric("surplus", { precision: 12, scale: 2 }),
+  /** The draw that produced it, so re-calculating that draw can undo it first. */
+  gameId: uuid("game_id"),
+  supersededAt: timestamp("superseded_at", { withTimezone: true }),
+  supersededReason: text("superseded_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
