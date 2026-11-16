@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, X, Bell, ChevronDown } from "lucide-react";
+import {
+  Menu, X, Bell, ChevronDown, LayoutDashboard, UserRound, TrendingUp, Trophy, CreditCard, BadgeCheck,
+  ReceiptText, Package, FileBarChart, Settings, Calculator, Building2, Scale, Users, ScanSearch, Receipt,
+  Wallet, PiggyBank, ShieldAlert, Gamepad2, Contact, Landmark, type LucideIcon,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
@@ -12,51 +16,62 @@ interface NavItem {
   label: string;
   path: string;
   roles: string[];
+  icon?: LucideIcon;
 }
 
 /** A heading in the menu that opens to show related pages. */
 interface NavGroup {
   label: string;
   group: true;
+  icon?: LucideIcon;
   children: NavItem[];
 }
 
 type NavEntry = NavItem | NavGroup;
 const isGroup = (e: NavEntry): e is NavGroup => "group" in e;
 
+const OFFICE = ["director", "administrator"];
+const ALL = ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"];
+
+/**
+ * Menu order, as the office asked for it. Items for a single role (the
+ * cashier's POS Wins Payment and Reserve Receipts, the entry clerks' and
+ * agents' entry pages) sit beside the items they belong with; roles only
+ * ever see the items they may open.
+ */
 const NAV_ITEMS: NavEntry[] = [
-  { label: "Dashboard", path: "/dashboard", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
-  { label: "Agency Overview", path: "/agencies", roles: ["director", "administrator"] },
-  { label: "Users & Agents", path: "/users", roles: ["administrator", "director", "cashier"] },
-  { label: "Games Management", path: "/games", roles: ["administrator", "director"] },
-  { label: "Risk Management", path: "/risk-management", roles: ["administrator", "director"] },
-  { label: "Ticket Lookup", path: "/ticket-lookup", roles: ["administrator", "director", "cashier"] },
-  { label: "System Settings", path: "/settings", roles: ["administrator", "director"] },
-  { label: "My Writers", path: "/my-writers", roles: ["agent"] },
-  { label: "Gross & Wins", path: "/gross-wins", roles: ["director", "administrator"] },
-  { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "agent"] },
-  { label: "Wins Entries", path: "/entries/wins", roles: ["wins_entry", "agent"] },
-  // { label: "Sales Log", path: "/sales", roles: ["agent", "administrator"] },
-  { label: "Payments", path: "/payments", roles: ["cashier", "administrator", "director"] },
-  { label: "POS Wins Payment", path: "/pos-wins-payment", roles: ["cashier"] },
-  { label: "Master Wallet", path: "/master-wallet", roles: ["director", "administrator"] },
+  { label: "Dashboard", path: "/dashboard", roles: ALL, icon: LayoutDashboard },
+  { label: "My Writers", path: "/my-writers", roles: ["agent"], icon: UserRound },
+  { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "agent"], icon: TrendingUp },
+  { label: "Wins Entries", path: "/entries/wins", roles: ["wins_entry", "agent"], icon: Trophy },
+  { label: "Payments", path: "/payments", roles: ["cashier", ...OFFICE], icon: CreditCard },
+  { label: "POS Wins Payment", path: "/pos-wins-payment", roles: ["cashier"], icon: BadgeCheck },
+  // Directors and administrators reach this as a tab of Reserve Fund.
+  { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier"], icon: ReceiptText },
+  { label: "Inventory", path: "/inventory", roles: ["cashier", ...OFFICE], icon: Package },
+  { label: "Reports", path: "/reports", roles: [...OFFICE, "cashier"], icon: FileBarChart },
+  { label: "Notifications", path: "/notifications", roles: ALL, icon: Bell },
+  { label: "System Settings", path: "/settings", roles: OFFICE, icon: Settings },
+  { label: "Run Draws", path: "/calculations", roles: OFFICE, icon: Calculator },
+  { label: "Agency Overview", path: "/agencies", roles: OFFICE, icon: Building2 },
+  { label: "Gross & Wins", path: "/gross-wins", roles: OFFICE, icon: Scale },
+  { label: "Users & Agents", path: "/users", roles: [...OFFICE, "cashier"], icon: Users },
+  { label: "Ticket Lookup", path: "/ticket-lookup", roles: [...OFFICE, "cashier"], icon: ScanSearch },
+  { label: "Company Expenses", path: "/company-expenses", roles: ["cashier", ...OFFICE], icon: Receipt },
+  { label: "Master Wallet", path: "/master-wallet", roles: OFFICE, icon: Wallet },
+  { label: "Reserve Fund", path: "/reserve", roles: OFFICE, icon: PiggyBank },
+  { label: "Risk Management", path: "/risk-management", roles: OFFICE, icon: ShieldAlert },
+  { label: "Games Management", path: "/games", roles: OFFICE, icon: Gamepad2 },
   {
     label: "Personnel Management",
     group: true,
+    icon: Contact,
     children: [
-      { label: "Internal Employees", path: "/staffs-employees", roles: ["cashier", "administrator", "director"] },
-      { label: "External Employees", path: "/agency-staff-expenses", roles: ["cashier", "administrator", "director"] },
+      { label: "Internal Employees", path: "/staffs-employees", roles: ["cashier", ...OFFICE] },
+      { label: "External Employees", path: "/agency-staff-expenses", roles: ["cashier", ...OFFICE] },
     ],
   },
-  { label: "Company Expenses", path: "/company-expenses", roles: ["cashier", "administrator", "director"] },
-  // Directors and administrators reach this as a tab of Reserve Fund.
-  { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier"] },
-  { label: "Run Draws", path: "/calculations", roles: ["director", "administrator"] },
-  { label: "Reports", path: "/reports", roles: ["director", "administrator", "cashier"] },
-  { label: "Wins & Debt Overview", path: "/wins-debt", roles: ["director", "administrator"] },
-  { label: "Reserve Fund", path: "/reserve", roles: ["director", "administrator"] },
-  { label: "Inventory", path: "/inventory", roles: ["cashier", "administrator", "director"] },
-  { label: "Notifications", path: "/notifications", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
+  { label: "Wins & Debt Overview", path: "/wins-debt", roles: OFFICE, icon: Landmark },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -76,15 +91,17 @@ function NavLink({ item, nested }: { item: NavItem; nested?: boolean }) {
   const active = isActivePath(location, item.path);
 
   return (
-    <Link href={item.path}>
+    // A block, so the menu's row spacing applies to links and groups alike.
+    <Link href={item.path} className="block">
       <span className={cn(
-        "block px-3 py-2 rounded text-sm font-medium transition-colors cursor-pointer",
-        nested && "py-1.5 text-[13px]",
+        "flex items-center gap-2.5 h-9 px-3 rounded-lg text-sm font-medium transition-colors cursor-pointer",
+        nested && "h-8 text-[13px]",
         active
-          ? "bg-primary text-primary-foreground"
-          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
       )}>
-        {item.label}
+        {item.icon && <item.icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />}
+        <span className="truncate">{item.label}</span>
       </span>
     </Link>
   );
@@ -104,17 +121,18 @@ function NavGroupLink({ group }: { group: NavGroup }) {
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
         className={cn(
-          "w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded text-sm font-medium text-left transition-colors",
+          "w-full flex items-center gap-2.5 h-9 px-3 rounded-lg text-sm font-medium text-left transition-colors",
           holdsActive && !open
-            ? "bg-primary text-primary-foreground"
-            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         )}
       >
-        <span className="truncate">{group.label}</span>
+        {group.icon && <group.icon className="h-4 w-4 shrink-0 opacity-70" />}
+        <span className="truncate flex-1">{group.label}</span>
         <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 opacity-70 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        <div className="mt-0.5 ml-3 pl-2 border-l border-sidebar-border space-y-0.5">
+        <div className="mt-0.5 mb-1 ml-[1.25rem] pl-2.5 border-l border-sidebar-border/70 space-y-0.5">
           {group.children.map(c => <NavLink key={c.path} item={c} nested />)}
         </div>
       )}
@@ -165,7 +183,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div key={item.path} className="relative">
                   <NavLink item={item} />
                   {unreadCount > 0 && (
-                    <Badge className="absolute top-1.5 right-2 h-5 min-w-5 flex items-center justify-center text-xs px-1" variant="destructive">
+                    <Badge className="absolute top-1/2 -translate-y-1/2 right-2 h-5 min-w-5 flex items-center justify-center text-[10px] px-1.5 pointer-events-none" variant="destructive">
                       {unreadCount > 99 ? "99+" : unreadCount}
                     </Badge>
                   )}
@@ -195,7 +213,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop: the sidebar is always there. */}
-      <aside className="hidden lg:flex w-60 flex-shrink-0 flex-col bg-sidebar border-r border-sidebar-border">
+      <aside className="hidden lg:flex w-[17rem] flex-shrink-0 flex-col bg-sidebar border-r border-sidebar-border">
         {sidebar}
       </aside>
 
@@ -204,7 +222,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMenuOpen(false)} />
-          <aside className="absolute left-0 top-0 h-full w-64 max-w-[85vw] flex flex-col bg-sidebar border-r border-sidebar-border shadow-2xl">
+          <aside className="absolute left-0 top-0 h-full w-[17rem] max-w-[85vw] flex flex-col bg-sidebar border-r border-sidebar-border shadow-2xl">
             <button type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)}
               className="absolute right-2 top-3 h-8 w-8 inline-flex items-center justify-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent">
               <X className="h-4 w-4" />
