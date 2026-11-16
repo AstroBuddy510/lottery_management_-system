@@ -1,6 +1,36 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
+/**
+ * Save or print: every generator ends in finishDoc, so any report can be
+ * printed as exactly the document its Export PDF button saves.
+ *
+ * printWith() runs a generator in print mode. Instead of downloading, the
+ * PDF opens in a new tab with the browser's print dialog already up - the
+ * paper and the PDF are the same file, so they can never disagree.
+ */
+let outputMode: "save" | "print" = "save";
+
+function finishDoc(doc: any, fileName: string) {
+  if (outputMode === "print") {
+    doc.autoPrint({ variant: "non-conform" });
+    const url = doc.output("bloburl");
+    const w = window.open(url, "_blank");
+    if (!w) alert("Your browser blocked the print window. Allow pop-ups for this site and try again.");
+    return;
+  }
+  doc.save(fileName);
+}
+
+export async function printWith(generate: () => unknown) {
+  outputMode = "print";
+  try {
+    await generate();
+  } finally {
+    outputMode = "save";
+  }
+}
+
 // Currency for print. Grouped like the screen, and negatives in brackets as
 // the accounts are read.
 function fmt(v: string | number | undefined | null) {
@@ -270,7 +300,7 @@ export async function generateWriterReportPDF(
   doc.text(fmt(totals.writerBalance), pageWidth - 20, finalY + 25, { align: "right" });
 
   drawSignatureBlock(doc, "Cashier/Auditor", "Writer Signature");
-  doc.save(`statement_writer_${writerCode}.pdf`);
+  finishDoc(doc, `statement_writer_${writerCode}.pdf`);
 }
 
 // ─── 2. AGENT REPORT PDF ───
@@ -416,7 +446,7 @@ export async function generateAgentReportPDF(
   doc.text(fmt(totals.writerBalance), pageWidth - 20, nextY + 31, { align: "right" });
 
   drawSignatureBlock(doc, "Billed By (Administrator)", "Acknowledged By (Agent)");
-  doc.save(`invoice_agent_${agentCode}.pdf`);
+  finishDoc(doc, `invoice_agent_${agentCode}.pdf`);
 }
 
 // ─── 3. ORGANISATION REPORT (P&L Summary) PDF ───
@@ -507,7 +537,7 @@ export async function generateOrgReportPDF(
   doc.text(fmt(totals.writerBalance), pageWidth - 20, nextY + 31, { align: "right" });
 
   drawSignatureBlock(doc, "Director Signatory", "External Auditor Signatory");
-  doc.save(`org_performance_statement.pdf`);
+  finishDoc(doc, `org_performance_statement.pdf`);
 }
 
 // ─── 3a. E-TOKEN REPORT PDF ───
@@ -644,7 +674,7 @@ export async function generateTokenReportPDF(
   }
 
   drawSignatureBlock(doc, "Prepared By", "Director Signatory");
-  doc.save("etoken_supply_report.pdf");
+  finishDoc(doc, "etoken_supply_report.pdf");
 }
 
 // ─── 3b. POS WINS REPORT PDF ───
@@ -749,7 +779,7 @@ export async function generatePosWinsReportPDF(
   });
 
   drawSignatureBlock(doc, "Cashier Signatory", "Director Signatory");
-  doc.save("pos_wins_payment_report.pdf");
+  finishDoc(doc, "pos_wins_payment_report.pdf");
 }
 
 // ─── 3d. SALES BY CHANNEL PDF ───
@@ -921,7 +951,7 @@ export async function generateSalesChannelsReportPDF(opts: {
   if (doc.lastAutoTable.finalY > doc.internal.pageSize.height - 45) doc.addPage();
   drawSignatureBlock(doc, "Prepared By (Accounts)", "Director Signatory");
   const stamp = dateFrom || dateTo ? `${dateFrom || "start"}_to_${dateTo || "today"}` : "all_time";
-  doc.save(`sales_by_channel_${stamp}.pdf`);
+  finishDoc(doc, `sales_by_channel_${stamp}.pdf`);
 }
 
 // ─── 3e. WINS & DEBT OVERVIEW PDF ───
@@ -1090,7 +1120,7 @@ export async function generateWinsDebtOverviewPDF(opts: {
 
   if (doc.lastAutoTable.finalY > pageHeight - 45) doc.addPage();
   drawSignatureBlock(doc, "Prepared By (Accounts)", "Director Signatory");
-  doc.save(`wins_and_debt_overview_${new Date().toISOString().slice(0, 10)}.pdf`);
+  finishDoc(doc, `wins_and_debt_overview_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 // ─── 3f. RESERVE ALLOCATION HISTORY PDF ───
@@ -1142,7 +1172,7 @@ export async function generateReserveAllocationsPDF(
   });
   if (doc.lastAutoTable.finalY > doc.internal.pageSize.height - 45) doc.addPage();
   drawSignatureBlock(doc, "Prepared By (Accounts)", "Director Signatory");
-  doc.save(`reserve_allocations_${dateFrom || "start"}_to_${dateTo || "today"}.pdf`);
+  finishDoc(doc, `reserve_allocations_${dateFrom || "start"}_to_${dateTo || "today"}.pdf`);
 }
 
 // ─── 3c. MASTER WALLET LEDGER PDF ───
@@ -1208,7 +1238,7 @@ export async function generateMasterWalletLedgerPDF(
   });
 
   drawSignatureBlock(doc, "Prepared By", "Director Signatory");
-  doc.save("master_wallet_ledger.pdf");
+  finishDoc(doc, "master_wallet_ledger.pdf");
 }
 
 // ─── 4a. GAME SALES BY AGENCY PDF ───
@@ -1356,7 +1386,7 @@ export async function generateGameSalesByAgencyPDF(
   doc.text(fmt(summary.balance), pageWidth - 20, nextY + 39, { align: "right" });
 
   drawSignatureBlock(doc, "Prepared By", "Director Signatory");
-  doc.save(`game_sales_${gameName.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}.pdf`);
+  finishDoc(doc, `game_sales_${gameName.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}.pdf`);
 }
 
 // ─── 4. GAME SALES REPORT PDF ───
@@ -1562,7 +1592,7 @@ export async function generateGameSalesReportPDF(
   doc.text(fmt(grandNetBalance), pageWidth - 20, nextY + 25, { align: "right" });
 
   drawSignatureBlock(doc, "Audited By (Administrator)", "Billed Authorized Sign");
-  doc.save(`game_sales_report_${agentCode}.pdf`);
+  finishDoc(doc, `game_sales_report_${agentCode}.pdf`);
 }
 
 // ─── 5. DAILY CASH RECONCILIATION SETTLEMENT PDF ───
@@ -1660,7 +1690,7 @@ export async function generateDailySettlementPDF(
   doc.text(fmt(netPosition), pageWidth - 20, nextY + 23, { align: "right" });
 
   drawSignatureBlock(doc, "Prepared By (Cashier)", "Verified By (Admin / Manager)");
-  doc.save(`cashier_settlement_${date}.pdf`);
+  finishDoc(doc, `cashier_settlement_${date}.pdf`);
 }
 
 // ─── 6. PAYROLL DISBURSEMENT PDF ───
@@ -1753,7 +1783,7 @@ export async function generatePayrollPDF(
   doc.text(fmt(grandTotal), pageWidth - 20, nextY + 23, { align: "right" });
 
   drawSignatureBlock(doc, "Approved By (HR/Cashier)", "Authorized By (Director)");
-  doc.save(`payroll_summary_${periodLabel.replace(/\s+/g, "_")}.pdf`);
+  finishDoc(doc, `payroll_summary_${periodLabel.replace(/\s+/g, "_")}.pdf`);
 }
 
 // ─── 7. GAME EVENT AUDIT REPORT PDF ───
@@ -1899,7 +1929,7 @@ export async function generateGameEventReportPDF(
   doc.text(fmt(totals.writerBalance), pageWidth - 20, nextY + 31, { align: "right" });
 
   drawSignatureBlock(doc, "Audited By (Cashier)", "Authorized Signatory (Director)");
-  doc.save(`event_audit_report_${eventNumber}.pdf`);
+  finishDoc(doc, `event_audit_report_${eventNumber}.pdf`);
 }
 
 // ─── 8. DIGITAL PADLOCK ASSIGNMENTS HISTORY REPORT PDF ───
@@ -1999,7 +2029,7 @@ export async function generatePadlockAssignmentsPDF(
   doc.text(String(assignments.length), pageWidth - 20, nextY + 8, { align: "right" });
 
   drawSignatureBlock(doc, "Prepared By (Inventory Manager)", "Verified By (Operations Director)");
-  doc.save(`padlock_assignments_history.pdf`);
+  finishDoc(doc, `padlock_assignments_history.pdf`);
 }
 
 // ─── 9. AGENT LEDGER REPORT PDF ───
@@ -2107,7 +2137,7 @@ export async function generateAgentLedgerPDF(
   doc.text(fmt(totalShortfall), pageWidth - 20, nextY + 23, { align: "right" });
 
   drawSignatureBlock(doc, "Prepared By (Finance Officer)", "Approved By (Finance Director)");
-  doc.save(`agent_ledger_${new Date().toISOString().slice(0, 10)}.pdf`);
+  finishDoc(doc, `agent_ledger_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 // ─── 10. SMART DEBT SIMULATION REPORT PDF ───
@@ -2220,7 +2250,7 @@ export async function generateSmartDebtSimulationPDF(
   doc.text(fmt(newBalance), pageWidth - 20, nextY + 23, { align: "right" });
 
   drawSignatureBlock(doc, "Prepared By (Treasury Manager)", "Approved By (Finance Director)");
-  doc.save(`smart_debt_allocation_${new Date().toISOString().slice(0, 10)}.pdf`);
+  finishDoc(doc, `smart_debt_allocation_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 // ─── 11. COMPANY EXPENSES STATEMENT REPORT PDF ───
@@ -2329,7 +2359,7 @@ export async function generateCompanyExpensesPDF(
   doc.text(fmt(total), pageWidth - 20, nextY + 14, { align: "right" });
 
   drawSignatureBlock(doc, "Prepared By (Finance Officer)", "Approved By (Managing Director)");
-  doc.save(`company_expenses_${new Date().toISOString().slice(0, 10)}.pdf`);
+  finishDoc(doc, `company_expenses_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 
@@ -2425,7 +2455,7 @@ export async function generatePaymentsHistoryPDF(
     },
   });
 
-  doc.save(`transaction-history-${new Date().toISOString().slice(0, 10)}.pdf`);
+  finishDoc(doc, `transaction-history-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
 // ─── GENERIC TABLE REPORT ───
@@ -2505,5 +2535,5 @@ export async function generateTableReportPDF(report: TableReport) {
 
   if (y > doc.internal.pageSize.height - 45) doc.addPage();
   drawSignatureBlock(doc, "Prepared By (Cashier)", "Approved By");
-  doc.save(report.fileName.endsWith(".pdf") ? report.fileName : `${report.fileName}.pdf`);
+  finishDoc(doc, report.fileName.endsWith(".pdf") ? report.fileName : `${report.fileName}.pdf`);
 }

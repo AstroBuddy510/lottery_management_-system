@@ -8,7 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Loader2, FileDown, CheckCircle2, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { fmtGHS } from "@/lib/utils";
-import { generateTokenReportPDF } from "@/lib/pdf-generator";
+import { generateTokenReportPDF, printWith } from "@/lib/pdf-generator";
+import { ScrollTable, Pager, usePaged, DirectionBadge, SignedAmount, PAGE_SIZE } from "@/components/data-kit";
+import { Printer } from "lucide-react";
 
 /**
  * E-token report: what was generated, who holds it, where it went.
@@ -37,10 +39,10 @@ interface TokenReport {
 
 function Figure({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
   return (
-    <div className="rounded-xl border bg-card p-3">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{label}</div>
-      <div className={`text-lg font-bold tabular-nums mt-0.5 ${tone ?? ""}`}>{value}</div>
-      {hint && <div className="text-[10px] text-muted-foreground mt-0.5">{hint}</div>}
+    <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
+      <div className="truncate text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`mt-1.5 truncate text-lg font-black tracking-tight tabular-nums ${tone ?? ""}`}>{value}</div>
+      {hint && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{hint}</div>}
     </div>
   );
 }
@@ -112,9 +114,17 @@ export function TokenReportView() {
     URL.revokeObjectURL(url);
   };
 
+  const pPool = usePaged(data?.poolTransactions, PAGE_SIZE, `${range?.from}|${range?.to}`);
+  const pSales = usePaged(data?.cashierTransactions, PAGE_SIZE, `${range?.from}|${range?.to}`);
+  const makePdf = () =>
+    data && generateTokenReportPDF(
+      range?.from ?? "", range?.to ?? "",
+      data.summary, data.writerHoldings, data.floats, data.poolTransactions,
+    );
+
   return (
-    <div className="space-y-4">
-      <Card>
+    <div className="space-y-4 pt-4">
+      <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">E-Token Report</CardTitle>
           <CardDescription className="text-xs">
@@ -141,19 +151,19 @@ export function TokenReportView() {
           <Button
             className="h-9 bg-[#ff6700] hover:bg-[#ff6700]/90 text-white font-semibold"
             disabled={!data}
-            onClick={() => data && generateTokenReportPDF(
-              range?.from ?? "", range?.to ?? "",
-              data.summary, data.writerHoldings, data.floats, data.poolTransactions,
-            )}
+            onClick={() => void makePdf()}
           >
             <FileDown className="h-4 w-4 mr-1.5" /> Export PDF
+          </Button>
+          <Button variant="outline" className="h-9 font-semibold" disabled={!data} onClick={() => void printWith(makePdf)}>
+            <Printer className="h-4 w-4 mr-1.5" /> Print
           </Button>
         </CardContent>
       </Card>
 
       {data && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Figure label="Generated" value={fmtGHS(s!.totalMinted)} hint="Ever created" />
             <Figure label="In Pool" value={fmtGHS(s!.poolBalance)} hint="Unissued" tone="text-primary" />
             <Figure label="Cashier Floats" value={fmtGHS(s!.heldByCashiers)} hint="Awaiting sale" />
@@ -180,15 +190,14 @@ export function TokenReportView() {
             </span>
           </div>
 
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Generation &amp; Recharges</CardTitle></CardHeader>
-            <CardContent>
-              <div className="rounded-md border overflow-x-auto">
+          <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+            <div className="border-b px-5 py-3 text-[11px] font-black uppercase tracking-wider text-muted-foreground">Generation &amp; recharges · company pool</div>
+              <ScrollTable minWidth="44rem">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead className="pl-5">Date</TableHead>
+                      <TableHead>Direction</TableHead>
                       <TableHead>By</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead className="text-right">Pool After</TableHead>
@@ -197,33 +206,33 @@ export function TokenReportView() {
                   <TableBody>
                     {data.poolTransactions.length === 0 ? (
                       <TableRow><TableCell colSpan={5} className="text-center py-6 text-sm text-muted-foreground">No activity in this range.</TableCell></TableRow>
-                    ) : data.poolTransactions.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell className="text-xs whitespace-nowrap">{format(new Date(t.createdAt), "d MMM · HH:mm")}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px] capitalize">
-                            {t.transactionType.replace(/_/g, " ")}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs">{t.byName}</TableCell>
-                        <TableCell className="text-right tabular-nums text-xs font-semibold">{fmtGHS(t.amount)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{fmtGHS(t.balanceAfter)}</TableCell>
-                      </TableRow>
-                    ))}
+                    ) : pPool.rows.map((t) => {
+                      // Seen from the pool: generation fills it, a recharge empties it into a float.
+                      const dir = t.transactionType === "issue_to_cashier" ? "out" : "in";
+                      const label = t.transactionType === "mint" ? "Generated" : t.transactionType === "issue_to_cashier" ? "Recharged a cashier" : "Reversal";
+                      return (
+                        <TableRow key={t.id} className="hover:bg-muted/30">
+                          <TableCell className="pl-5 text-xs whitespace-nowrap">{format(new Date(t.createdAt), "d MMM · HH:mm")}</TableCell>
+                          <TableCell><DirectionBadge direction={dir} detail={label} /></TableCell>
+                          <TableCell className="text-xs">{t.byName}</TableCell>
+                          <TableCell className="text-right text-xs"><SignedAmount direction={dir}>{fmtGHS(t.amount)}</SignedAmount></TableCell>
+                          <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{fmtGHS(t.balanceAfter)}</TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
-              </div>
-            </CardContent>
-          </Card>
+              </ScrollTable>
+              <Pager page={pPool.page} totalPages={pPool.totalPages} onPage={pPool.setPage} total={pPool.total} size={pPool.size} noun="pool movements" />
+          </div>
 
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Sales to Writers</CardTitle></CardHeader>
-            <CardContent>
-              <div className="rounded-md border overflow-x-auto">
+          <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+            <div className="border-b px-5 py-3 text-[11px] font-black uppercase tracking-wider text-muted-foreground">Sales to writers · Pay-Out from cashier floats</div>
+              <ScrollTable minWidth="44rem">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
+                      <TableHead className="pl-5">Date</TableHead>
                       <TableHead>Cashier</TableHead>
                       <TableHead>Writer</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
@@ -233,23 +242,23 @@ export function TokenReportView() {
                   <TableBody>
                     {data.cashierTransactions.length === 0 ? (
                       <TableRow><TableCell colSpan={5} className="text-center py-6 text-sm text-muted-foreground">No activity in this range.</TableCell></TableRow>
-                    ) : data.cashierTransactions.map((t) => (
-                      <TableRow key={t.id}>
-                        <TableCell className="text-xs whitespace-nowrap">{format(new Date(t.createdAt), "d MMM · HH:mm")}</TableCell>
+                    ) : pSales.rows.map((t) => (
+                      <TableRow key={t.id} className="hover:bg-muted/30">
+                        <TableCell className="pl-5 text-xs whitespace-nowrap">{format(new Date(t.createdAt), "d MMM · HH:mm")}</TableCell>
                         <TableCell className="text-xs">{t.cashierName}</TableCell>
                         <TableCell className="text-xs">
                           {t.writerName ?? "—"}
                           {t.writerCode && <span className="block font-mono text-[10px] text-muted-foreground">{t.writerCode}</span>}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs font-semibold">{fmtGHS(t.amount)}</TableCell>
+                        <TableCell className="text-right text-xs"><SignedAmount direction="out">{fmtGHS(t.amount)}</SignedAmount></TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{fmtGHS(t.balanceAfter)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </div>
-            </CardContent>
-          </Card>
+              </ScrollTable>
+              <Pager page={pSales.page} totalPages={pSales.totalPages} onPage={pSales.setPage} total={pSales.total} size={pSales.size} noun="sales" />
+          </div>
         </>
       )}
     </div>

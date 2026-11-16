@@ -25,8 +25,11 @@ import {
   generateGameSalesByAgencyPDF,
   generatePosWinsReportPDF,
   generateSalesChannelsReportPDF,
+  printWith,
   type SalesChannelGroupRow,
 } from "@/lib/pdf-generator";
+import { ScrollTable, Pager, usePaged, ReportActions, DirectionBadge, SignedAmount, StatTile, PAGE_SIZE } from "@/components/data-kit";
+import { FileBarChart, User, Users, Building2, Gamepad2, Trophy, Shuffle, Coins, CalendarRange } from "lucide-react";
 import { TokenReportView } from "@/components/token-report";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -81,58 +84,69 @@ function AmtCell({ v, dim }: { v: string | number; dim?: boolean }) {
 
 function TotalsGrid({ t, label }: { t: ReportTotals; label?: string }) {
   const balance = Number(t.writerBalance);
-  const items = [
-    { l: "Gross Sales", v: t.grossSales, dim: false, accent: false },
-    { l: "Commission", v: t.commissionAmount, dim: true, accent: false },
-    { l: "Net Gross", v: t.netGross, dim: false, accent: false },
-    { l: "Wins Paid Out", v: t.winsAmount, dim: true, accent: false },
-    { l: "Reserve", v: t.reserveAmount, dim: true, accent: false },
-    { l: "Net Balance", v: t.writerBalance, dim: false, accent: true },
-  ] as const;
+  const show = (v: string) => fmt(v);
   return (
-    <div className="rounded-xl border bg-card p-4">
-      {label && <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">{label}</div>}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {items.map(({ l, v, dim, accent }) => (
-          <div key={l} className={`rounded-lg px-3 py-2.5 ${accent ? (balance < 0 ? "bg-red-50 dark:bg-red-950/40" : "bg-emerald-50 dark:bg-emerald-950/40") : "bg-muted/40"}`}>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{l}</div>
-            <div className={`font-mono font-semibold tabular-nums text-sm ${accent ? (balance < 0 ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400") : dim ? "text-muted-foreground" : ""}`}>
-              {Number(v) < 0 ? `(GH₵ ${Math.abs(Number(v)).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : `GH₵ ${Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-            </div>
-          </div>
-        ))}
+    <div className="space-y-2">
+      {label && <div className="px-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</div>}
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <StatTile label="Gross Sales" value={show(t.grossSales)} />
+        <StatTile label="Commission" value={show(t.commissionAmount)} tone="muted" />
+        <StatTile label="Net Gross" value={show(t.netGross)} />
+        <StatTile label="Wins Paid Out" value={show(t.winsAmount)} tone="out" />
+        <StatTile label="Reserve" value={show(t.reserveAmount)} tone="muted" />
+        <StatTile label="Net Balance" value={show(t.writerBalance)} tone={balance < 0 ? "bad" : "in"} />
       </div>
     </div>
   );
 }
 
-function ReportLetterhead({ title, subtitle, dateFrom, dateTo, onExportPDF }: { title: string; subtitle?: string; dateFrom?: string; dateTo?: string; onExportPDF?: () => void }) {
+/** A table card: heading bar, a scroll box with pinned headings, and a pager. */
+function ReportTable({ title, right, children, footer, minWidth = "52rem", maxHeight = "36rem" }: {
+  title?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode;
+  minWidth?: string; maxHeight?: string;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+      {(title || right) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3">
+          <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">{title}</span>
+          {right}
+        </div>
+      )}
+      <ScrollTable minWidth={minWidth} maxHeight={maxHeight}>{children}</ScrollTable>
+      {footer}
+    </div>
+  );
+}
+
+function ReportLetterhead({ title, subtitle, dateFrom, dateTo, onExportPDF }: { title: string; subtitle?: string; dateFrom?: string; dateTo?: string; onExportPDF?: () => unknown }) {
   const range = dateFrom || dateTo ? `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}` : "All periods";
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-card border rounded-xl px-5 py-4 mb-1">
-      <div className="flex items-center gap-4 flex-1 min-w-0">
-        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center p-1.5 flex-shrink-0">
-          <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
+    <div className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm lg:flex-row lg:items-center">
+      <div className="flex min-w-0 flex-1 items-center gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border bg-muted p-1.5">
+          <img src="/company-logo-v3.png" alt="VS2000 Logo" className="h-full w-full object-contain" />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">VS2000 Smart Office</div>
-          <div className="text-base font-bold text-foreground leading-tight mt-0.5">{title}</div>
-          {subtitle && <div className="text-sm text-muted-foreground mt-0.5">{subtitle}</div>}
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">VS2000 Smart Office</div>
+          <div className="mt-0.5 text-base font-black leading-tight tracking-tight text-foreground">{title}</div>
+          {subtitle && <div className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</div>}
         </div>
       </div>
-      <div className="flex items-center gap-4 justify-between sm:justify-end flex-shrink-0">
-        <div className="text-right space-y-0.5">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Period</div>
-          <div className="text-xs font-medium">{range}</div>
-          <div className="text-[10px] text-muted-foreground">
-            {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+      <div className="flex flex-wrap items-center justify-between gap-4 sm:justify-end">
+        <div className="flex items-center gap-2 rounded-xl border bg-muted/30 px-3 py-1.5">
+          <CalendarRange className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <div className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Period</div>
+            <div className="text-xs font-semibold">{range}</div>
           </div>
         </div>
         {onExportPDF && (
-          <Button onClick={onExportPDF} size="sm" className="bg-[#ff6700] hover:bg-[#ff6700]/90 text-white flex items-center gap-1.5 font-semibold">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export PDF
-          </Button>
+          <ReportActions
+            label={title}
+            onPdf={async () => { await onExportPDF(); }}
+            onPrint={() => { void printWith(onExportPDF); }}
+          />
         )}
       </div>
     </div>
@@ -152,7 +166,7 @@ function DateShortcuts({ onSelect }: { onSelect: (from: string, to: string) => v
     <div className="flex flex-wrap gap-1.5 pt-0.5">
       {shortcuts.map(s => (
         <button key={s.label} onClick={() => onSelect(s.from, s.to)}
-          className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-muted hover:bg-muted/70 text-muted-foreground hover:text-foreground transition-colors border">
+          className="rounded-full border bg-muted/50 px-3 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary">
           {s.label}
         </button>
       ))}
@@ -165,11 +179,11 @@ function ParamPanel({ children, onRun, disabled, loading, buttonLabel, hint }: {
   buttonLabel?: string; hint?: string;
 }) {
   return (
-    <div className="bg-muted/20 border rounded-xl p-4 space-y-3">
+    <div className="space-y-3 rounded-2xl border border-border/80 bg-card p-5 shadow-sm">
       {children}
-      <div className="flex items-center justify-between pt-1">
+      <div className="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-xs text-muted-foreground">{hint ?? "Adjust parameters above, then run."}</span>
-        <Button size="sm" disabled={disabled || loading} onClick={onRun} className="min-w-[96px]">
+        <Button size="sm" disabled={disabled || loading} onClick={onRun} className="min-w-[110px] self-start rounded-lg font-bold sm:self-auto">
           {loading ? "Loading…" : (buttonLabel ?? "Run Report")}
         </Button>
       </div>
@@ -201,8 +215,8 @@ function TableFoot({ row }: { row: ReportTotals & { label?: string; count?: numb
 function FinanceTableHead() {
   return (
     <TableHeader>
-      <TableRow className="bg-muted/40">
-        <TableHead className="text-xs w-[160px]">Name</TableHead>
+      <TableRow>
+        <TableHead className="w-[180px] pl-5">Name</TableHead>
         <TableHead className="text-right text-xs">Gross Sales</TableHead>
         <TableHead className="text-right text-xs">Commission</TableHead>
         <TableHead className="text-right text-xs">Net Gross</TableHead>
@@ -259,6 +273,7 @@ function WriterReportView() {
   const r = report as WriterReportFull | undefined;
   const agentList = Array.isArray(agents) ? agents : [];
   const writerList = Array.isArray(writers) ? writers : [];
+  const pDays = usePaged(r?.rows, PAGE_SIZE, `${writerId}|${dateFrom}|${dateTo}`);
 
   const reset = () => setRun(false);
   const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); reset(); };
@@ -304,7 +319,7 @@ function WriterReportView() {
       </ParamPanel>
 
       {!run && !isLoading && (
-        <div className="text-center py-12 text-sm text-muted-foreground">Select a writer and click Run Report.</div>
+        <div className="rounded-2xl border border-dashed bg-muted/10 py-14 text-center text-sm text-muted-foreground">Select a writer and click Run Report.</div>
       )}
 
       {r && (
@@ -357,11 +372,14 @@ function WriterReportView() {
 
           {/* Daily rows table */}
           {r.rows && r.rows.length > 0 ? (
-            <div className="rounded-xl border overflow-hidden">
+            <ReportTable
+              title={`Daily calculations · ${r.rows.length}`}
+              footer={<Pager page={pDays.page} totalPages={pDays.totalPages} onPage={pDays.setPage} total={pDays.total} size={pDays.size} noun="days" />}
+            >
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead className="text-xs">Date</TableHead>
+                  <TableRow>
+                    <TableHead className="pl-5">Date</TableHead>
                     <TableHead className="text-right text-xs">Gross Sales</TableHead>
                     <TableHead className="text-right text-xs">Commission</TableHead>
                     <TableHead className="text-right text-xs">Net Gross</TableHead>
@@ -371,9 +389,9 @@ function WriterReportView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {r.rows.map((row, i) => (
-                    <TableRow key={i} className="hover:bg-muted/20">
-                      <TableCell className="text-sm font-medium">{fmtDate(row.calcDate)}</TableCell>
+                  {pDays.rows.map((row, i) => (
+                    <TableRow key={i} className="hover:bg-muted/30">
+                      <TableCell className="pl-5 text-sm font-medium">{fmtDate(row.calcDate)}</TableCell>
                       <TableCell className="text-right"><AmtCell v={row.grossSales} /></TableCell>
                       <TableCell className="text-right"><AmtCell v={row.commissionAmount} dim /></TableCell>
                       <TableCell className="text-right"><AmtCell v={row.netGross} /></TableCell>
@@ -385,9 +403,9 @@ function WriterReportView() {
                 </TableBody>
                 <TableFoot row={{ ...r.totals, label: "Period Total", count: r.rows.length }} />
               </Table>
-            </div>
+            </ReportTable>
           ) : (
-            <div className="text-center py-10 text-sm text-muted-foreground border rounded-xl">
+            <div className="rounded-2xl border border-dashed bg-muted/10 py-10 text-center text-sm text-muted-foreground">
               No calculated entries for this writer in the selected period.
             </div>
           )}
@@ -442,6 +460,9 @@ function AgentReportView() {
 
   const r = report as AgentReportFull | undefined;
   const agentList = Array.isArray(agents) ? agents : [];
+  const writerRows = useMemo(() => (r?.writers ?? []).filter(ws => ws.writer), [r]);
+  const pPay = usePaged(r?.payments, PAGE_SIZE, `${agentId}|${dateFrom}|${dateTo}`);
+  const pWriters = usePaged(writerRows, PAGE_SIZE, `${agentId}|${dateFrom}|${dateTo}`);
   const reset = () => setRun(false);
   const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); reset(); };
 
@@ -474,7 +495,7 @@ function AgentReportView() {
       </ParamPanel>
 
       {!run && !isLoading && (
-        <div className="text-center py-12 text-sm text-muted-foreground">Select an agent and click Run Report.</div>
+        <div className="rounded-2xl border border-dashed bg-muted/10 py-14 text-center text-sm text-muted-foreground">Select an agent and click Run Report.</div>
       )}
 
       {r && (
@@ -499,7 +520,7 @@ function AgentReportView() {
 
           {/* Payments summary */}
           {r.totalPaid !== undefined && (
-            <div className="flex items-center justify-between rounded-xl border bg-card px-4 py-3">
+            <div className="flex items-center justify-between rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm">
               <div>
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">
                   Payments Collected ({r.payments?.length ?? 0})
@@ -517,49 +538,52 @@ function AgentReportView() {
           )}
 
           {showPayments && r.payments && r.payments.length > 0 && (
-            <div className="rounded-xl border overflow-hidden">
+            <ReportTable
+              title={`Payments · ${r.payments.length}`}
+              minWidth="44rem"
+              footer={<Pager page={pPay.page} totalPages={pPay.totalPages} onPage={pPay.setPage} total={pPay.total} size={pPay.size} noun="payments" />}
+            >
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead className="text-xs">Date</TableHead>
-                    <TableHead className="text-xs">Receipt</TableHead>
-                    <TableHead className="text-xs">Type</TableHead>
-                    <TableHead className="text-right text-xs">Amount</TableHead>
-                    <TableHead className="text-xs">Notes</TableHead>
+                  <TableRow>
+                    <TableHead className="pl-5">Date</TableHead>
+                    <TableHead>Receipt</TableHead>
+                    <TableHead>Direction</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="pr-5">Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {r.payments.map(p => (
-                    <TableRow key={p.id} className="hover:bg-muted/20">
-                      <TableCell className="text-sm">{fmtDate(p.paymentDate)}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{p.receiptNumber ?? "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-[10px] capitalize">
-                          {p.transactionType.replace("_", " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right"><AmtCell v={p.amount} /></TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">{p.notes ?? "—"}</TableCell>
-                    </TableRow>
-                  ))}
+                  {pPay.rows.map(p => {
+                    const dir = p.transactionType === "pay_out" ? "out" : "in";
+                    return (
+                      <TableRow key={p.id} className="hover:bg-muted/30">
+                        <TableCell className="pl-5 text-sm">{fmtDate(p.paymentDate)}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{p.receiptNumber ?? "—"}</TableCell>
+                        <TableCell><DirectionBadge direction={dir} /></TableCell>
+                        <TableCell className="text-right text-sm"><SignedAmount direction={dir}>{fmt(p.amount)}</SignedAmount></TableCell>
+                        <TableCell className="max-w-[200px] truncate pr-5 text-xs text-muted-foreground">{p.notes ?? "—"}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
-            </div>
+            </ReportTable>
           )}
 
           {/* Per-writer breakdown */}
           <div>
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
-              Writer Breakdown
-            </div>
-            {r.writers && r.writers.length > 0 ? (
-              <div className="rounded-xl border overflow-hidden">
+            {writerRows.length > 0 ? (
+              <ReportTable
+                title={`Writer breakdown · ${writerRows.length}`}
+                footer={<Pager page={pWriters.page} totalPages={pWriters.totalPages} onPage={pWriters.setPage} total={pWriters.total} size={pWriters.size} noun="writers" />}
+              >
                 <Table>
                   <FinanceTableHead />
                   <TableBody>
-                    {r.writers.filter(ws => ws.writer).map(ws => (
-                      <TableRow key={ws.writer.id} className="hover:bg-muted/20">
-                        <TableCell>
+                    {pWriters.rows.map(ws => (
+                      <TableRow key={ws.writer.id} className="hover:bg-muted/30">
+                        <TableCell className="pl-5">
                           <div className="font-mono text-sm font-semibold">{ws.writer.fullCode}</div>
                           <div className="text-xs text-muted-foreground">{ws.writer.fullName}</div>
                         </TableCell>
@@ -574,9 +598,9 @@ function AgentReportView() {
                   </TableBody>
                   <TableFoot row={{ ...r.totals, label: "Agent Total", count: r.writers.length }} />
                 </Table>
-              </div>
+              </ReportTable>
             ) : (
-              <div className="text-center py-8 text-sm text-muted-foreground border rounded-xl">
+              <div className="rounded-2xl border border-dashed bg-muted/10 py-8 text-center text-sm text-muted-foreground">
                 No calculated data for this agent in the selected period.
               </div>
             )}
@@ -615,6 +639,7 @@ function OrgReportView() {
   );
 
   const r = report as OrgReportFull | undefined;
+  const pAgents = usePaged(r?.agents, PAGE_SIZE, `${dateFrom}|${dateTo}`);
   const reset = () => setRun(false);
   const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); reset(); };
 
@@ -635,7 +660,7 @@ function OrgReportView() {
       </ParamPanel>
 
       {!run && !isLoading && (
-        <div className="text-center py-12 text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-dashed bg-muted/10 py-14 text-center text-sm text-muted-foreground">
           Set a date range (optional) and click Run Report.
         </div>
       )}
@@ -657,13 +682,16 @@ function OrgReportView() {
           <TotalsGrid t={r.totals} label="Organisation Totals" />
 
           {r.agents && r.agents.length > 0 ? (
-            <div className="rounded-xl border overflow-hidden">
+            <ReportTable
+              title={`Agents · ${r.agents.length}`}
+              footer={<Pager page={pAgents.page} totalPages={pAgents.totalPages} onPage={pAgents.setPage} total={pAgents.total} size={pAgents.size} noun="agents" />}
+            >
               <Table>
                 <FinanceTableHead />
                 <TableBody>
-                  {r.agents.map(a => (
-                    <TableRow key={a.agent.id} className="hover:bg-muted/20">
-                      <TableCell>
+                  {pAgents.rows.map(a => (
+                    <TableRow key={a.agent.id} className="hover:bg-muted/30">
+                      <TableCell className="pl-5">
                         <div className="font-mono text-sm font-semibold">{a.agent.fullCode}</div>
                         <div className="text-xs text-muted-foreground">{a.agent.user?.fullName ?? "—"}</div>
                       </TableCell>
@@ -678,9 +706,9 @@ function OrgReportView() {
                 </TableBody>
                 <TableFoot row={{ ...r.totals, label: "Organisation Total", count: r.agents.length }} />
               </Table>
-            </div>
+            </ReportTable>
           ) : (
-            <div className="text-center py-10 text-sm text-muted-foreground border rounded-xl">
+            <div className="rounded-2xl border border-dashed bg-muted/10 py-10 text-center text-sm text-muted-foreground">
               No calculated data in this period.
             </div>
           )}
@@ -785,6 +813,7 @@ function GameSalesView() {
   });
 
   const r = report;
+  const pGame = usePaged(r?.byAgent, PAGE_SIZE, `${gameName}|${dateFrom}|${dateTo}|${agentId}`);
   const applyDates = (f: string, t: string) => { setDateFrom(f); setDateTo(t); };
 
   return (
@@ -836,7 +865,7 @@ function GameSalesView() {
       </ParamPanel>
 
       {!gameName && !isLoading && (
-        <div className="text-center py-12 text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-dashed bg-muted/10 py-14 text-center text-sm text-muted-foreground">
           Select a game above to see how each agency sold it.
         </div>
       )}
@@ -874,7 +903,7 @@ function GameSalesView() {
           ) : null}
 
           {/* Period totals */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             {[
               { label: "Gross Sales", value: ghs(r.summary.gross), cls: "" },
               { label: "Commission", value: ghs(r.summary.commission), cls: "text-amber-600 dark:text-amber-400" },
@@ -886,20 +915,20 @@ function GameSalesView() {
                 cls: Number(r.summary.balance) < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400",
               },
             ].map(({ label, value, cls }) => (
-              <div key={label} className="rounded-xl border bg-card px-3 py-2.5">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</div>
-                <div className={`font-mono font-bold text-sm ${cls}`}>{value}</div>
+              <div key={label} className="min-w-0 rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
+                <div className="truncate text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</div>
+                <div className={`mt-1.5 truncate text-lg font-black tracking-tight tabular-nums ${cls}`}>{value}</div>
               </div>
             ))}
           </div>
 
           {/* The draws being counted, named, so the totals can be checked. */}
           {r.game.events.length > 0 && (
-            <div className="rounded-xl border px-4 py-3">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-2">
+            <div className="rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm">
+              <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-2">
                 Events counted ({r.game.events.length})
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto thin-scroll">
                 {r.game.events.map(e => (
                   <Badge key={e.id} variant="outline" className="font-mono text-[10px]">
                     #{e.eventNumber} · {new Date(e.goLiveAt).toLocaleDateString("en-GB")}
@@ -911,36 +940,33 @@ function GameSalesView() {
 
           {/* The league table */}
           {r.byAgent.length > 0 && (
-            <div className="rounded-xl border overflow-hidden">
-              <div className="bg-muted/40 px-4 py-2.5 border-b flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Sales by Agency
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {r.summary.agencyCount} agenc{r.summary.agencyCount === 1 ? "y" : "ies"} · {r.summary.writerCount} writer{r.summary.writerCount === 1 ? "" : "s"}
-                </span>
-              </div>
+            <ReportTable
+              title="Sales by agency"
+              minWidth="62rem"
+              right={<span className="text-xs text-muted-foreground">{r.summary.agencyCount} agenc{r.summary.agencyCount === 1 ? "y" : "ies"} · {r.summary.writerCount} writer{r.summary.writerCount === 1 ? "" : "s"} · click a row for its writers</span>}
+              footer={<Pager page={pGame.page} totalPages={pGame.totalPages} onPage={pGame.setPage} total={pGame.total} size={pGame.size} noun="agencies" />}
+            >
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/20">
-                    <TableHead className="text-xs">Agency</TableHead>
-                    <TableHead className="text-xs w-[120px]">Share</TableHead>
-                    <TableHead className="text-right text-xs">Gross Sales</TableHead>
-                    <TableHead className="text-right text-xs">Commission</TableHead>
-                    <TableHead className="text-right text-xs">Net Gross</TableHead>
-                    <TableHead className="text-right text-xs">Wins</TableHead>
-                    <TableHead className="text-right text-xs">Reserve</TableHead>
-                    <TableHead className="text-right text-xs">Balance</TableHead>
+                  <TableRow>
+                    <TableHead className="pl-5">Agency</TableHead>
+                    <TableHead className="w-[120px]">Share</TableHead>
+                    <TableHead className="text-right">Gross Sales</TableHead>
+                    <TableHead className="text-right">Commission</TableHead>
+                    <TableHead className="text-right">Net Gross</TableHead>
+                    <TableHead className="text-right">Wins</TableHead>
+                    <TableHead className="text-right">Reserve</TableHead>
+                    <TableHead className="pr-5 text-right">Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {r.byAgent.map(a => (
+                  {pGame.rows.map(a => (
                     <React.Fragment key={a.agent.id}>
                       <TableRow
-                        className="hover:bg-muted/20 cursor-pointer"
+                        className="hover:bg-muted/30 cursor-pointer"
                         onClick={() => setExpanded(expanded === a.agent.id ? null : a.agent.id)}
                       >
-                        <TableCell>
+                        <TableCell className="pl-5">
                           <div className="font-semibold text-sm">{a.agent.agencyName ?? a.agent.agentName}</div>
                           <div className="text-[10px] font-mono text-muted-foreground">
                             {a.agent.fullCode} · {a.writerCount} writer{a.writerCount === 1 ? "" : "s"} · {expanded === a.agent.id ? "hide" : "show"} writers
@@ -991,7 +1017,7 @@ function GameSalesView() {
                   </tr>
                 </tfoot>
               </Table>
-            </div>
+            </ReportTable>
           )}
         </div>
       )}
@@ -1039,6 +1065,7 @@ function PosWinsReportView() {
     },
   });
 
+  const pDisb = usePaged(r?.disbursements, PAGE_SIZE, `${dateFrom}|${dateTo}`);
   const stage = (key: string) => r?.pipeline[key] ?? { count: 0, total: "0" };
   const unclaimed = { count: stage("pending").count + stage("approved").count, total: Number(stage("pending").total) + Number(stage("approved").total) };
 
@@ -1073,7 +1100,7 @@ function PosWinsReportView() {
             onExportPDF={() => generatePosWinsReportPDF(dateFrom, dateTo, r.paid, r.byAgency, r.byCashier, r.disbursements, r.wallet)}
           />
 
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {[
               { label: "Paid in period", value: ghs(r.paid.total), sub: `${r.paid.count} payout${r.paid.count === 1 ? "" : "s"}`, cls: "text-green-600 dark:text-green-400" },
               { label: "Awaiting claim", value: ghs(unclaimed.total), sub: `${unclaimed.count} winning ticket${unclaimed.count === 1 ? "" : "s"} not yet scanned`, cls: "" },
@@ -1081,10 +1108,10 @@ function PosWinsReportView() {
               { label: "Awaiting funds", value: ghs(stage("awaiting_funds").total), sub: `${stage("awaiting_funds").count} not yet covered`, cls: stage("awaiting_funds").count ? "text-amber-600" : "" },
               { label: "Flagged / withheld", value: ghs(Number(stage("rejected").total) + Number(stage("withheld").total)), sub: `${stage("rejected").count} in review · ${stage("withheld").count} withheld`, cls: stage("rejected").count ? "text-rose-600" : "" },
             ].map(({ label, value, sub, cls }) => (
-              <div key={label} className="rounded-xl border bg-card px-3 py-2.5">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</div>
-                <div className={`font-mono font-bold text-sm ${cls}`}>{value}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+              <div key={label} className="min-w-0 rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
+                <div className="truncate text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</div>
+                <div className={`mt-1.5 truncate text-lg font-black tracking-tight tabular-nums ${cls}`}>{value}</div>
+                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{sub}</div>
               </div>
             ))}
           </div>
@@ -1094,8 +1121,7 @@ function PosWinsReportView() {
               { title: "By agency", rows: r.byAgency.map(a => ({ key: a.agentCode, name: a.agencyName ?? a.agentCode, sub: a.agentCode, count: a.count, total: a.total })) },
               { title: "By approving cashier", rows: r.byCashier.map(c => ({ key: c.cashierName, name: c.cashierName, sub: "", count: c.count, total: c.total })) },
             ].map(block => (
-              <div key={block.title} className="rounded-xl border overflow-hidden">
-                <div className="bg-muted/40 px-4 py-2.5 border-b text-xs font-semibold uppercase tracking-wide text-muted-foreground">{block.title}</div>
+              <ReportTable key={block.title} title={block.title} minWidth="24rem" maxHeight="22rem">
                 <Table>
                   <TableBody>
                     {block.rows.length === 0 ? (
@@ -1112,33 +1138,34 @@ function PosWinsReportView() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              </ReportTable>
             ))}
           </div>
 
-          <div className="rounded-xl border overflow-hidden">
-            <div className="bg-muted/40 px-4 py-2.5 border-b flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Disbursements</span>
-              <span className="text-xs text-muted-foreground">{r.disbursements.length} in period</span>
-            </div>
+          <ReportTable
+            title="Disbursements"
+            minWidth="64rem"
+            right={<span className="text-xs text-muted-foreground">{r.disbursements.length} in period · each a Pay-Out to a writer's wallet</span>}
+            footer={<Pager page={pDisb.page} totalPages={pDisb.totalPages} onPage={pDisb.setPage} total={pDisb.total} size={pDisb.size} noun="disbursements" />}
+          >
             <Table>
               <TableHeader>
-                <TableRow className="bg-muted/20">
-                  <TableHead className="text-xs">Paid</TableHead>
-                  <TableHead className="text-xs">Ticket</TableHead>
-                  <TableHead className="text-xs">Writer</TableHead>
-                  <TableHead className="text-xs">MoMo wallet</TableHead>
-                  <TableHead className="text-xs">Approved by</TableHead>
-                  <TableHead className="text-xs">Paystack reference</TableHead>
-                  <TableHead className="text-right text-xs">Amount</TableHead>
+                <TableRow>
+                  <TableHead className="pl-5">Paid</TableHead>
+                  <TableHead>Ticket</TableHead>
+                  <TableHead>Writer</TableHead>
+                  <TableHead>MoMo wallet</TableHead>
+                  <TableHead>Approved by</TableHead>
+                  <TableHead>Paystack reference</TableHead>
+                  <TableHead className="pr-5 text-right">Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {r.disbursements.length === 0 ? (
                   <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground text-center py-8">No POS wins were paid in this period.</TableCell></TableRow>
-                ) : r.disbursements.map(d => (
-                  <TableRow key={d.payoutId} className="hover:bg-muted/20">
-                    <TableCell className="text-xs whitespace-nowrap">{d.paidAt ? new Date(d.paidAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—"}</TableCell>
+                ) : pDisb.rows.map(d => (
+                  <TableRow key={d.payoutId} className="hover:bg-muted/30">
+                    <TableCell className="pl-5 text-xs whitespace-nowrap">{d.paidAt ? new Date(d.paidAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "—"}</TableCell>
                     <TableCell>
                       <div className="font-mono text-xs font-semibold">{d.ticketNumber}</div>
                       <div className="text-[10px] text-muted-foreground">{d.gameName} #{d.eventNumber}</div>
@@ -1150,18 +1177,18 @@ function PosWinsReportView() {
                     <TableCell className="font-mono text-xs">{d.payeeMomoNumber ?? "—"}</TableCell>
                     <TableCell className="text-xs">{d.cashierName ?? "—"}</TableCell>
                     <TableCell className="font-mono text-[10px] text-muted-foreground">{d.transferReference}</TableCell>
-                    <TableCell className="text-right font-mono text-sm font-semibold">{ghs(d.amount)}</TableCell>
+                    <TableCell className="pr-5 text-right text-sm"><SignedAmount direction="out">{ghs(d.amount)}</SignedAmount></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
               <tfoot>
                 <tr className="border-t-2 bg-muted/30">
-                  <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground" colSpan={6}>Total paid</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-sm font-bold">{ghs(r.paid.total)}</td>
+                  <td className="px-5 py-2.5 text-xs font-bold uppercase text-muted-foreground" colSpan={6}>Total paid out</td>
+                  <td className="px-5 py-2.5 text-right font-mono text-sm font-bold">{ghs(r.paid.total)}</td>
                 </tr>
               </tfoot>
             </Table>
-          </div>
+          </ReportTable>
         </div>
       )}
     </div>
@@ -1281,6 +1308,7 @@ function SalesChannelsView() {
   });
 
   const grouped = useMemo(() => (r ? groupChannelRows(r.rows, groupBy) : []), [r, groupBy]);
+  const pGroups = usePaged(grouped, PAGE_SIZE, `${groupBy}|${dateFrom}|${dateTo}|${agentId}`);
   const s = r?.summary;
   const total = Number(s?.total ?? 0);
   const share = (v: string | undefined) => (total > 0 ? `${Math.round(Number(v ?? 0) / total * 100)}%` : "—");
@@ -1331,25 +1359,25 @@ function SalesChannelsView() {
             onExportPDF={() => generateSalesChannelsReportPDF({ dateFrom, dateTo, agencyLabel, groupLabel, summary: s, rows: grouped })}
           />
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
             {[
               { label: "Total sales", value: ghs(s.total), sub: `${s.writerCount} writer${s.writerCount === 1 ? "" : "s"} · ${s.agencyCount} agenc${s.agencyCount === 1 ? "y" : "ies"}`, dot: "" },
               { label: "POS prepaid", value: ghs(s.prepaid.amount), sub: `${share(s.prepaid.amount)} · ${s.prepaid.tickets.toLocaleString()} ticket${s.prepaid.tickets === 1 ? "" : "s"} · e-tokens`, dot: CHANNEL_COLORS.prepaid },
               { label: "POS postpaid", value: ghs(s.postpaid.amount), sub: `${share(s.postpaid.amount)} · ${s.postpaid.tickets.toLocaleString()} ticket${s.postpaid.tickets === 1 ? "" : "s"} · on credit`, dot: CHANNEL_COLORS.postpaid },
               { label: "Manual (agent entry)", value: ghs(s.manual.amount), sub: `${share(s.manual.amount)} · ${s.manual.entries.toLocaleString()} entr${s.manual.entries === 1 ? "y" : "ies"}`, dot: CHANNEL_COLORS.manual },
             ].map(({ label, value, sub, dot }) => (
-              <div key={label} className="rounded-xl border bg-card px-3 py-2.5 min-w-0">
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                  {dot && <span className={`w-2 h-2 rounded-full ${dot}`} />}{label}
+              <div key={label} className="min-w-0 rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
+                <div className="flex items-center gap-1.5 truncate text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />}{label}
                 </div>
-                <div className="font-mono font-bold text-sm truncate">{value}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+                <div className="mt-1.5 truncate text-lg font-black tracking-tight tabular-nums">{value}</div>
+                <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{sub}</div>
               </div>
             ))}
           </div>
 
-          <div className="rounded-xl border bg-card px-4 py-3">
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-2">
+          <div className="rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm">
+            <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-2">
               <span className={`w-2 h-2 rounded-full ${CHANNEL_COLORS.postpaid}`} />Postpaid collection
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -1375,9 +1403,11 @@ function SalesChannelsView() {
             </div>
           )}
 
-          <div className="rounded-xl border overflow-hidden">
-            <div className="bg-muted/40 px-4 py-2.5 border-b flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">By {groupLabel.toLowerCase()} · {grouped.length}</span>
+          <ReportTable
+            title={`By ${groupLabel.toLowerCase()} · ${grouped.length}`}
+            minWidth="66rem"
+            footer={<Pager page={pGroups.page} totalPages={pGroups.totalPages} onPage={pGroups.setPage} total={pGroups.total} size={pGroups.size} noun={`${groupLabel.toLowerCase()} rows`} />}
+            right={
               <div className="inline-flex rounded-lg border bg-background p-0.5">
                 {(["agency", "writer", "game"] as const).map(g => (
                   <button key={g} onClick={() => setGroupBy(g)}
@@ -1386,12 +1416,12 @@ function SalesChannelsView() {
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="overflow-x-auto">
+            }
+          >
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/20">
-                    <TableHead className="text-xs">{groupLabel}</TableHead>
+                  <TableRow>
+                    <TableHead className="pl-5">{groupLabel}</TableHead>
                     <TableHead className="text-right text-xs"><span className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${CHANNEL_COLORS.prepaid}`} />Prepaid</span></TableHead>
                     <TableHead className="text-right text-xs"><span className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${CHANNEL_COLORS.postpaid}`} />Postpaid</span></TableHead>
                     <TableHead className="text-right text-xs"><span className="inline-flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full ${CHANNEL_COLORS.manual}`} />Manual</span></TableHead>
@@ -1404,9 +1434,9 @@ function SalesChannelsView() {
                 <TableBody>
                   {grouped.length === 0 ? (
                     <TableRow><TableCell colSpan={8} className="text-sm text-muted-foreground text-center py-8">No sales in this period.</TableCell></TableRow>
-                  ) : grouped.map(g => (
-                    <TableRow key={g.key} className="hover:bg-muted/20">
-                      <TableCell className="min-w-[160px]">
+                  ) : pGroups.rows.map(g => (
+                    <TableRow key={g.key} className="hover:bg-muted/30">
+                      <TableCell className="min-w-[180px] pl-5">
                         <div className="text-sm font-semibold">{g.name}</div>
                         {g.sub && <div className="text-[10px] font-mono text-muted-foreground">{g.sub}</div>}
                         <div className="mt-1.5 w-28"><ChannelMix prepaid={Number(g.prepaid)} postpaid={Number(g.postpaid)} manual={Number(g.manual)} /></div>
@@ -1443,8 +1473,7 @@ function SalesChannelsView() {
                   </tr>
                 </tfoot>
               </Table>
-            </div>
-          </div>
+          </ReportTable>
         </div>
       )}
     </div>
@@ -1453,33 +1482,39 @@ function SalesChannelsView() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const TAB = "shrink-0 rounded-none border-b-2 border-transparent bg-transparent px-3 py-3 text-xs font-bold shadow-none transition-all hover:text-foreground/80 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none gap-1.5";
+
 export function Reports() {
   const { user } = useAuth();
   const isDirectorOrAdmin = user?.role === "director" || user?.role === "administrator";
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="mb-5 flex items-center gap-3.5">
-        <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center p-1.5 flex-shrink-0">
-          <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold">Reports</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Accurate performance reports for writers, agents and the organisation
-          </p>
+    <div className="p-4 sm:p-6 space-y-6 min-w-0">
+      {/* ── Header, as on Inventory and Payments ── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-border/80 bg-card/60 backdrop-blur-md p-5 sm:p-6 rounded-3xl shadow-sm">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="p-3 bg-primary/10 text-primary rounded-2xl shadow-inner border border-primary/10 shrink-0">
+            <FileBarChart className="w-7 h-7" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black tracking-tight text-foreground">Reports</h1>
+            <p className="text-xs text-muted-foreground mt-1 font-medium">
+              Performance reports for writers, agents and the organisation — export to PDF or print from each report
+            </p>
+          </div>
         </div>
       </div>
 
-      <Tabs defaultValue="writer">
-        <TabsList className="mb-1 h-auto flex-wrap justify-start">
-          <TabsTrigger value="writer">Writer</TabsTrigger>
-          <TabsTrigger value="agent">Agent</TabsTrigger>
-          <TabsTrigger value="gamesales">Game Sales</TabsTrigger>
-          <TabsTrigger value="poswins">POS Wins</TabsTrigger>
-          <TabsTrigger value="channels">Sales Channels</TabsTrigger>
-          {isDirectorOrAdmin && <TabsTrigger value="org">Organisation</TabsTrigger>}
-          {isDirectorOrAdmin && <TabsTrigger value="tokens">E-Tokens</TabsTrigger>}
+      <Tabs defaultValue="writer" className="space-y-1 min-w-0">
+        {/* Scrolls sideways on a narrow screen instead of wrapping. */}
+        <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-none border-b border-border/60 bg-transparent p-0 flex-nowrap thin-scroll">
+          <TabsTrigger value="writer" className={TAB}><User className="h-3.5 w-3.5" />Writer</TabsTrigger>
+          <TabsTrigger value="agent" className={TAB}><Users className="h-3.5 w-3.5" />Agent</TabsTrigger>
+          <TabsTrigger value="gamesales" className={TAB}><Gamepad2 className="h-3.5 w-3.5" />Game Sales</TabsTrigger>
+          <TabsTrigger value="poswins" className={TAB}><Trophy className="h-3.5 w-3.5" />POS Wins</TabsTrigger>
+          <TabsTrigger value="channels" className={TAB}><Shuffle className="h-3.5 w-3.5" />Sales Channels</TabsTrigger>
+          {isDirectorOrAdmin && <TabsTrigger value="org" className={TAB}><Building2 className="h-3.5 w-3.5" />Organisation</TabsTrigger>}
+          {isDirectorOrAdmin && <TabsTrigger value="tokens" className={TAB}><Coins className="h-3.5 w-3.5" />E-Tokens</TabsTrigger>}
         </TabsList>
         <TabsContent value="writer"><WriterReportView /></TabsContent>
         <TabsContent value="agent"><AgentReportView /></TabsContent>
