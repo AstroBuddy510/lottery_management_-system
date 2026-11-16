@@ -1384,7 +1384,7 @@ export function Inventory() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Total Cost (GH₵)</Label>
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Total Cost of the Whole Batch (GH₵)</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -1395,6 +1395,13 @@ export function Inventory() {
                 className="rounded-xl border-border bg-muted/20 font-mono"
                 required
               />
+              {/* The one batch on file was entered with its per-booklet price in
+                  this box. Showing the per-booklet result makes that visible. */}
+              {Number(batchForm.quantity) > 0 && Number(batchForm.totalCost) > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  = GH₵{(Number(batchForm.totalCost) / Number(batchForm.quantity)).toFixed(4)} per booklet. The director confirms it against the invoice in Finance &amp; Statements › Inventory.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Notes / Description</Label>

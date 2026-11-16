@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, varchar, numeric, date, boolean, text, timestamp, jsonb, index, unique,
+  pgTable, uuid, varchar, numeric, date, boolean, text, timestamp, jsonb, index, unique, integer,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
@@ -178,4 +178,60 @@ export const agentCommissionPayoutsTable = pgTable("agent_commission_payouts", {
   method: varchar("method", { length: 12 }),
   accountId: uuid("account_id").references(() => finMoneyAccountsTable.id),
   reference: varchar("reference", { length: 120 }),
+});
+
+/** A cost corrected against the supplier's invoice. Append-only. */
+export const inventoryCostCorrectionsTable = pgTable("inventory_cost_corrections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemType: varchar("item_type", { length: 20 }).notNull(),
+  itemId: uuid("item_id").notNull(),
+  oldTotal: numeric("old_total", { precision: 14, scale: 2 }).notNull(),
+  newTotal: numeric("new_total", { precision: 14, scale: 2 }).notNull(),
+  invoiceRef: varchar("invoice_ref", { length: 120 }).notNull(),
+  reason: text("reason").notNull(),
+  correctedBy: uuid("corrected_by").notNull().references(() => usersTable.id),
+  correctedAt: timestamp("corrected_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Paying a supplier for a batch, in full or in part. Append-only. */
+export const inventorySupplierPaymentsTable = pgTable("inventory_supplier_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemType: varchar("item_type", { length: 20 }).notNull(),
+  itemId: uuid("item_id").notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  paidOn: date("paid_on").notNull(),
+  method: varchar("method", { length: 12 }).notNull(),
+  accountId: uuid("account_id").notNull().references(() => finMoneyAccountsTable.id),
+  reference: varchar("reference", { length: 120 }),
+  note: text("note"),
+  paidBy: uuid("paid_by").notNull().references(() => usersTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Booklets returned, damaged, lost, or found different on a count. Append-only. */
+export const bookletAdjustmentsTable = pgTable("booklet_adjustments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adjustmentType: varchar("adjustment_type", { length: 20 }).notNull(),
+  quantity: integer("quantity").notNull(),
+  agentId: uuid("agent_id"),
+  occurredOn: date("occurred_on").notNull(),
+  note: text("note").notNull(),
+  enteredBy: uuid("entered_by").notNull().references(() => usersTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A month's salaries, prepared by the administrator and approved by the director. */
+export const salarySchedulesTable = pgTable("salary_schedules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  periodMonth: integer("period_month").notNull(),
+  periodYear: integer("period_year").notNull(),
+  status: varchar("status", { length: 10 }).notNull().default("submitted"),
+  totalAmount: numeric("total_amount", { precision: 14, scale: 2 }).notNull(),
+  staffCount: integer("staff_count").notNull(),
+  preparedBy: uuid("prepared_by").notNull().references(() => usersTable.id),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+  note: text("note"),
+  decidedBy: uuid("decided_by").references(() => usersTable.id),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  decisionNote: text("decision_note"),
 });

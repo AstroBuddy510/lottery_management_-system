@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BadgePercent, BookOpen, Building2, History, Landmark, Lock, Percent, Scale, Store, Trophy } from "lucide-react";
+import { BadgePercent, BookOpen, Building2, CalendarCheck, History, Landmark, Lock, Package, Percent, Scale, Store, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
@@ -12,6 +12,8 @@ import { AuditTab } from "@/components/finance/audit-tab";
 import { WinningsTab } from "@/components/finance/winnings-tab";
 import { AgenciesTab } from "@/components/finance/agencies-tab";
 import { CommissionsTab } from "@/components/finance/commissions-tab";
+import { InventoryTab } from "@/components/finance/inventory-tab";
+import { PayrollTab } from "@/components/finance/payroll-tab";
 
 /**
  * Finance & Statements.
@@ -34,6 +36,8 @@ const TABS: TabDef[] = [
   { value: "winnings", label: "Winnings & Reserve", icon: Trophy, roles: [...MGMT, "cashier"], render: (r) => <WinningsTab role={r} /> },
   { value: "agencies", label: "Agencies", icon: Store, roles: MGMT, render: () => <AgenciesTab /> },
   { value: "commissions", label: "Commissions", icon: BadgePercent, roles: [...MGMT, "cashier"], render: (r) => <CommissionsTab role={r} /> },
+  { value: "payroll", label: "Payroll", icon: CalendarCheck, roles: [...MGMT, "cashier"], render: (r) => <PayrollTab role={r} /> },
+  { value: "inventory", label: "Inventory", icon: Package, roles: [...MGMT, "cashier"], render: (r) => <InventoryTab role={r} /> },
   { value: "fees", label: "Paystack Fees", icon: Percent, roles: MGMT, render: () => <FeesTab /> },
   { value: "audit", label: "Audit Trail", icon: History, roles: MGMT, render: () => <AuditTab /> },
 ];

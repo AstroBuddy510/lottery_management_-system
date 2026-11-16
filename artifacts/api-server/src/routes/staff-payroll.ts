@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { 
   db, 
-  salaryPaymentsTable, 
+  salaryPaymentsTable, salarySchedulesTable, 
   salaryWalletTable, 
   salaryWalletTransactionsTable,
   companyStaffTable,
@@ -157,7 +157,7 @@ router.get("/staff-payroll/payments", requireAuth, requireRole("director", "admi
 });
 
 // POST /staff-payroll/payments
-router.post("/staff-payroll/payments", requireAuth, requireRole("cashier", "administrator", "director"), async (req, res) => {
+router.post("/staff-payroll/payments", requireAuth, requireRole("cashier", "administrator"), async (req, res) => {
   try {
     const bodyResult = CreateSalaryPaymentBody.safeParse(req.body);
     if (!bodyResult.success) {
@@ -165,6 +165,25 @@ router.post("/staff-payroll/payments", requireAuth, requireRole("cashier", "admi
       return;
     }
     const { salaryPaymentId, deductions, notes } = bodyResult.data;
+
+    // A salary is paid only once the month's schedule has been approved by
+    // the director, and never by the person who approved it.
+    const [line] = await db.select().from(salaryPaymentsTable).where(eq(salaryPaymentsTable.id, salaryPaymentId)).limit(1);
+    if (line) {
+      const [schedule] = await db.select().from(salarySchedulesTable).where(and(
+        eq(salarySchedulesTable.periodMonth, line.periodMonth),
+        eq(salarySchedulesTable.periodYear, line.periodYear),
+        eq(salarySchedulesTable.status, "approved"),
+      )).limit(1);
+      if (!schedule) {
+        res.status(409).json({ error: `The salary schedule for ${line.periodMonth}/${line.periodYear} has not been approved yet. The administrator submits it and the director approves it in Finance & Statements › Payroll.` });
+        return;
+      }
+      if (schedule.decidedBy === req.user!.userId) {
+        res.status(403).json({ error: "The person who approved the schedule cannot also pay it" });
+        return;
+      }
+    }
 
     // Transaction
     const result = await db.transaction(async (tx) => {

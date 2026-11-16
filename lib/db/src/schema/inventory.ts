@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, date, decimal, varchar, timestamp, integer, text, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, date, decimal, varchar, timestamp, integer, text, index, uniqueIndex, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { agentsTable, writersTable } from "./agents";
@@ -11,8 +11,16 @@ export const bookletBatchesTable = pgTable("booklet_batches", {
   batchDate: date("batch_date").notNull(),
   quantity: integer("quantity").notNull(),
   totalCost: decimal("total_cost", { precision: 12, scale: 2 }).notNull(),
-  costPerBooklet: decimal("cost_per_booklet", { precision: 12, scale: 2 }).notNull(),
+  costPerBooklet: decimal("cost_per_booklet", { precision: 12, scale: 4 }).notNull(),
   description: text("description"),
+  supplier: varchar("supplier", { length: 120 }),
+  invoiceRef: varchar("invoice_ref", { length: 120 }),
+  serialFrom: varchar("serial_from", { length: 40 }),
+  serialTo: varchar("serial_to", { length: 40 }),
+  /** Checked against the supplier's invoice by the director. See migration 0025. */
+  costConfirmed: boolean("cost_confirmed").notNull().default(false),
+  costConfirmedBy: uuid("cost_confirmed_by"),
+  costConfirmedAt: timestamp("cost_confirmed_at", { withTimezone: true }),
   enteredBy: uuid("entered_by").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })

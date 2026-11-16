@@ -36,6 +36,9 @@ const INSERT = sql`INSERT INTO fin_cash_book
    party_type, party_id, party_label, reference, memo, handled_by)`;
 const DONE = sql`ON CONFLICT (source_type, source_id, leg) DO NOTHING`;
 
+/** A Company Expenses row that is only the copy a salary payment writes. */
+const AUTO_SALARY_EXPENSE = sql`(e.authorizing_officer = 'System (Auto-authorized)' AND e.description LIKE 'Salary payment for %')`;
+
 /**
  * Master Wallet entries that are test money or the reversal of it. Both
  * halves stay on the wallet's own ledger; neither is company money.
@@ -154,7 +157,36 @@ const GENERATORS: Array<{ name: string; q: SQL }> = [
       SELECT e.created_at, 'out', e.amount, ${CASH}, 'cash', 'expense', 'company_expense', e.id::text, 'main',
              'payee', NULL, e.payee_name, NULL, e.description, e.cashier_id
         FROM company_expenses e
-       WHERE e.amount > 0
+       WHERE e.amount > 0 AND NOT ${AUTO_SALARY_EXPENSE}
+      ${DONE}`,
+  },
+  {
+    // Paying a salary also writes a copy into Company Expenses, for that
+    // page's lists. The salary itself is booked from the salary record, so
+    // the copy is not booked again - and if an earlier version booked it,
+    // that booking is reversed here.
+    name: "salary copies in expenses",
+    q: sql`INSERT INTO fin_cash_book
+        (occurred_at, direction, amount, account_id, method, category, source_type, source_id, leg,
+         party_type, party_id, party_label, reference, memo, handled_by, reverses_id)
+      SELECT now(), 'in', b.amount, b.account_id, b.method, b.category, b.source_type, b.source_id, 'dup-salary',
+             b.party_type, b.party_id, b.party_label, b.reference,
+             'Reversed: a copy of a salary already booked from the salary record', NULL, b.id
+        FROM fin_cash_book b JOIN company_expenses e ON e.id::text = b.source_id
+       WHERE b.source_type = 'company_expense' AND b.leg = 'main' AND ${AUTO_SALARY_EXPENSE}
+      ${DONE}`,
+  },
+  {
+    // Paying a supplier for booklets or thermal rolls.
+    name: "supplier payments",
+    q: sql`${INSERT}
+      SELECT (p.paid_on::timestamp + interval '12 hours') AT TIME ZONE 'UTC', 'out', p.amount, p.account_id, p.method, 'supplier_payment',
+             'supplier_payment', p.id::text, 'main', 'supplier', NULL,
+             coalesce(CASE WHEN p.item_type = 'booklet_batch' THEN (SELECT supplier FROM booklet_batches WHERE id = p.item_id)
+                           ELSE (SELECT supplier FROM thermal_roll_purchases WHERE id = p.item_id) END, 'Supplier'),
+             p.reference,
+             CASE WHEN p.item_type = 'booklet_batch' THEN 'Booklet batch' ELSE 'Thermal rolls' END || coalesce(' · ' || p.note, ''), p.paid_by
+        FROM inventory_supplier_payments p
       ${DONE}`,
   },
   {
@@ -244,16 +276,16 @@ const FUND_GENERATORS: SQL[] = [
       ON CONFLICT (source_type, source_id) DO NOTHING`,
 ];
 
-let lastSync = 0;
 let inFlight: Promise<number> | null = null;
 
 /**
  * Bring the cash book and fund ledger up to date. Concurrent callers share
- * one run, and a run within the last two seconds is reused: a page firing
- * five finance requests at once syncs once.
+ * the run already in flight, so a page firing five finance requests at once
+ * syncs once - but a read that starts after a write always runs its own
+ * sync, so it never shows figures from before that write.
  */
-export async function syncBooks(force = false): Promise<number> {
-  if (!force && Date.now() - lastSync < 2000) return 0;
+export async function syncBooks(_force = false): Promise<number> {
+  if (inFlight) await inFlight.catch(() => 0);
   if (inFlight) return inFlight;
   inFlight = (async () => {
     let added = 0;
@@ -275,7 +307,6 @@ export async function syncBooks(force = false): Promise<number> {
         // Agencies on an approved opening balance carry the ledger's figure.
         await refreshAgencyBalances(tx);
       });
-      lastSync = Date.now();
     } catch (err) {
       logger.error({ err }, "[FINANCE] book sync failed");
       throw err;

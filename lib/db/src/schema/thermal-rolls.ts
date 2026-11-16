@@ -48,6 +48,7 @@ export const thermalRollPurchasesTable = pgTable(
       .generatedAlwaysAs(sql`boxes * rolls_per_box`),
     totalCost: numeric("total_cost", { precision: 12, scale: 2 }).notNull(),
     supplier: varchar("supplier", { length: 120 }),
+    invoiceRef: varchar("invoice_ref", { length: 120 }),
     notes: text("notes"),
     enteredBy: uuid("entered_by").notNull().references(() => usersTable.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
