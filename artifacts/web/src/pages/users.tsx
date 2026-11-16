@@ -793,7 +793,9 @@ const DEBT_STATUS_CFG = {
 
 function agencyStatusOf(a: AgentWithUser): keyof typeof DEBT_STATUS_CFG {
   if (a.status === "closed") return "closed";
-  if (parseFloat(a.outstandingDebt ?? "0") > 0) return "active-debt";
+  // Negative is money the agency owes the company - the sign the draw
+  // calculation uses. This list used to treat positive as debt.
+  if (parseFloat(a.outstandingDebt ?? "0") < 0) return "active-debt";
   return "active-clear";
 }
 
@@ -1000,7 +1002,6 @@ function AgentsTab() {
         });
       }
 
-      const debt = parseFloat(createForm.outstandingDebt || "0");
       await createMutation.mutateAsync({
         data: {
           userId: finalUserId,
@@ -1010,7 +1011,6 @@ function AgentsTab() {
           lat: createForm.lat ? parseFloat(createForm.lat) : undefined,
           lng: createForm.lng ? parseFloat(createForm.lng) : undefined,
           status: createForm.status,
-          outstandingDebt: debt > 0 ? String(debt) : "0",
         },
       });
 
@@ -1049,7 +1049,6 @@ function AgentsTab() {
     e.preventDefault();
     if (!editAgent) return;
     try {
-      const debt = parseFloat(editForm.outstandingDebt || "0");
       await updateMutation.mutateAsync({
         id: editAgent.id,
         data: {
@@ -1059,7 +1058,6 @@ function AgentsTab() {
           lat: editForm.lat ? parseFloat(editForm.lat) : undefined,
           lng: editForm.lng ? parseFloat(editForm.lng) : undefined,
           status: editForm.status,
-          outstandingDebt: String(debt > 0 ? debt : 0),
         },
       });
       // Sync photo back to user profile
@@ -1131,7 +1129,7 @@ function AgentsTab() {
               <TableHead className="text-xs font-bold text-muted-foreground">Agent</TableHead>
               <TableHead className="text-xs font-bold text-muted-foreground">Location</TableHead>
               <TableHead className="text-xs font-bold text-muted-foreground">Status</TableHead>
-              <TableHead className="text-xs font-bold text-muted-foreground">Debt</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground">Balance</TableHead>
               <TableHead className="w-20 text-right pr-6 text-xs font-bold text-muted-foreground">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -1172,8 +1170,12 @@ function AgentsTab() {
                         {cfg.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className={`text-xs font-mono font-bold tracking-tight ${debt > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/60"}`}>
-                      {debt > 0 ? `GHS ${debt.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+                    <TableCell className={`text-xs font-mono font-bold tracking-tight ${debt < 0 ? "text-amber-600 dark:text-amber-400" : debt > 0 ? "text-sky-600 dark:text-sky-400" : "text-muted-foreground/60"}`}>
+                      {debt === 0 ? "—" : (
+                        <span title={debt < 0 ? "Owed by the agency to the company" : "Owed by the company to the agency"}>
+                          {debt < 0 ? "Owes " : "Owed "}GHS {Math.abs(debt).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell onClick={e => e.stopPropagation()}>
                       <div className="flex justify-end pr-2">
@@ -1325,8 +1327,10 @@ function AgentsTab() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Initial Outstanding Debt <span className="text-muted-foreground">(GHS)</span></Label>
-                <Input type="number" min="0" step="0.01" value={createForm.outstandingDebt} onChange={e => setCreateForm(f => ({ ...f, outstandingDebt: e.target.value }))} className="h-9 text-sm" placeholder="0.00" />
+                <Label className="text-xs">Opening balance</Label>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  A new agency starts at zero. Anything it owed or was owed before is entered in Finance &amp; Statements › Agencies, with its direction and date, and approved by a second person.
+                </p>
               </div>
             </div>
 
@@ -1413,8 +1417,11 @@ function AgentsTab() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Outstanding Debt (GHS)</Label>
-                <Input type="number" min="0" step="0.01" value={editForm.outstandingDebt} onChange={e => setEditForm(f => ({ ...f, outstandingDebt: e.target.value }))} className="h-9 text-sm" placeholder="0.00" />
+                <Label className="text-xs">Balance</Label>
+                <p className="text-sm font-mono font-bold">
+                  {(() => { const v = parseFloat(editAgent?.outstandingDebt ?? "0"); return v < 0 ? `Owes the company GHS ${Math.abs(v).toFixed(2)}` : v > 0 ? `Company owes GHS ${v.toFixed(2)}` : "Clear"; })()}
+                </p>
+                <p className="text-[11px] text-muted-foreground">Set by the ledger - see Finance &amp; Statements › Agencies.</p>
               </div>
             </div>
 

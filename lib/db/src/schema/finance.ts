@@ -140,3 +140,42 @@ export const finAuditLogTable = pgTable("fin_audit_log", {
 export type FinMoneyAccount = typeof finMoneyAccountsTable.$inferSelect;
 export type FinCashBookEntry = typeof finCashBookTable.$inferSelect;
 export type FinPaymentFee = typeof finPaymentFeesTable.$inferSelect;
+
+/**
+ * What an agency owed, or was owed, before this system - proposed by one
+ * person, approved by another. See migration 0024.
+ */
+export const agencyOpeningBalancesTable = pgTable("agency_opening_balances", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id").notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  direction: varchar("direction", { length: 14 }).notNull(),
+  asOf: date("as_of").notNull(),
+  basis: text("basis").notNull(),
+  status: varchar("status", { length: 12 }).notNull().default("proposed"),
+  proposedBy: uuid("proposed_by").notNull().references(() => usersTable.id),
+  proposedAt: timestamp("proposed_at", { withTimezone: true }).notNull().defaultNow(),
+  decidedBy: uuid("decided_by").references(() => usersTable.id),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  decisionNote: text("decision_note"),
+  storedBefore: numeric("stored_before", { precision: 14, scale: 2 }),
+});
+
+/** An agent's commission payout: requested, reviewed, paid. See migration 0024. */
+export const agentCommissionPayoutsTable = pgTable("agent_commission_payouts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  status: varchar("status", { length: 10 }).notNull().default("requested"),
+  requestedBy: uuid("requested_by").notNull().references(() => usersTable.id),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+  requestNote: text("request_note"),
+  reviewedBy: uuid("reviewed_by").references(() => usersTable.id),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewNote: text("review_note"),
+  paidBy: uuid("paid_by").references(() => usersTable.id),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  method: varchar("method", { length: 12 }),
+  accountId: uuid("account_id").references(() => finMoneyAccountsTable.id),
+  reference: varchar("reference", { length: 120 }),
+});

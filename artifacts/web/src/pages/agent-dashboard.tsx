@@ -1,3 +1,4 @@
+import { AgentCommissionWallet } from "@/components/agent-commission-wallet";
 import { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { getServerNow } from "../lib/time-sync";
@@ -445,6 +446,11 @@ export function AgentDashboard() {
 
       {/* Live agency figures, directly under the identity they belong to. */}
       <MySummarySection title="My Agency · Live" />
+
+      {/* Commission earned on the writers' sales, and the way to ask for it. */}
+      <div className="mt-5">
+        <AgentCommissionWallet agencyCode={agent?.fullCode} agencyName={agent?.agencyName ?? null} agentName={user?.fullName} />
+      </div>
 
       <div className="space-y-5">
 

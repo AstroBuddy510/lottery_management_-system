@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { logger } from "../logger";
 import { reserveLedgerTotals } from "./reserve";
 import { releaseExpiredWinnings } from "./winnings";
+import { refreshAgencyBalances } from "./agencies";
 
 /**
  * The company's books, generated from the records that caused them.
@@ -208,6 +209,16 @@ const GENERATORS: Array<{ name: string; q: SQL }> = [
       ${DONE}`,
   },
   {
+    // Agent commission, when the cashier has paid it.
+    name: "agent commission payouts",
+    q: sql`${INSERT}
+      SELECT p.paid_at, 'out', p.amount, p.account_id, p.method, 'commission_payout', 'commission_payout', p.id::text, 'main',
+             'agent', p.agent_id, a.full_code || coalesce(' · ' || a.agency_name, ''), p.reference, 'Agent commission paid', p.paid_by
+        FROM agent_commission_payouts p JOIN agents a ON a.id = p.agent_id
+       WHERE p.status = 'paid' AND p.paid_at IS NOT NULL AND p.account_id IS NOT NULL
+      ${DONE}`,
+  },
+  {
     // What Paystack kept. Booked once its actual figure is known.
     name: "payment processing fees",
     q: sql`${INSERT}
@@ -261,6 +272,8 @@ export async function syncBooks(force = false): Promise<number> {
           const r = await tx.execute(q);
           added += r.rowCount ?? 0;
         }
+        // Agencies on an approved opening balance carry the ledger's figure.
+        await refreshAgencyBalances(tx);
       });
       lastSync = Date.now();
     } catch (err) {

@@ -1,8 +1,17 @@
 import { db, agentsTable, paymentsTable, dailyCalculationsTable, writersTable, agentDebtReductionsTable, usersTable } from "@workspace/db";
 import { eq, and, asc, inArray } from "drizzle-orm";
 import { dispatchSystemNotification } from "./notify";
+import { hasApprovedOpening, refreshAgencyBalances } from "./finance/agencies";
 
 export async function verifyLedgerAndEscalate(agentId: string, systemUserId?: string): Promise<boolean> {
+  // An agency whose opening balance has been approved keeps its balance as a
+  // copy of the ledger (see lib/finance/agencies.ts): bring the copy up to
+  // date and there is nothing left to disagree.
+  if (await hasApprovedOpening(agentId)) {
+    await refreshAgencyBalances(db, agentId);
+    return false;
+  }
+
   // 1. Get Agent
   const [agent] = await db
     .select()

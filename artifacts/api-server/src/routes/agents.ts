@@ -303,8 +303,14 @@ router.post(
       return;
     }
 
-    const debtAmount = outstandingDebt ? parseFloat(outstandingDebt) : 0;
-    const debtSince = debtAmount > 0 ? new Date() : null;
+    // An agency starts at zero. What it owed or was owed before this system
+    // is an opening balance, proposed and approved in Finance & Statements
+    // with its direction stated - never a number typed into this form, which
+    // used to be stored with the opposite sign to the one the draws use.
+    if (outstandingDebt && Number(outstandingDebt) !== 0) {
+      res.status(400).json({ error: "Opening balances are set in Finance & Statements › Agencies, where the direction and date are recorded and a second person approves them." });
+      return;
+    }
 
     const [agent] = await db
       .insert(agentsTable)
@@ -315,8 +321,8 @@ router.post(
         lat: lat != null ? String(lat) : null,
         lng: lng != null ? String(lng) : null,
         status: (status as "active" | "closed") ?? "active",
-        outstandingDebt: outstandingDebt ?? "0",
-        debtSince,
+        outstandingDebt: "0",
+        debtSince: null,
       })
       .returning();
 
@@ -392,16 +398,10 @@ router.patch(
     if (data.lat !== undefined) updates.lat = data.lat != null ? String(data.lat) : null;
     if (data.lng !== undefined) updates.lng = data.lng != null ? String(data.lng) : null;
     if (data.status !== undefined) updates.status = data.status;
-    if (data.outstandingDebt !== undefined) {
-      updates.outstandingDebt = data.outstandingDebt;
-      const debtAmount = parseFloat(data.outstandingDebt);
-      if (debtAmount > 0) {
-        const [existing] = await db.select({ debtSince: agentsTable.debtSince }).from(agentsTable).where(eq(agentsTable.id, paramsResult.data.id)).limit(1);
-        if (!existing?.debtSince) updates.debtSince = new Date();
-      } else {
-        updates.debtSince = null;
-      }
-    }
+    // The balance is not edited here: an agency's balance is its approved
+    // opening figure plus its draws and payments (Finance & Statements ›
+    // Agencies). The old form re-sent it on every edit, which reset a
+    // negative balance to zero.
 
     await db.update(agentsTable).set(updates).where(eq(agentsTable.id, paramsResult.data.id));
 
