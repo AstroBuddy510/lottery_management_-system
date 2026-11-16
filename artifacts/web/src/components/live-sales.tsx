@@ -111,10 +111,10 @@ export function GamePicker({
 
 function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="text-2xl font-bold tracking-tight tabular-nums mt-1">{value}</div>
-      {hint && <div className="text-xs text-muted-foreground mt-0.5">{hint}</div>}
+    <div className="rounded-xl border bg-muted/30 px-4 py-3 min-w-0">
+      <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="font-mono text-lg font-black tracking-tight tabular-nums mt-1 truncate">{value}</div>
+      {hint && <div className="text-[10px] text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }
@@ -149,14 +149,14 @@ export function LiveSalesPanel({
       : "0";
 
   return (
-    <Card>
+    <Card className="rounded-2xl shadow-sm">
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
         <div>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-sm font-bold">
             <Radio className={`h-4 w-4 ${isFetching ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
             {title}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-[11px]">
             Updates every {LIVE_REFETCH_MS / 1000}s from tickets as writers place them.
           </CardDescription>
         </div>
@@ -187,7 +187,7 @@ export function LiveSalesPanel({
             </div>
 
             {Array.isArray(data?.breakdown) && data.breakdown.length > 0 && (
-              <div className="rounded-md border overflow-x-auto">
+              <div className="rounded-xl border overflow-auto max-h-80 [&_thead]:sticky [&_thead]:top-0 [&_thead]:bg-muted/95 [&_thead]:backdrop-blur">
                 <Table>
                   <TableHeader>
                     <TableRow>

@@ -31,7 +31,7 @@ import {
   Wallet, Trophy, Percent, TrendingUp, Shield, DollarSign,
   Search, LayoutGrid, List, ChevronRight, ArrowRight,
   Clock, Activity, FileText, AlertCircle, RefreshCw,
-  ArrowUpRight, ArrowDownRight, Users, Sparkles, Building
+  ArrowUpRight, ArrowDownRight, Users, Sparkles, Building, ChevronLeft, CheckCircle2,
 } from "lucide-react";
 
 // Recharts charting library for premium business analytics
@@ -154,7 +154,7 @@ function ListIcon({ active }: { active: boolean }) {
 }
 
 type AgentStat = {
-  agent: { id: string; agentCode: string; fullCode: string; isActive: boolean; user: { fullName: string; profilePicture?: string | null } };
+  agent: { id: string; agentCode: string; fullCode: string; isActive: boolean; agencyName?: string | null; user: { fullName: string; profilePicture?: string | null } };
   gross: number; commission: number; net: number; wins: number; reserve: number; balance: number;
   submittedWriters: number; totalWriters: number; hasPaid: boolean;
   isPending: boolean;
@@ -167,246 +167,170 @@ function AgentGridCard({ stat, onClick }: { stat: AgentStat; onClick: () => void
   const entryGross = stat.entryGross ?? 0;
   const ticketGross = stat.ticketGross ?? 0;
   const ticketCount = stat.ticketCount ?? 0;
-  const hasSourceSplit = entryGross > 0 || ticketGross > 0;
   const name = agent.user.fullName;
-  const submitPercentage = totalWriters > 0 ? (submittedWriters / totalWriters) * 100 : 0;
+  const submitPct = totalWriters > 0 ? Math.min(100, (submittedWriters / totalWriters) * 100) : 0;
+  const winRate = gross > 0 ? Math.min(100, (wins / gross) * 100) : 0;
 
   return (
-    <Card
-      className="cursor-pointer border border-border/60 hover:border-primary/35 hover:-translate-y-1.5 hover:shadow-lg transition-all duration-300 overflow-hidden bg-card/65 backdrop-blur-sm shadow-sm flex flex-col justify-between"
+    <button
+      type="button"
       onClick={onClick}
+      className={`group text-left rounded-2xl border bg-card shadow-sm hover:shadow-md hover:border-primary/40 transition-all flex flex-col overflow-hidden ${isPending ? "border-amber-500/40" : ""}`}
     >
-      <CardContent className="p-0 flex-1 flex flex-col justify-between">
-        {/* Header strip with Avatar */}
-        <div className="bg-muted/30 border-b border-border/40 px-5 pt-5 pb-4 flex items-start gap-4">
-          <div className="relative">
-            <div className={`rounded-full p-0.5 ${
-              agent.isActive ? "ring-2 ring-emerald-500/70" : "ring-2 ring-muted-foreground/30"
-            }`}>
-              <AgentAvatar name={name} picture={agent.user.profilePicture} size="lg" />
-            </div>
-            {agent.user.profilePicture && (
-              <div
-                style={{ display: "none" }}
-                className={`w-16 h-16 rounded-full ${AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]} flex items-center justify-center text-white font-bold text-xl flex-shrink-0`}
-              >
-                {name.split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase() || "?"}
-              </div>
-            )}
-          </div>
-          
-          <div className="flex-1 min-w-0">
-            <div className="font-bold text-base tracking-tight leading-tight truncate text-foreground">{name}</div>
-            <div className="text-xs font-mono text-muted-foreground font-medium mt-0.5">{agent.fullCode}</div>
-            <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
-              <Badge className={`text-[10px] h-5 font-bold border-none shadow-sm ${
-                agent.isActive 
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
-                  : "bg-muted text-muted-foreground"
-              }`}>
-                {agent.isActive ? "Active" : "Inactive"}
-              </Badge>
-              <Badge className={`text-[10px] h-5 font-bold border-none shadow-sm ${
-                hasPaid 
-                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" 
-                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-              }`}>
-                Reserve: {hasPaid ? "Paid" : "Not Paid"}
-              </Badge>
-              {isPending && (
-                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 px-1.5 py-0.5 rounded shadow-sm">
-                  <span className="w-1 h-1 rounded-full bg-amber-500 inline-block animate-pulse" />
-                  PENDING CALC
-                </span>
-              )}
-            </div>
-          </div>
+      <div className="flex items-center gap-3 px-4 pt-4">
+        <div className={`rounded-full p-0.5 ${agent.isActive ? "ring-2 ring-emerald-500/60" : "ring-2 ring-muted-foreground/25"}`}>
+          <AgentAvatar name={name} picture={agent.user.profilePicture} size="sm" />
         </div>
-
-        {/* Financials grid */}
-        <div className={`px-5 py-4.5 grid grid-cols-2 gap-x-6 gap-y-3.5 flex-1 ${isPending ? "bg-amber-50/15 dark:bg-amber-950/5" : ""}`}>
-          {[
-            ["Gross Sales", gross, false],
-            ["Net Gross", net, false],
-            ["Commission", commission, false],
-            ["Wins Claimed", wins, false],
-            ["Reserve Pool", reserve, false],
-            ["Current Balance", balance, true],
-          ].map(([label, val, isBalance]) => (
-            <div key={label as string} className="flex flex-col">
-              <span className={`text-[9px] uppercase tracking-wider font-bold ${
-                isPending ? "text-amber-700/80" : "text-muted-foreground/80"
-              }`}>
-                {label as string}{isPending ? " ~" : ""}
-              </span>
-              <span className={`text-sm font-bold font-mono mt-0.5 ${
-                isBalance && Number(val) < 0 ? "text-destructive"
-                : isBalance ? "text-primary"
-                : isPending ? "text-amber-800 dark:text-amber-300" : "text-foreground"
-              }`}>
-                {fmtGHS(val as number)}
-              </span>
-            </div>
-          ))}
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-bold truncate">{agent.agencyName || name}</div>
+          <div className="text-[11px] text-muted-foreground truncate"><span className="font-mono">{agent.fullCode}</span>{agent.agencyName ? ` · ${name}` : ""}</div>
         </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${hasPaid ? "bg-sky-500/10 text-sky-700 dark:text-sky-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>
+            {hasPaid ? "Reserve paid" : "Reserve due"}
+          </span>
+          {isPending && <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Estimate</span>}
+        </div>
+      </div>
 
-        {/* Where this agent's gross came from */}
-        {hasSourceSplit && (
-          <div className="px-5 py-2.5 border-t border-border/40 bg-muted/10 space-y-1">
-            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80">
-              <span>Agent Entries</span>
-              <span className="font-mono text-foreground">{fmtGHS(entryGross)}</span>
+      <div className="px-4 pt-3 pb-3 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Balance</div>
+          <div className={`font-mono text-xl font-black truncate ${balance < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>{fmtGHS(balance)}</div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Gross</div>
+          <div className="font-mono text-sm font-bold">{fmtGHS(gross)}</div>
+        </div>
+      </div>
+
+      <div className="mx-4 grid grid-cols-4 gap-px rounded-xl overflow-hidden bg-border/60 text-center">
+        {[
+          ["Comm.", commission], ["Net", net], ["Reserve", reserve], ["Wins", wins],
+        ].map(([l, v]) => (
+          <div key={l as string} className="bg-muted/40 px-1 py-1.5 min-w-0">
+            <div className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">{l as string}</div>
+            <div className="font-mono text-[11px] font-semibold truncate">{fmtGHS(v as number)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="px-4 py-3 space-y-2 mt-auto">
+        {(entryGross > 0 || ticketGross > 0) && (
+          <div className="space-y-1">
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span><span className="inline-block w-1.5 h-1.5 rounded-full bg-sky-500 mr-1" />Entries {fmtGHS(entryGross)}</span>
+              <span><span className="inline-block w-1.5 h-1.5 rounded-full bg-violet-500 mr-1" />POS {fmtGHS(ticketGross)}{ticketCount ? ` · ${ticketCount}` : ""}</span>
             </div>
-            <div className="flex items-center justify-between text-[9px] uppercase tracking-wider font-bold text-muted-foreground/80">
-              <span>Writer Portal{ticketCount > 0 ? ` · ${ticketCount}` : ""}</span>
-              <span className="font-mono text-foreground">{fmtGHS(ticketGross)}</span>
-            </div>
-            <div className="w-full h-1 rounded-full overflow-hidden bg-muted/50 flex">
-              <div
-                className="h-full bg-blue-500"
-                style={{ width: `${gross > 0 ? (entryGross / gross) * 100 : 0}%` }}
-                title="Agent entries"
-              />
-              <div
-                className="h-full bg-violet-500"
-                style={{ width: `${gross > 0 ? (ticketGross / gross) * 100 : 0}%` }}
-                title="Writer portal sales"
-              />
+            <div className="flex h-1 rounded-full overflow-hidden bg-muted">
+              <div className="bg-sky-500" style={{ width: `${gross > 0 ? (entryGross / gross) * 100 : 0}%` }} />
+              <div className="bg-violet-500" style={{ width: `${gross > 0 ? (ticketGross / gross) * 100 : 0}%` }} />
             </div>
           </div>
         )}
-
-        {/* Writer Submissions Progress Bar */}
-        <div className="px-5 pb-4 space-y-1.5 bg-muted/5 border-t border-border/40 pt-3">
-          <div className="flex justify-between text-xs font-semibold text-muted-foreground">
-            <span>Writer Submissions</span>
-            <span className="font-mono text-foreground font-bold">{submittedWriters}/{totalWriters}</span>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 space-y-1">
+            <div className="flex justify-between text-[10px] text-muted-foreground"><span>Writers reporting</span><span className="font-mono font-semibold text-foreground">{submittedWriters}/{totalWriters}</span></div>
+            <div className="h-1 rounded-full bg-muted overflow-hidden"><div className={`h-full ${submitPct === 100 ? "bg-emerald-500" : "bg-primary"}`} style={{ width: `${submitPct}%` }} /></div>
           </div>
-          <div className="w-full bg-muted/65 dark:bg-muted/20 h-1.5 rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full transition-all duration-500 ${
-                submitPercentage === 100 ? "bg-emerald-500" : "bg-primary"
-              }`}
-              style={{ width: `${submitPercentage}%` }}
-            />
+          <div className="w-16 space-y-1">
+            <div className="flex justify-between text-[10px] text-muted-foreground"><span>Wins</span><span className="font-mono font-semibold text-foreground">{Math.round(winRate)}%</span></div>
+            <div className="h-1 rounded-full bg-muted overflow-hidden"><div className={`h-full ${winRate > 80 ? "bg-rose-500" : winRate > 50 ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${winRate}%` }} /></div>
           </div>
         </div>
+      </div>
 
-        {/* Footer */}
-        <div className="border-t border-border/40 px-5 py-3 flex items-center justify-between bg-muted/20">
-          <span className="text-[11px] text-muted-foreground font-medium">
-            {submitPercentage === 100 ? "All writers submitted ✓" : "Submissions in progress..."}
-          </span>
-          <span className="text-[11px] text-primary font-bold flex items-center gap-0.5">
-            View details 
-            <ChevronRight className="w-3 h-3" />
-          </span>
-        </div>
-      </CardContent>
-    </Card>
+      <div className="border-t px-4 py-2 flex items-center justify-between text-[11px] bg-muted/20">
+        <span className="text-muted-foreground">{agent.isActive ? "Active agency" : "Inactive agency"}</span>
+        <span className="font-semibold text-primary inline-flex items-center gap-0.5 group-hover:gap-1.5 transition-all">Open <ChevronRight className="w-3 h-3" /></span>
+      </div>
+    </button>
   );
 }
 
 function AgentListRow({ stat, onClick }: { stat: AgentStat; onClick: () => void }) {
-  const { agent, gross, net, balance, submittedWriters, totalWriters, hasPaid, isPending } = stat;
+  const { agent, gross, net, wins, balance, submittedWriters, totalWriters, hasPaid, isPending } = stat;
   const name = agent.user.fullName;
-  const submitPercentage = totalWriters > 0 ? (submittedWriters / totalWriters) * 100 : 0;
-
+  const submitPct = totalWriters > 0 ? Math.min(100, (submittedWriters / totalWriters) * 100) : 0;
   return (
-    <tr
-      className={`border-b border-border/40 last:border-0 hover:bg-muted/40 cursor-pointer transition-colors ${
-        isPending ? "bg-amber-50/10 dark:bg-amber-950/5" : ""
-      }`}
-      onClick={onClick}
-    >
-      <td className="py-3.5 pl-4 pr-2">
+    <tr className={`border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors ${isPending ? "bg-amber-500/[0.03]" : ""}`} onClick={onClick}>
+      <td className="py-3 pl-4 pr-2">
         <div className="flex items-center gap-3">
-          <div className={`rounded-full p-0.5 ${
-            agent.isActive ? "ring-2 ring-emerald-500/70" : "ring-2 ring-muted-foreground/30"
-          }`}>
+          <div className={`rounded-full p-0.5 ${agent.isActive ? "ring-2 ring-emerald-500/60" : "ring-2 ring-muted-foreground/25"}`}>
             <AgentAvatar name={name} picture={agent.user.profilePicture} size="sm" />
           </div>
-          <div>
-            <div className="font-bold text-sm leading-tight text-foreground">{name}</div>
-            <div className="text-xs font-mono text-muted-foreground mt-0.5">{agent.fullCode}</div>
+          <div className="min-w-0">
+            <div className="text-sm font-bold truncate">{agent.agencyName || name}</div>
+            <div className="text-[11px] text-muted-foreground truncate"><span className="font-mono">{agent.fullCode}</span>{agent.agencyName ? ` · ${name}` : ""}</div>
           </div>
         </div>
       </td>
-      <td className={`py-3.5 px-3 text-sm font-mono text-right font-semibold ${isPending ? "text-amber-800 dark:text-amber-300" : "text-foreground"}`}>
-        {fmtGHS(gross)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
+      <td className="py-3 px-3 text-right font-mono text-sm whitespace-nowrap">{fmtGHS(gross)}</td>
+      <td className="py-3 px-3 text-right font-mono text-sm whitespace-nowrap">{fmtGHS(net)}</td>
+      <td className="py-3 px-3 text-right font-mono text-sm whitespace-nowrap text-violet-600 dark:text-violet-400">{fmtGHS(wins)}</td>
+      <td className={`py-3 px-3 text-right font-mono text-sm font-bold whitespace-nowrap ${balance < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+        {fmtGHS(balance)}{isPending && <span className="ml-1 text-[9px] font-bold text-amber-600 align-super">EST</span>}
       </td>
-      <td className={`py-3.5 px-3 text-sm font-mono text-right font-semibold ${isPending ? "text-amber-800 dark:text-amber-300" : "text-foreground"}`}>
-        {fmtGHS(net)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
-      </td>
-      <td className={`py-3.5 px-3 text-sm font-mono font-extrabold text-right ${balance < 0 ? "text-destructive" : "text-primary"}`}>
-        {fmtGHS(balance)}{isPending ? <span className="text-[10px] text-amber-600 ml-0.5">~</span> : null}
-      </td>
-      <td className="py-3.5 px-3 text-center">
-        <div className="inline-flex flex-col items-center gap-1">
-          <span className="text-xs font-bold text-foreground">{submittedWriters}/{totalWriters}</span>
-          <div className="w-16 bg-muted/65 dark:bg-muted/20 h-1 rounded-full overflow-hidden">
-            <div 
-              className={`h-full rounded-full ${submitPercentage === 100 ? "bg-emerald-500" : "bg-primary"}`}
-              style={{ width: `${submitPercentage}%` }}
-            />
-          </div>
+      <td className="py-3 px-3">
+        <div className="w-24 space-y-1">
+          <div className="text-[11px] font-mono font-semibold text-right">{submittedWriters}/{totalWriters}</div>
+          <div className="h-1 rounded-full bg-muted overflow-hidden"><div className={`h-full ${submitPct === 100 ? "bg-emerald-500" : "bg-primary"}`} style={{ width: `${submitPct}%` }} /></div>
         </div>
       </td>
-      <td className="py-3.5 px-3">
-        <Badge className={`text-[10px] font-bold border-none shadow-sm ${
-          agent.isActive 
-            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
-            : "bg-muted text-muted-foreground"
-        }`}>
-          {agent.isActive ? "Active" : "Inactive"}
-        </Badge>
+      <td className="py-3 px-3">
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${hasPaid ? "bg-sky-500/10 text-sky-700 dark:text-sky-400" : "bg-rose-500/10 text-rose-700 dark:text-rose-400"}`}>{hasPaid ? "Paid" : "Due"}</span>
       </td>
-      <td className="py-3.5 px-3 space-y-0.5">
-        <Badge className={`text-[10px] font-bold border-none shadow-sm ${
-          hasPaid 
-            ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" 
-            : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-        }`}>
-          {hasPaid ? "Paid" : "Not Paid"}
-        </Badge>
-        {isPending && (
-          <div className="text-[9px] text-amber-600 font-bold uppercase tracking-wide">Est. pending</div>
-        )}
-      </td>
-      <td className="py-3.5 pl-2 pr-4 text-xs text-primary font-bold text-right">
-        <div className="flex items-center justify-end gap-0.5">
-          View 
-          <ChevronRight className="w-3.5 h-3.5" />
-        </div>
-      </td>
+      <td className="py-3 pl-2 pr-4 text-right"><ChevronRight className="w-4 h-4 text-muted-foreground inline" /></td>
     </tr>
   );
 }
 
 function Pagination({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
   if (totalPages <= 1) return null;
+  const list: (number | "…")[] = [];
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || Math.abs(i - page) <= 1) list.push(i);
+    else if (list[list.length - 1] !== "…") list.push("…");
+  }
+  const btn = "h-8 w-8 inline-flex items-center justify-center rounded-lg border bg-background text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:pointer-events-none";
   return (
-    <div className="flex items-center justify-center gap-2 pt-2">
-      <Button size="sm" variant="outline" className="h-8 px-3 text-xs" disabled={page === 1} onClick={() => onPage(page - 1)}>
-        ← Prev
-      </Button>
-      {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-        <Button
-          key={p}
-          size="sm"
-          variant={p === page ? "default" : "outline"}
-          className="h-8 w-8 text-xs p-0"
-          onClick={() => onPage(p)}
-        >
-          {p}
-        </Button>
+    <div className="flex items-center justify-center gap-1 pt-1">
+      <button type="button" aria-label="Previous page" className={btn} disabled={page === 1} onClick={() => onPage(page - 1)}><ChevronLeft className="w-4 h-4" /></button>
+      {list.map((n, i) => n === "…" ? <span key={`g${i}`} className="px-1 text-xs text-muted-foreground">…</span> : (
+        <button key={n} type="button" onClick={() => onPage(n)} aria-current={n === page ? "page" : undefined}
+          className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-semibold ${n === page ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{n}</button>
       ))}
-      <Button size="sm" variant="outline" className="h-8 px-3 text-xs" disabled={page === totalPages} onClick={() => onPage(page + 1)}>
-        Next →
-      </Button>
+      <button type="button" aria-label="Next page" className={btn} disabled={page === totalPages} onClick={() => onPage(page + 1)}><ChevronRight className="w-4 h-4" /></button>
     </div>
   );
 }
+
+/** A dashboard section: a titled panel that every block on the page shares. */
+function Panel({ title, subtitle, icon, right, children, className = "" }: {
+  title: string; subtitle?: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; className?: string;
+}) {
+  return (
+    <section className={`rounded-2xl border bg-card shadow-sm flex flex-col min-w-0 ${className}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-3 border-b">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {icon && <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shrink-0">{icon}</div>}
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold tracking-tight">{title}</h2>
+            {subtitle && <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>}
+          </div>
+        </div>
+        {right}
+      </div>
+      <div className="p-5 flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}
+
+const compactGhs = (v: number) => {
+  const a = Math.abs(v);
+  const s = a >= 1_000_000 ? `${(a / 1_000_000).toFixed(1)}m` : a >= 1_000 ? `${(a / 1_000).toFixed(1)}k` : a.toFixed(0);
+  return `${v < 0 ? "−" : ""}₵${s}`;
+};
 
 /**
  * Platform totals for the displayed draw, unified across agent entries and
@@ -555,6 +479,7 @@ function DirectorDashboard() {
       const hasPaid = paymentList.some(p => p.agentId === agent.id && !p.isVoided && p.paymentDate?.startsWith(viewDate));
       const agentInfo = {
         id: agent.id, agentCode: agent.agentCode, fullCode: agent.fullCode, isActive: agent.isActive,
+        agencyName: agent.agencyName ?? null,
         user: { fullName: agent.user?.fullName ?? agent.fullCode, profilePicture: agent.user?.profilePicture },
       };
 
@@ -713,6 +638,7 @@ function DirectorDashboard() {
     const q = search.toLowerCase().trim();
     return agentStats.filter(s =>
       s.agent.user.fullName.toLowerCase().includes(q) ||
+      (s.agent.agencyName ?? "").toLowerCase().includes(q) ||
       s.agent.fullCode.toLowerCase().includes(q)
     );
   }, [agentStats, search]);
@@ -725,568 +651,289 @@ function DirectorDashboard() {
   const handlePage = (p: number) => setPage(p);
   const handleViewMode = (mode: "grid" | "list") => { setViewMode(mode); setPage(1); };
 
+  const isLiveView = !selectedGameId || selectedGameId === "_live" || selectedGameId === "_none";
+  const winShare = totals.gross > 0 ? (totals.wins / totals.gross) * 100 : 0;
+  const netAfterReserve = totals.net - totals.reserve;
+  const cashPosition = totals.balance - totalExpensesAmount;
+  const viewDateLabel = viewDate
+    ? new Date(`${viewDate}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+    : "";
+
   return (
-    <div className="space-y-6">
-      {/* Game banner — interactive game selector */}
-      <div className={`relative overflow-hidden rounded-xl px-5 py-3.5 flex items-center gap-4 flex-wrap border shadow-sm transition-all duration-300 ${
-        displayGame 
-          ? "bg-slate-900 border-primary/30 text-white" 
-          : "bg-muted/60 border-border"
-      }`}>
-        {/* Decorative corner glows */}
-        {displayGame && (
-          <div className="absolute right-0 top-0 w-24 h-24 bg-primary/10 rounded-full blur-xl pointer-events-none" />
-        )}
-        
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
-          displayGame ? "bg-primary/20 text-primary-foreground" : "bg-muted text-muted-foreground"
-        }`}>
-          🎮
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          {displayGame ? (
-            <>
-              <div className="text-[10px] text-primary-foreground/75 font-bold uppercase tracking-wider">
-                {(!selectedGameId || selectedGameId === "_live" || selectedGameId === "_none") ? "Active Game Event" : "Viewing Game Event"}
-              </div>
-              <div className="flex items-center gap-2.5 flex-wrap mt-0.5">
-                <span className="text-sm font-mono font-bold text-blue-300 px-1.5 py-0.5 rounded bg-white/10">{displayGame.eventNumber}</span>
-                <span className="text-base font-extrabold tracking-tight leading-tight">{displayGame.name}</span>
-                {displayGame.status === "live" && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold border-none text-[10px] px-2 py-0.5 shadow-sm shadow-emerald-500/20">LIVE</Badge>
-                    <CountdownTimer closeAt={displayGame.closeAt} status={displayGame.status} className="flex items-center gap-1.5 text-[9px] font-bold text-yellow-300 bg-white/10 border border-white/20 px-2 py-0.5 rounded-lg animate-pulse" />
-                  </div>
-                )}
-                {displayGame.status === "closed" && (
-                  <Badge variant="secondary" className="text-[10px] px-2 py-0.5 bg-white/15 text-white border-none">Closed</Badge>
-                )}
-              </div>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground font-medium">No active game for {DAY_NAMES[todayDow]}</span>
-          )}
-
-          {/* Alternative Quick Switch Pills of active games */}
-          {liveGames.length > 0 && (
-            <div className="flex items-center gap-2 mt-2.5 overflow-x-auto pb-1 scrollbar-none">
-              <span className="text-[9px] uppercase font-extrabold text-white/50 tracking-wider whitespace-nowrap">Active Games:</span>
-              {liveGames.map(g => {
-                const isSelected = displayGame?.id === g.id;
-                return (
-                  <button
-                    key={g.id}
-                    onClick={() => handleGameSelect(g.id)}
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-all shrink-0 whitespace-nowrap ${
-                      isSelected
-                        ? "bg-blue-500/20 text-blue-300 shadow-sm ring-1 ring-blue-400/30 backdrop-blur-md hover:bg-blue-500/30"
-                        : "bg-white/10 text-white/90 hover:bg-white/25"
-                    }`}
-                  >
-                    🟢 {g.name} (#{g.eventNumber})
-                  </button>
-                );
-              })}
+    <div className="space-y-5">
+      {/* ── Draw context: which game, which day, how far along ── */}
+      <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+        <div className="flex flex-col xl:flex-row xl:items-center gap-4 p-4">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${displayGame?.status === "live" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
+              <Activity className="w-5 h-5" />
             </div>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-2.5 shrink-0">
-          <Select
-            value={selectedGameId || "_live"}
-            onValueChange={handleGameSelect}
-          >
-            <SelectTrigger className={`h-9 text-xs w-52 border ${
-              displayGame ? "bg-white/10 text-white border-white/20 focus:ring-white/30" : "bg-background/80"
-            }`}>
-              <SelectValue placeholder="Select game…" />
-            </SelectTrigger>
-            <SelectContent align="end">
-              <SelectItem value="_live">
-                {currentGame ? `Current: ${currentGame.eventNumber}` : "Current game (live)"}
-              </SelectItem>
-              {liveGames.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Active (Live) Games</SelectLabel>
-                  {liveGames.map(g => (
-                    <SelectItem key={g.id} value={g.id}>
-                      <span className="font-mono text-xs text-muted-foreground mr-1.5">🟢 #{g.eventNumber}</span>
-                      {g.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              )}
-              {otherGames.length > 0 && (
-                <SelectGroup>
-                  <SelectLabel className="text-xs font-bold text-muted-foreground">Closed / Offline Games</SelectLabel>
-                  {otherGames
-                    .sort((a, b) => b.eventNumber.localeCompare(a.eventNumber))
-                    .map(g => (
-                      <SelectItem key={g.id} value={g.id}>
-                        <span className="font-mono text-xs text-muted-foreground mr-1.5">#{g.eventNumber}</span>
-                        {g.name}
-                      </SelectItem>
-                    ))}
-                </SelectGroup>
-              )}
-            </SelectContent>
-          </Select>
-          {selectedGameId && selectedGameId !== "_live" && selectedGameId !== "_none" && (
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              className={`h-9 text-xs px-3 ${displayGame ? "text-blue-300 hover:text-white hover:bg-white/10" : ""}`}
-              onClick={() => handleGameSelect("_live")}
-            >
-              Back to live
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Live Entry Status — real-time glassmorphic status block */}
-      <div className="rounded-xl border border-border/60 bg-card/45 backdrop-blur-md px-5 py-3.5 flex items-center gap-5 flex-wrap shadow-sm">
-        <div className="text-[10px] font-extrabold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5 flex-shrink-0">
-          <Activity className="w-3.5 h-3.5 text-primary animate-pulse" />
-          Realtime entries today
-        </div>
-
-        <div className="h-4 w-px bg-border flex-shrink-0 hidden md:block" />
-
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/30 flex-shrink-0" />
-          <span className="text-xs text-muted-foreground font-semibold">Gross:</span>
-          <span className="text-sm font-extrabold">{grossToday.length}</span>
-          <span className="text-xs text-muted-foreground">
-            {grossToday.length === 1 ? "entry" : "entries"}
-          </span>
-          <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded">
-            {fmtGHS(grossTodayAmount)}
-          </span>
-        </div>
-
-        <div className="w-px h-4 bg-border flex-shrink-0" />
-
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm shadow-purple-500/30 flex-shrink-0" />
-          <span className="text-xs text-muted-foreground font-semibold">Wins:</span>
-          <span className="text-sm font-extrabold">{winsToday.length}</span>
-          <span className="text-xs text-muted-foreground">
-            {winsToday.length === 1 ? "entry" : "entries"}
-          </span>
-          <span className="text-xs font-mono font-bold text-purple-600 bg-purple-50 dark:bg-purple-950/20 px-1.5 py-0.5 rounded">
-            {fmtGHS(winsTodayAmount)}
-          </span>
-        </div>
-
-        <div className="ml-auto flex-shrink-0">
-          {hasCalcToday ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full font-bold shadow-sm shadow-emerald-500/5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-              Calculated for today
-            </span>
-          ) : (grossToday.length > 0 || winsToday.length > 0) ? (
-            <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full font-bold shadow-sm shadow-amber-500/5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse" />
-              Entries pending calculation
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground bg-muted/60 px-3 py-1 rounded-full font-medium">
-              No entries logged today
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Where the gross came from — agent entries vs writer portal */}
-      {unified && (entryGross > 0 || portalGross > 0) && (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs rounded-xl border border-border/40 bg-card/45 px-4 py-2.5">
-          <span className="font-semibold text-muted-foreground">Gross by source:</span>
-          <span>
-            <span className="text-muted-foreground">Agent entries </span>
-            <span className="font-mono font-bold">{fmtGHS(entryGross)}</span>
-          </span>
-          <span>
-            <span className="text-muted-foreground">Writer portal </span>
-            <span className="font-mono font-bold">{fmtGHS(portalGross)}</span>
-            <span className="text-muted-foreground"> ({portalTicketCount} ticket{portalTicketCount === 1 ? "" : "s"})</span>
-          </span>
-          <span className="text-muted-foreground/70">Both use the same commission and reserve criteria.</span>
-        </div>
-      )}
-
-      {/* Redesigned Summary cards — 7 KPI Grid showing the sequential financial formula flow */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
-        <StatCard
-          label={anyPending ? "Gross (Live)" : "Gross"}
-          value={fmtGHS(totals.gross)}
-          pending={anyPending}
-          icon={<Wallet className="w-4 h-4" />}
-          colorClass="text-blue-500 bg-blue-50 dark:bg-blue-950/30"
-          description="Total gross sales compiled"
-        />
-        <StatCard
-          label={anyPending ? "Commission ~" : "Commission"}
-          value={fmtGHS(totals.commission)}
-          pending={anyPending}
-          icon={<Percent className="w-4 h-4" />}
-          colorClass="text-amber-500 bg-amber-50 dark:bg-amber-950/30"
-          description="Agent commissions deducted"
-        />
-        <StatCard
-          label={anyPending ? "Net Before Deduction ~" : "Net Before Deduction"}
-          value={fmtGHS(totals.net)}
-          pending={anyPending}
-          icon={<TrendingUp className="w-4 h-4" />}
-          colorClass="text-teal-500 bg-teal-50 dark:bg-teal-950/30"
-          description="Gross minus commission"
-        />
-        <StatCard 
-          label={anyPending ? "Reserve Fund ~" : "Reserve Fund"}
-          value={fmtGHS(totals.reserve)} 
-          pending={anyPending}
-          icon={<Shield className="w-4 h-4" />}
-          colorClass="text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30"
-          description="Safety pool reserve deduction"
-        />
-        <StatCard
-          label={anyPending ? "Net After Reserve ~" : "Net After Reserve"}
-          value={fmtGHS(totals.net - totals.reserve)}
-          pending={anyPending}
-          icon={<TrendingUp className="w-4 h-4" />}
-          colorClass="text-cyan-500 bg-cyan-50 dark:bg-cyan-950/30"
-          description="Net before minus reserve"
-        />
-        <StatCard
-          label={anyPending ? "Wins (Live)" : "Wins"}
-          value={fmtGHS(totals.wins)}
-          pending={anyPending}
-          icon={<Trophy className="w-4 h-4" />}
-          colorClass="text-purple-500 bg-purple-50 dark:bg-purple-950/30"
-          description="Wins claimed by writers"
-        />
-        <StatCard
-          label={anyPending ? "Profit/Deficit (Est.)" : "Profit/Deficit"}
-          value={fmtGHS(totals.balance)}
-          accent={totals.balance >= 0}
-          pending={anyPending}
-          icon={<DollarSign className="w-4 h-4" />}
-          colorClass={totals.balance >= 0 ? "text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : "text-rose-500 bg-rose-50 dark:bg-rose-950/30"}
-          description={totals.balance >= 0 ? "Net surplus yield" : "Net deficit loss"}
-        />
-      </div>
-
-      {/* Analytics & Company Expenses Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart Column (2/3 span) */}
-        <Card className="lg:col-span-2 border border-border/60 bg-card/50 backdrop-blur-md">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-primary" />
-                  Sales & Profitability Trends
-                </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Visualizing performance for the last 7 calculation days
-                </p>
-              </div>
-              <Sparkles className="w-4 h-4 text-accent animate-pulse" />
-            </div>
-          </CardHeader>
-          <CardContent className="pt-2">
-            {chartData.length === 0 ? (
-              <div className="h-64 flex flex-col items-center justify-center text-muted-foreground text-xs border border-dashed rounded-lg">
-                <FileText className="w-8 h-8 mb-2 opacity-50" />
-                No historical calculations found to plot.
-              </div>
-            ) : (
-              <div className="w-full h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25}/>
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorWins" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.25}/>
-                        <stop offset="95%" stopColor="#7c3aed" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
-                    <XAxis 
-                      dataKey="date" 
-                      tickLine={false} 
-                      axisLine={false} 
-                      className="text-[10px] fill-muted-foreground font-medium" 
-                    />
-                    <YAxis 
-                      tickLine={false} 
-                      axisLine={false} 
-                      className="text-[10px] fill-muted-foreground font-medium" 
-                      tickFormatter={(val) => `GH₵${val}`}
-                    />
-                    <ChartTooltip 
-                      contentStyle={{ 
-                        background: "rgba(255, 255, 255, 0.95)",
-                        border: "1px solid rgba(0, 0, 0, 0.1)",
-                        borderRadius: "8px",
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                        fontSize: "11px"
-                      }}
-                      formatter={(value: any) => [fmtGHS(Number(value)), ""]}
-                    />
-                    <ChartLegend verticalAlign="top" height={36} className="text-xs" />
-                    <Area 
-                      name="Gross Sales" 
-                      type="monotone" 
-                      dataKey="gross" 
-                      stroke="hsl(var(--primary))" 
-                      strokeWidth={2}
-                      fillOpacity={1} 
-                      fill="url(#colorGross)" 
-                    />
-                    <Area 
-                      name="Wins Claimed" 
-                      type="monotone" 
-                      dataKey="wins" 
-                      stroke="#7c3aed" 
-                      strokeWidth={2}
-                      fillOpacity={1} 
-                      fill="url(#colorWins)" 
-                    />
-                    <Area 
-                      name="Net Yield" 
-                      type="monotone" 
-                      dataKey="balance" 
-                      stroke="#10b981" 
-                      strokeWidth={2}
-                      fillOpacity={1} 
-                      fill="url(#colorNet)" 
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Expenses Widget (1/3 span) */}
-        <Card className="border border-border/60 bg-card/50 backdrop-blur-md flex flex-col">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <Building className="w-4 h-4 text-accent" />
-              Company Expense Hub
-            </CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Financial health for {viewDate}
-            </p>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col space-y-4 justify-between">
-            {/* Expense details summary */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
-                <span className="text-xs text-muted-foreground">Reserve Cash Pool</span>
-                <span className="text-sm font-bold font-mono text-primary">{fmtGHS(accumulatedReserve)}</span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2">
-                <span className="text-xs text-muted-foreground">Outlays recorded today</span>
-                <span className="text-sm font-bold font-mono text-destructive">{fmtGHS(totalExpensesAmount)}</span>
-              </div>
-              
-              {/* Calculated Cash Position */}
-              <div className="rounded-lg bg-muted/40 p-2.5 flex items-center justify-between">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Net Cashflow Position
-                  </div>
-                  <div className="text-[9px] text-muted-foreground mt-0.5">
-                    Operational Balance - Expenses
-                  </div>
-                </div>
-                <div className={`text-base font-extrabold font-mono ${
-                  (totals.balance - totalExpensesAmount) >= 0 ? "text-emerald-600" : "text-destructive"
-                }`}>
-                  {fmtGHS(totals.balance - totalExpensesAmount)}
-                </div>
-              </div>
-            </div>
-
-            {/* List of recent expenses */}
-            <div className="space-y-2 flex-1">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mt-1">
-                Recent Outlays
-              </div>
-              {dateExpenses.length === 0 ? (
-                <div className="py-6 text-center text-xs text-muted-foreground border border-dashed rounded-lg">
-                  No company expenses recorded on this date.
-                </div>
-              ) : (
-                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                  {dateExpenses.slice(0, 3).map(exp => (
-                    <div key={exp.id} className="flex items-center justify-between bg-muted/20 hover:bg-muted/40 p-2 rounded text-xs transition-colors">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold truncate text-foreground">{exp.description}</div>
-                        <div className="text-[10px] text-muted-foreground truncate">
-                          Payee: {exp.payeeName}
-                        </div>
-                      </div>
-                      <div className="text-right pl-2">
-                        <div className="font-bold font-mono text-destructive">-{fmtGHS(Number(exp.amount))}</div>
-                        <div className="text-[9px] text-muted-foreground uppercase">{exp.type}</div>
-                      </div>
-                    </div>
-                  ))}
-                  {dateExpenses.length > 3 && (
-                    <div className="text-[10px] text-center text-primary font-medium">
-                      + {dateExpenses.length - 3} more items
-                    </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{isLiveView ? "Current draw" : "Viewing draw"} · {viewDateLabel}</div>
+              {displayGame ? (
+                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                  <span className="text-base font-black tracking-tight truncate">{displayGame.name}</span>
+                  <span className="font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">#{displayGame.eventNumber}</span>
+                  {displayGame.status === "live" ? (
+                    <>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-white"><span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />LIVE</span>
+                      <CountdownTimer closeAt={displayGame.closeAt} status={displayGame.status} className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full" />
+                    </>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground uppercase">{displayGame.status}</span>
                   )}
                 </div>
+              ) : (
+                <div className="text-sm font-semibold text-muted-foreground mt-0.5">No game is live for {DAY_NAMES[todayDow]}</div>
               )}
             </div>
+          </div>
 
-            {/* Manage Expenses link button */}
-            <Button 
-              size="sm" 
-              variant="outline" 
-              className="w-full text-xs font-semibold mt-2 h-9 flex items-center justify-center gap-1.5"
-              onClick={() => navigate("/company-expenses")}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Manage Company Expenses
-              <ArrowRight className="w-3 h-3 ml-0.5" />
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Redesigned Controls & Search Toolbar */}
-      <div className="border border-border/60 bg-card/45 backdrop-blur-md px-4 py-2.5 rounded-xl flex items-center justify-between gap-4 flex-wrap shadow-sm">
-        <div className="flex items-center gap-3 flex-wrap flex-1">
-          {/* Date Picker */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Period:</span>
-            <Input
-              type="date"
-              value={viewDate}
-              onChange={e => { setSelectedDate(e.target.value); setPage(1); }}
-              className="h-8.5 text-xs w-44 bg-background/60 border-border/50"
-            />
-            {selectedDate && (
-              <Button size="sm" variant="ghost" className="h-8 text-xs px-2" onClick={() => { setSelectedDate(""); setPage(1); }}>
-                Reset
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={selectedGameId || "_live"} onValueChange={handleGameSelect}>
+              <SelectTrigger className="h-9 text-xs w-[220px] bg-background"><SelectValue placeholder="Select game…" /></SelectTrigger>
+              <SelectContent align="end">
+                <SelectItem value="_live">{currentGame ? `Current: ${currentGame.name} #${currentGame.eventNumber}` : "Current game (live)"}</SelectItem>
+                {liveGames.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Live</SelectLabel>
+                    {liveGames.map(g => <SelectItem key={g.id} value={g.id}><span className="font-mono text-xs text-muted-foreground mr-1.5">#{g.eventNumber}</span>{g.name}</SelectItem>)}
+                  </SelectGroup>
+                )}
+                {otherGames.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel className="text-xs font-bold text-muted-foreground">Closed / offline</SelectLabel>
+                    {[...otherGames].sort((a, b) => b.eventNumber.localeCompare(a.eventNumber)).map(g => (
+                      <SelectItem key={g.id} value={g.id}><span className="font-mono text-xs text-muted-foreground mr-1.5">#{g.eventNumber}</span>{g.name}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+              </SelectContent>
+            </Select>
+            <Input type="date" value={viewDate} onChange={e => { setSelectedDate(e.target.value); setPage(1); }} className="h-9 text-xs w-[150px] bg-background" aria-label="Day" />
+            {(!isLiveView || selectedDate) && (
+              <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => { handleGameSelect("_live"); setSelectedDate(""); }}>
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Back to live
               </Button>
             )}
           </div>
-          
-          <div className="h-4 w-px bg-border/65 hidden sm:block" />
-
-          {/* Search Input */}
-          <div className="relative flex-1 max-w-xs min-w-[200px]">
-            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground/75" />
-            <Input
-              type="search"
-              placeholder="Search agent name or code..."
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }}
-              className="h-8.5 pl-8 text-xs bg-background/60 border-border/50 placeholder:text-muted-foreground/60 focus:bg-background transition-all"
-            />
-          </div>
-          
-          {loadingCalcs && <span className="text-xs text-muted-foreground/70 animate-pulse">Syncing...</span>}
         </div>
 
-        {/* View toggle & counts */}
-        <div className="flex items-center gap-3 shrink-0 ml-auto sm:ml-0">
-          <span className="text-xs text-muted-foreground/80 font-medium">
-            {filteredAgentStats.length === agentStats.length ? (
-              <>Showing {agentStats.length} agent{agentStats.length !== 1 ? "s" : ""}</>
+        <div className="border-t bg-muted/30 px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+          {liveGames.length > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {liveGames.map(g => (
+                <button key={g.id} type="button" onClick={() => handleGameSelect(g.id)}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap transition-colors ${displayGame?.id === g.id ? "bg-foreground text-background border-foreground" : "bg-background text-muted-foreground hover:text-foreground"}`}>
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-sky-500" /><span className="text-muted-foreground">Gross entries</span><span className="font-bold">{grossToday.length}</span><span className="font-mono font-semibold">{fmtGHS(grossTodayAmount)}</span></span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-violet-500" /><span className="text-muted-foreground">Wins entries</span><span className="font-bold">{winsToday.length}</span><span className="font-mono font-semibold">{fmtGHS(winsTodayAmount)}</span></span>
+          {portalTicketCount > 0 && (
+            <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-muted-foreground">POS tickets</span><span className="font-bold">{portalTicketCount}</span><span className="font-mono font-semibold">{fmtGHS(portalGross)}</span></span>
+          )}
+          <span className="ml-auto">
+            {hasCalcToday ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="w-3.5 h-3.5" /> Draw calculated</span>
+            ) : (grossToday.length > 0 || winsToday.length > 0 || portalTicketCount > 0) ? (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400"><Clock className="w-3.5 h-3.5" /> Figures are estimates until Run Draws</span>
             ) : (
-              <>Found {filteredAgentStats.length} of {agentStats.length} agent{agentStats.length !== 1 ? "s" : ""}</>
+              <span className="text-muted-foreground">Nothing recorded for this draw yet</span>
             )}
           </span>
-
-          <div className="flex items-center gap-1 border border-border/50 rounded-lg p-0.5 bg-muted/40">
-            <button
-              onClick={() => handleViewMode("grid")}
-              className={`p-1.5 rounded-md transition-all duration-200 ${
-                viewMode === "grid" 
-                  ? "bg-background text-primary shadow-sm" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
-              }`}
-              title="Grid view"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => handleViewMode("list")}
-              className={`p-1.5 rounded-md transition-all duration-200 ${
-                viewMode === "list" 
-                  ? "bg-background text-primary shadow-sm" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
-              }`}
-              title="List view"
-            >
-              <List className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Agents — Grid */}
-      {viewMode === "grid" && (
-        agentStats.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No agents found.</p>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-              {pagedStats.map(stat => (
-                <AgentGridCard key={stat.agent.id} stat={stat} onClick={() => navigate(`/agents/${stat.agent.id}/detail`)} />
-              ))}
+      {/* ── Headline figures ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <HeroCard label="Gross sales" value={fmtGHS(totals.gross)} icon={<Wallet className="w-4 h-4" />} edge="border-l-sky-500" estimate={anyPending}
+          footer={(entryGross > 0 || portalGross > 0) ? (
+            <div className="space-y-1">
+              <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
+                <div className="bg-sky-500" style={{ width: `${totals.gross > 0 ? (entryGross / totals.gross) * 100 : 0}%` }} />
+                <div className="bg-violet-500" style={{ width: `${totals.gross > 0 ? (portalGross / totals.gross) * 100 : 0}%` }} />
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground"><span>Entries {compactGhs(entryGross)}</span><span>POS {compactGhs(portalGross)}</span></div>
+            </div>
+          ) : <span className="text-[10px] text-muted-foreground">Agent entries and POS sales together</span>} />
+        <HeroCard label="Wins" value={fmtGHS(totals.wins)} icon={<Trophy className="w-4 h-4" />} edge="border-l-violet-500" estimate={anyPending}
+          footer={<div className="space-y-1">
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden"><div className={`h-full ${winShare > 80 ? "bg-rose-500" : winShare > 50 ? "bg-amber-500" : "bg-violet-500"}`} style={{ width: `${Math.min(100, winShare)}%` }} /></div>
+            <div className="text-[10px] text-muted-foreground">{winShare.toFixed(1)}% of gross paid back</div>
+          </div>} />
+        <HeroCard label="Reserve set aside" value={fmtGHS(totals.reserve)} icon={<Shield className="w-4 h-4" />} edge="border-l-amber-500" estimate={anyPending}
+          footer={<div className="text-[10px] text-muted-foreground">Fund balance <span className="font-mono font-semibold text-foreground">{fmtGHS(accumulatedReserve)}</span></div>} />
+        <HeroCard label={totals.balance >= 0 ? "Profit" : "Deficit"} value={fmtGHS(totals.balance)} icon={<DollarSign className="w-4 h-4" />}
+          edge={totals.balance >= 0 ? "border-l-emerald-500" : "border-l-rose-500"} estimate={anyPending}
+          valueClass={totals.balance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}
+          footer={<div className="text-[10px] text-muted-foreground">{totals.gross > 0 ? `${((totals.balance / totals.gross) * 100).toFixed(1)}% margin on gross` : "No sales yet"}</div>} />
+      </div>
+
+      {/* ── How the draw adds up ── */}
+      <div className="rounded-2xl border bg-card shadow-sm px-4 py-3 overflow-x-auto">
+        <div className="flex items-stretch gap-1 min-w-[1000px] xl:min-w-0">
+          {[
+            { label: "Gross", value: totals.gross, cls: "" },
+            { op: "−", label: "Commission", value: totals.commission, cls: "text-muted-foreground" },
+            { op: "=", label: "Net before reserve", value: totals.net, cls: "" },
+            { op: "−", label: "Reserve", value: totals.reserve, cls: "text-amber-600 dark:text-amber-400" },
+            { op: "=", label: "Net after reserve", value: netAfterReserve, cls: "" },
+            { op: "−", label: "Wins", value: totals.wins, cls: "text-violet-600 dark:text-violet-400" },
+            { op: "=", label: totals.balance >= 0 ? "Profit" : "Deficit", value: totals.balance, cls: totals.balance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400", strong: true },
+          ].map((step, i) => (
+            <div key={i} className="flex items-center gap-1 flex-1 min-w-0">
+              {step.op && <span className="text-sm font-bold text-muted-foreground/60 w-4 text-center shrink-0">{step.op}</span>}
+              <div className={`flex-1 min-w-0 rounded-xl px-3 py-2 ${step.strong ? "bg-muted/60" : ""}`}>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground truncate">{step.label}</div>
+                <div className={`font-mono text-sm font-bold truncate ${step.cls}`}>{fmtGHS(step.value)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Trend + cash ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <Panel className="xl:col-span-8" title="Sales and profitability" subtitle="The last seven calculated days" icon={<TrendingUp className="w-4 h-4" />}>
+          {chartData.length === 0 ? (
+            <div className="h-64 flex flex-col items-center justify-center text-muted-foreground text-xs border border-dashed rounded-xl">
+              <FileText className="w-8 h-8 mb-2 opacity-40" />
+              No calculated days to plot yet.
+            </div>
+          ) : (
+            <div className="w-full h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="dGross" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.25} /><stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} /></linearGradient>
+                    <linearGradient id="dWins" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} /><stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} /></linearGradient>
+                    <linearGradient id="dNet" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.2} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                    tickFormatter={(d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} />
+                  <YAxis tickLine={false} axisLine={false} width={56} tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v: number) => compactGhs(v)} />
+                  <ChartTooltip
+                    contentStyle={{ background: "hsl(var(--popover))", color: "hsl(var(--popover-foreground))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 11 }}
+                    labelFormatter={(d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                    formatter={(value: number, name: string) => [fmtGHS(Number(value)), name]}
+                  />
+                  <ChartLegend verticalAlign="top" height={30} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
+                  <Area name="Gross" type="monotone" dataKey="gross" stroke="#0ea5e9" strokeWidth={2} fill="url(#dGross)" />
+                  <Area name="Wins" type="monotone" dataKey="wins" stroke="#8b5cf6" strokeWidth={2} fill="url(#dWins)" />
+                  <Area name="Balance" type="monotone" dataKey="balance" stroke="#10b981" strokeWidth={2} fill="url(#dNet)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Panel>
+
+        <Panel className="xl:col-span-4" title="Cash position" subtitle={`For ${viewDateLabel}`} icon={<Building className="w-4 h-4" />}
+          right={<Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => navigate("/company-expenses")}>Expenses <ArrowRight className="w-3 h-3 ml-1" /></Button>}>
+          <div className="space-y-4">
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between"><span className="text-muted-foreground">Draw {totals.balance >= 0 ? "profit" : "deficit"}</span><span className={`font-mono font-semibold ${totals.balance < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{fmtGHS(totals.balance)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Company expenses</span><span className="font-mono font-semibold text-rose-600 dark:text-rose-400">−{fmtGHS(totalExpensesAmount)}</span></div>
+              <div className="flex justify-between border-t pt-2"><span className="font-semibold">Net cash position</span><span className={`font-mono text-base font-black ${cashPosition >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{fmtGHS(cashPosition)}</span></div>
+              <div className="flex justify-between text-muted-foreground"><span>Reserve fund balance</span><span className="font-mono">{fmtGHS(accumulatedReserve)}</span></div>
+            </div>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-2">Expenses this day · {dateExpenses.length}</div>
+              {loadingExpenses ? (
+                <div className="h-16 rounded-xl bg-muted animate-pulse" />
+              ) : dateExpenses.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center border border-dashed rounded-xl">No expenses recorded.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {dateExpenses.map(exp => (
+                    <div key={exp.id} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-2 text-xs">
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate">{exp.description}</div>
+                        <div className="text-[10px] text-muted-foreground truncate">{exp.payeeName} · {exp.type}</div>
+                      </div>
+                      <div className="font-mono font-semibold text-rose-600 dark:text-rose-400 shrink-0">−{fmtGHS(Number(exp.amount))}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      {/* ── Live POS sales ── */}
+      <LiveSalesSection title="Live POS sales" />
+
+      {/* ── Agencies ── */}
+      <Panel title="Agency performance" icon={<Users className="w-4 h-4" />}
+        subtitle={`${filteredAgentStats.length === agentStats.length ? agentStats.length : `${filteredAgentStats.length} of ${agentStats.length}`} agencies · ${viewDateLabel}`}
+        right={
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input type="search" placeholder="Agency name or code…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="h-8 pl-8 text-xs w-[200px]" />
+            </div>
+            <div className="flex items-center rounded-lg border p-0.5 bg-muted/40">
+              <button type="button" onClick={() => handleViewMode("grid")} title="Cards" className={`p-1.5 rounded-md ${viewMode === "grid" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}><LayoutGrid className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={() => handleViewMode("list")} title="Table" className={`p-1.5 rounded-md ${viewMode === "list" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}><List className="w-3.5 h-3.5" /></button>
+            </div>
+            {loadingCalcs && <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />}
+          </div>
+        }>
+        {filteredAgentStats.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-10 text-center">{agentStats.length === 0 ? "No agencies yet." : "No agency matches that search."}</p>
+        ) : viewMode === "grid" ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+              {pagedStats.map(stat => <AgentGridCard key={stat.agent.id} stat={stat} onClick={() => navigate(`/agents/${stat.agent.id}/detail`)} />)}
             </div>
             <Pagination page={safePage} totalPages={totalPages} onPage={handlePage} />
-          </>
-        )
-      )}
-
-      {/* Agents — List */}
-      {viewMode === "list" && (
-        agentStats.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No agents found.</p>
+          </div>
         ) : (
-          <>
-            <div className="border rounded-lg overflow-hidden">
+          <div className="space-y-4">
+            <div className="rounded-xl border overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/30 text-xs text-muted-foreground uppercase tracking-wide">
-                    <th className="text-left py-2.5 pl-4 pr-2 font-medium">Agent</th>
-                    <th className="text-right py-2.5 px-3 font-medium">Gross</th>
-                    <th className="text-right py-2.5 px-3 font-medium">Net</th>
-                    <th className="text-right py-2.5 px-3 font-medium">Balance</th>
-                    <th className="text-center py-2.5 px-3 font-medium">Writers</th>
-                    <th className="py-2.5 px-3 font-medium">Status</th>
-                    <th className="py-2.5 px-3 font-medium">Reserve</th>
-                    <th className="py-2.5 pl-2 pr-4"></th>
+                  <tr className="border-b bg-muted/40 text-[10px] text-muted-foreground uppercase tracking-wider">
+                    <th className="text-left py-2.5 pl-4 pr-2 font-bold">Agency</th>
+                    <th className="text-right py-2.5 px-3 font-bold">Gross</th>
+                    <th className="text-right py-2.5 px-3 font-bold">Net</th>
+                    <th className="text-right py-2.5 px-3 font-bold">Wins</th>
+                    <th className="text-right py-2.5 px-3 font-bold">Balance</th>
+                    <th className="text-right py-2.5 px-3 font-bold">Writers</th>
+                    <th className="py-2.5 px-3 font-bold text-left">Reserve</th>
+                    <th className="py-2.5 pl-2 pr-4" />
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedStats.map(stat => (
-                    <AgentListRow key={stat.agent.id} stat={stat} onClick={() => navigate(`/agents/${stat.agent.id}/detail`)} />
-                  ))}
+                  {pagedStats.map(stat => <AgentListRow key={stat.agent.id} stat={stat} onClick={() => navigate(`/agents/${stat.agent.id}/detail`)} />)}
                 </tbody>
               </table>
             </div>
             <Pagination page={safePage} totalPages={totalPages} onPage={handlePage} />
-          </>
-        )
-      )}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function HeroCard({ label, value, icon, edge, footer, estimate, valueClass = "" }: {
+  label: string; value: string; icon: React.ReactNode; edge: string; footer?: React.ReactNode; estimate?: boolean; valueClass?: string;
+}) {
+  return (
+    <div className={`bg-card border border-border border-l-4 ${edge} rounded-2xl p-4 shadow-sm flex flex-col gap-2 min-w-0`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[10px] text-muted-foreground uppercase font-black tracking-wider">
+          {label}{estimate && <span className="ml-1.5 normal-case tracking-normal font-bold text-amber-600 dark:text-amber-400">est.</span>}
+        </div>
+        <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shrink-0">{icon}</div>
+      </div>
+      <div className={`font-mono text-xl sm:text-2xl font-black tracking-tight truncate ${valueClass}`}>{value}</div>
+      <div className="mt-auto">{footer}</div>
     </div>
   );
 }
@@ -1878,6 +1525,11 @@ const ROLE_LABELS: Record<string, string> = {
   gross_entry: "Gross Entry Team", wins_entry: "Wins Entry Team", agent: "Agent",
 };
 
+function greeting(now: Date) {
+  const h = now.getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
 export function Dashboard() {
   const { user } = useAuth();
   const role = user?.role ?? "";
@@ -1886,18 +1538,21 @@ export function Dashboard() {
     return <AgentDashboard />;
   }
 
-  return (
-    <div className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <Badge variant="secondary" className="text-xs">{ROLE_LABELS[role] ?? role}</Badge>
-      </div>
+  const now = new Date(getServerNow());
+  const firstName = (user?.fullName ?? "").split(" ")[0];
 
-      {(role === "director" || role === "administrator") && (
-        <div className="mb-6">
-          <LiveSalesSection />
+  return (
+    <div className="p-4 sm:p-6 space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+            {now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </div>
+          <h1 className="text-2xl font-black tracking-tight mt-0.5">{greeting(now)}{firstName ? `, ${firstName}` : ""}</h1>
+          <p className="text-xs text-muted-foreground font-medium mt-1">Here is how today's draw is going.</p>
         </div>
-      )}
+        <span className="self-start sm:self-auto text-[11px] font-bold px-3 py-1 rounded-full border bg-card shadow-sm">{ROLE_LABELS[role] ?? role}</span>
+      </div>
 
       {(role === "director" || role === "administrator") && <DirectorDashboard />}
       {role === "cashier" && <CashierDashboard />}

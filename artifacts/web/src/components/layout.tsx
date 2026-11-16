@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { Menu, X, Bell } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
@@ -69,7 +71,6 @@ function NavLink({ item }: { item: NavItem }) {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  if (user?.role === "agent") return <AgentLayout>{children}</AgentLayout>;
   const { data: unread } = useGetUnreadCount({
     query: { queryKey: getGetUnreadCountQueryKey(), refetchInterval: 30000 }
   });
@@ -79,10 +80,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
     user?.role && item.roles.includes(user.role)
   );
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <aside className="w-56 flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border">
-        <div className="px-4 py-4 border-b border-sidebar-border flex items-center gap-3">
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [location] = useLocation();
+  // Following a link closes the drawer.
+  useEffect(() => { setMenuOpen(false); }, [location]);
+
+  // After every hook, so the hook order is the same for every role.
+  if (user?.role === "agent") return <AgentLayout>{children}</AgentLayout>;
+
+  const sidebar = (
+    <>
+      <div className="px-4 py-4 border-b border-sidebar-border flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg overflow-hidden bg-white flex items-center justify-center p-1.5 shadow-sm border border-sidebar-border/50 flex-shrink-0">
             <img src="/company-logo-v3.png" alt="VS2000 Logo" className="w-full h-full object-contain" />
           </div>
@@ -123,11 +131,55 @@ export function Layout({ children }: { children: React.ReactNode }) {
             Sign Out
           </Button>
         </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* Desktop: the sidebar is always there. */}
+      <aside className="hidden lg:flex w-56 flex-shrink-0 flex-col bg-sidebar border-r border-sidebar-border">
+        {sidebar}
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
+      {/* Phones and tablets: the same sidebar as a drawer, so the page gets the
+          whole width instead of what is left beside a 224px menu. */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMenuOpen(false)} />
+          <aside className="absolute left-0 top-0 h-full w-64 max-w-[85vw] flex flex-col bg-sidebar border-r border-sidebar-border shadow-2xl">
+            <button type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)}
+              className="absolute right-2 top-3 h-8 w-8 inline-flex items-center justify-center rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent">
+              <X className="h-4 w-4" />
+            </button>
+            {sidebar}
+          </aside>
+        </div>
+      )}
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="lg:hidden flex items-center gap-3 px-3 h-14 border-b bg-sidebar text-sidebar-foreground shrink-0">
+          <button type="button" aria-label="Open menu" onClick={() => setMenuOpen(true)}
+            className="h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-sidebar-accent">
+            <Menu className="h-5 w-5" />
+          </button>
+          <div className="w-8 h-8 rounded-md overflow-hidden bg-white flex items-center justify-center p-1 shrink-0">
+            <img src="/company-logo-v3.png" alt="" className="w-full h-full object-contain" />
+          </div>
+          <div className="text-sm font-bold text-sidebar-primary tracking-tight">VS2000</div>
+          <Link href="/notifications" className="ml-auto relative h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-sidebar-accent" aria-label="Notifications">
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold inline-flex items-center justify-center">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </Link>
+        </header>
+
+        <main className="flex-1 overflow-y-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
