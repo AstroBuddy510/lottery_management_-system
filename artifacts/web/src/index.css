@@ -203,24 +203,29 @@
 }
 
 /*
- * Select menus that opt in with .select-scroll show a real scrollbar.
- * Radix hides the viewport's scrollbar and relies on hover arrows, which
- * nobody finds on a list of a hundred past draws.
+ * Every select menu shows a real scrollbar.
+ *
+ * Radix hides the list's scrollbar and relies on small hover arrows, which
+ * nobody finds - a long list of writers or past draws looked like it simply
+ * ended. This used to be opt-in (.select-scroll); it now applies to every
+ * dropdown on the platform. The menu's height is capped in
+ * components/ui/select.tsx, so a long list scrolls inside the menu instead
+ * of running off the screen.
  */
-.select-scroll [data-radix-select-viewport] {
+[data-radix-select-viewport] {
   scrollbar-width: thin !important;
   scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
 }
-.select-scroll [data-radix-select-viewport]::-webkit-scrollbar {
+[data-radix-select-viewport]::-webkit-scrollbar {
   display: block !important;
   width: 8px;
 }
-.select-scroll [data-radix-select-viewport]::-webkit-scrollbar-thumb {
+[data-radix-select-viewport]::-webkit-scrollbar-thumb {
   background: hsl(var(--muted-foreground) / 0.35);
   border-radius: 9999px;
   border: 2px solid hsl(var(--popover));
 }
-.select-scroll [data-radix-select-viewport]::-webkit-scrollbar-track {
+[data-radix-select-viewport]::-webkit-scrollbar-track {
   background: transparent;
 }
 
