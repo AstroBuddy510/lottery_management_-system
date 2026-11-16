@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { db, paymentsTable, agentsTable, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { recordFeeQuietly } from "../lib/finance/fees";
 import { dispatchSystemNotification } from "../lib/notify";
 import { paystackConfigured, paystackSecret, verifyWebhook } from "../lib/paystack";
 import { handlePurchaseWebhook } from "./writer-token-purchases";
@@ -295,6 +296,16 @@ export const handleAgentPaymentWebhook: RequestHandler = async (req, res) => {
         paystackReference: reference,
       })
       .returning();
+
+    if (newPayment) {
+      const fees = verifyData.data.fees;
+      recordFeeQuietly({
+        reference, kind: "collection", sourceType: "agency_payment", sourceId: newPayment.id,
+        grossMinor: Number(verifyData.data.amount) || 0,
+        feeMinor: typeof fees === "number" ? fees : null,
+        capturedFrom: "webhook", occurredAt: verifyData.data.paid_at ?? new Date(),
+      });
+    }
 
     // Update Agent's outstanding debt
     const [agentToUpdate] = await db

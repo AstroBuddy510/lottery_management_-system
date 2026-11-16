@@ -70,7 +70,7 @@ export function verifyWebhook(req: Request): WebhookCheck {
  */
 export async function verifyCharge(
   reference: string,
-): Promise<{ ok: boolean; amountMinor?: number; reason?: string }> {
+): Promise<{ ok: boolean; amountMinor?: number; feesMinor?: number | null; paidAt?: string | null; reason?: string }> {
   if (!paystackConfigured()) return { ok: false, reason: "Paystack is not configured" };
 
   const res = await fetch(
@@ -79,11 +79,19 @@ export async function verifyCharge(
   );
   const data = (await res.json().catch(() => ({}))) as {
     status?: boolean;
-    data?: { status?: string; amount?: number };
+    data?: { status?: string; amount?: number; fees?: number | null; paid_at?: string | null };
   };
 
   if (!res.ok || !data.status || data.data?.status !== "success") {
     return { ok: false, reason: data.data?.status ?? "verification failed" };
   }
-  return { ok: true, amountMinor: data.data?.amount ?? 0 };
+  // The fee Paystack kept, as it reports it. Never estimated here: a missing
+  // figure stays missing and is reconciled from the settlement report.
+  const fees = data.data?.fees;
+  return {
+    ok: true,
+    amountMinor: data.data?.amount ?? 0,
+    feesMinor: typeof fees === "number" && Number.isFinite(fees) ? fees : null,
+    paidAt: data.data?.paid_at ?? null,
+  };
 }

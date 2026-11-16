@@ -7,6 +7,7 @@ import { quoteDueLedgers, currentWriterCommissionPct } from "../lib/postpaid";
 import { dispatchSystemNotification } from "../lib/notify";
 import { logger } from "../lib/logger";
 import { paystackConfigured, paystackSecret, verifyWebhook, verifyCharge } from "../lib/paystack";
+import { recordFeeQuietly } from "../lib/finance/fees";
 import { toMinorUnits } from "../lib/money-input";
 
 const router = Router();
@@ -457,6 +458,14 @@ export const handleSettlementWebhook: RequestHandler = async (req, res) => {
       ),
     )
     .returning();
+
+  if (updated) {
+    recordFeeQuietly({
+      reference, kind: "collection", sourceType: "postpaid_ledger", sourceId: updated.id,
+      grossMinor: charge.amountMinor ?? 0, feeMinor: charge.feesMinor ?? null,
+      capturedFrom: "webhook", occurredAt: charge.paidAt ?? new Date(),
+    });
+  }
 
   res.status(200).json({ message: updated ? "Settled" : "Already processed" });
 };

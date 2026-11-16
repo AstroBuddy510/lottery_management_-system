@@ -80,6 +80,12 @@ export const masterWalletLedgerTable = pgTable(
     /** A bank or transfer reference on a funding entry; Paystack's on a disbursement. */
     reference: varchar("reference", { length: 120 }),
     note: text("note"),
+    /**
+     * Set on an entry that undoes an earlier one - the test top-ups of
+     * November 2026 are the first. The finance reports leave both the entry
+     * and its reversal out; the ledger keeps both.
+     */
+    reversesId: uuid("reverses_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

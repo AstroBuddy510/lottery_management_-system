@@ -191,8 +191,8 @@ export async function initiateTransfer(opts: {
  */
 export async function verifyTransfer(
   reference: string,
-): Promise<TransferOutcome | { state: "not_found" } | { state: "success"; transferCode: string | null; amountMinor: number }> {
-  const result = await call<{ status?: string; transfer_code?: string; amount?: number }>(
+): Promise<TransferOutcome | { state: "not_found" } | { state: "success"; transferCode: string | null; amountMinor: number; feeMinor: number | null }> {
+  const result = await call<{ status?: string; transfer_code?: string; amount?: number; fee_charged?: number; fee?: number }>(
     "GET",
     `/transfer/verify/${encodeURIComponent(reference)}`,
   );
@@ -204,7 +204,11 @@ export async function verifyTransfer(
   }
   const outcome = outcomeFor(result.data.status, result.data.transfer_code ?? null, result.message);
   if (outcome.state === "success") {
-    return { ...outcome, amountMinor: result.data.amount ?? 0 };
+    // fee_charged is what Paystack took for this transfer. Older responses
+    // carry no fee at all; then it is null and waits for the settlement report.
+    const fee = typeof result.data.fee_charged === "number" ? result.data.fee_charged
+      : typeof result.data.fee === "number" ? result.data.fee : null;
+    return { ...outcome, amountMinor: result.data.amount ?? 0, feeMinor: fee };
   }
   return outcome;
 }

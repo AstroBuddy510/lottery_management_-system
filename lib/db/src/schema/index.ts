@@ -31,3 +31,4 @@ export * from "./writer-model-requests";
 export * from "./auth-throttle";
 export * from "./master-wallet";
 export * from "./thermal-rolls";
+export * from "./finance";

@@ -15,6 +15,7 @@ import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { dispatchSystemNotification } from "../lib/notify";
 import { paystackConfigured, paystackSecret, verifyWebhook, verifyCharge } from "../lib/paystack";
+import { recordFeeQuietly } from "../lib/finance/fees";
 import { quoteUnits } from "../lib/unit-pricing";
 import { creditWallet } from "../lib/wallet";
 import { logger } from "../lib/logger";
@@ -196,6 +197,13 @@ export const handlePurchaseWebhook: RequestHandler = async (req, res) => {
     res.status(200).json({ message: "Already processed" });
     return;
   }
+
+  // The fee Paystack kept on this collection, booked against the reference.
+  recordFeeQuietly({
+    reference, kind: "collection", sourceType: "unit_purchase", sourceId: updated.id,
+    grossMinor: charge.amountMinor ?? expectedMinor, feeMinor: charge.feesMinor ?? null,
+    capturedFrom: "webhook", occurredAt: charge.paidAt ?? new Date(),
+  });
 
   const [writer] = await db
     .select({ fullName: writersTable.fullName, fullCode: writersTable.fullCode })

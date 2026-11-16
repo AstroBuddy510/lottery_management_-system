@@ -37,6 +37,7 @@ import { Layout } from "@/components/layout";
  */
 const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.Dashboard })));
 const LiveTicker = lazy(() => import("@/pages/live-ticker"));
+const Finance = lazy(() => import("@/pages/finance"));
 const Users = lazy(() => import("@/pages/users").then((m) => ({ default: m.Users })));
 const Settings = lazy(() => import("@/pages/settings").then((m) => ({ default: m.Settings })));
 const Games = lazy(() => import("@/pages/games").then((m) => ({ default: m.Games })));
@@ -140,6 +141,9 @@ function Router() {
         {() => <ProtectedRoute component={Dashboard} />}
       </Route>
 
+      <Route path="/finance">
+        {() => <ProtectedRoute component={Finance} roles={['director', 'administrator', 'cashier']} />}
+      </Route>
       <Route path="/live-ticker">
         {() => <ProtectedRoute component={LiveTicker} roles={['director', 'administrator']} />}
       </Route>

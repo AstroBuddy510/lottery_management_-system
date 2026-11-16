@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Menu, X, Bell, ChevronDown, LayoutDashboard, UserRound, TrendingUp, Trophy, CreditCard, BadgeCheck,
   ReceiptText, Package, FileBarChart, Settings, Calculator, Building2, Scale, Users, ScanSearch, Receipt,
-  Wallet, PiggyBank, ShieldAlert, Gamepad2, Contact, Landmark, Radio, type LucideIcon,
+  Wallet, PiggyBank, ShieldAlert, Gamepad2, Contact, Landmark, Radio, HandCoins, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-client-react";
@@ -46,6 +46,7 @@ const NAV_ITEMS: NavEntry[] = [
   { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "agent"], icon: TrendingUp },
   { label: "Wins Entries", path: "/entries/wins", roles: ["wins_entry", "agent"], icon: Trophy },
   { label: "Payments", path: "/payments", roles: ["cashier", ...OFFICE], icon: CreditCard },
+  { label: "Finance & Statements", path: "/finance", roles: [...OFFICE, "cashier"], icon: HandCoins },
   { label: "POS Wins Payment", path: "/pos-wins-payment", roles: ["cashier"], icon: BadgeCheck },
   // Directors and administrators reach this as a tab of Reserve Fund.
   { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier"], icon: ReceiptText },

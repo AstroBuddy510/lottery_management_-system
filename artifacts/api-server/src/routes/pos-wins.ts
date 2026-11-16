@@ -17,6 +17,7 @@ import { and, desc, eq, gte, lte, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { livePaystackBalance } from "../lib/finance/paystack-balance";
 import { submitClaim, promoteAwaitingFunds } from "../lib/payout-claims";
 import {
   approveAndDisburse,
@@ -694,6 +695,27 @@ router.post("/master-wallet/fund", requireAuth, requireRole("director"), async (
   const amount = parsed.success ? parseAmount(parsed.data.amount) : null;
   if (!parsed.success || !amount) {
     res.status(400).json({ error: "Enter an amount above zero and the bank or transfer reference for it" });
+    return;
+  }
+
+  // The wallet records money that is in Paystack; it cannot be the source of
+  // it. A top-up is accepted only when Paystack is already holding enough to
+  // cover everything the wallet would then claim - available and held
+  // together. This is what stops a figure typed into the screen from becoming
+  // "money" a cashier is shown as able to pay out.
+  const live = await livePaystackBalance();
+  if (live === null) {
+    res.status(503).json({ error: "Paystack's balance could not be checked, so the top-up was not recorded. Try again once Paystack is reachable." });
+    return;
+  }
+  const current = await readWallet(db);
+  const wouldClaim = Number(current.available) + Number(current.held) + Number(amount);
+  if (wouldClaim > live + 0.005) {
+    res.status(409).json({
+      error: `Paystack is holding GH₵${live.toFixed(2)}. With this top-up the wallet would claim GH₵${wouldClaim.toFixed(2)}. Deposit the money into Paystack first, then record it here.`,
+      paystackBalance: live.toFixed(2),
+      walletWouldClaim: wouldClaim.toFixed(2),
+    });
     return;
   }
 

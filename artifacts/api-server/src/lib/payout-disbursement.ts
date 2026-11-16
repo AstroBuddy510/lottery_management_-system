@@ -6,6 +6,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { recordFeeQuietly } from "./finance/fees";
 import { disburse, type Actor } from "./master-wallet";
 import {
   createMomoRecipient,
@@ -115,6 +116,23 @@ export async function markPaid(payoutId: string, reference: string): Promise<boo
   });
 
   if (!booked) return false;
+
+  // The fee Paystack charged for this transfer, as Paystack reports it.
+  // Outside the payment's transaction: a fee lookup that fails must never
+  // un-pay a winner. A missing figure is picked up by the Fees sync later.
+  void (async () => {
+    try {
+      const v = await verifyTransfer(reference);
+      recordFeeQuietly({
+        reference, kind: "transfer", sourceType: "payout_request", sourceId: payoutId,
+        grossMinor: toMinorUnits(Number(booked.payoutAmount).toFixed(2)),
+        feeMinor: v.state === "success" && "feeMinor" in v ? v.feeMinor : null,
+        capturedFrom: "verify", occurredAt: new Date(),
+      });
+    } catch (err) {
+      logger.warn({ err, payoutId }, "[PAYOUT] paid; fee lookup failed and will be retried by the Fees sync");
+    }
+  })();
 
   // After the commit, never inside it: a text that fails to send must not
   // un-pay a payout.
