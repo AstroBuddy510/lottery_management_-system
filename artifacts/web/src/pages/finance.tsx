@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BadgePercent, BookOpen, Building2, CalendarCheck, History, Landmark, Lock, Package, Percent, Scale, Store, Trophy } from "lucide-react";
+import { BadgePercent, BookOpen, Building2, CalendarCheck, FileStack, History, Landmark, Lock, Package, Percent, Scale, ShieldCheck, Store, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
@@ -14,6 +14,8 @@ import { AgenciesTab } from "@/components/finance/agencies-tab";
 import { CommissionsTab } from "@/components/finance/commissions-tab";
 import { InventoryTab } from "@/components/finance/inventory-tab";
 import { PayrollTab } from "@/components/finance/payroll-tab";
+import { StatementsTab } from "@/components/finance/statements-tab";
+import { ReconciliationTab } from "@/components/finance/reconciliation-tab";
 
 /**
  * Finance & Statements.
@@ -30,6 +32,8 @@ const MGMT = ["director", "administrator"];
 
 const TABS: TabDef[] = [
   { value: "position", label: "Position", icon: Scale, roles: MGMT, render: () => <PositionTab /> },
+  { value: "statements", label: "Statements", icon: FileStack, roles: MGMT, render: () => <StatementsTab /> },
+  { value: "reconciliation", label: "Reconciliation", icon: ShieldCheck, roles: MGMT, render: () => <ReconciliationTab /> },
   { value: "cash-book", label: "Cash Book", icon: BookOpen, roles: [...MGMT, "cashier"], render: (r) => <CashBookTab role={r} /> },
   { value: "accounts", label: "Accounts", icon: Building2, roles: [...MGMT, "cashier"], render: (r) => <AccountsTab role={r} /> },
   { value: "funds", label: "Funds", icon: Lock, roles: MGMT, render: (r) => <FundsTab role={r} /> },
