@@ -16,12 +16,12 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/dashboard", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
-  { label: "Agency Dashboard", path: "/agencies", roles: ["director", "administrator"] },
+  { label: "Agency Overview", path: "/agencies", roles: ["director", "administrator"] },
   { label: "Users & Agents", path: "/users", roles: ["administrator", "director", "cashier"] },
-  { label: "Games", path: "/games", roles: ["administrator", "director"] },
+  { label: "Games Management", path: "/games", roles: ["administrator", "director"] },
   { label: "Risk Management", path: "/risk-management", roles: ["administrator", "director"] },
   { label: "Ticket Lookup", path: "/ticket-lookup", roles: ["administrator", "director", "cashier"] },
-  { label: "Settings", path: "/settings", roles: ["administrator", "director"] },
+  { label: "System Settings", path: "/settings", roles: ["administrator", "director"] },
   { label: "My Writers", path: "/my-writers", roles: ["agent"] },
   { label: "Gross & Wins", path: "/gross-wins", roles: ["director", "administrator"] },
   { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "agent"] },
