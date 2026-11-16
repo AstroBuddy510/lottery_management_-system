@@ -24,7 +24,7 @@ const router = Router();
  * so a cancellation does not look like a sale vanishing.
  */
 
-const FEED_LIMIT = 100;
+const FEED_LIMIT = 200;
 const SERIES_MINUTES = 60;
 
 function todayBounds() {

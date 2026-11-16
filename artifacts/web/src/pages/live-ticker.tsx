@@ -6,6 +6,7 @@ import {
 import {
   Activity, Radio, Ticket, Coins, Users as UsersIcon, Building2, Flame, Pause, Play,
   Search, MonitorSmartphone, MapPin, WifiOff, Loader2, ShieldAlert, RefreshCw, Clock,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -72,17 +73,17 @@ function useNow(ms: number) {
 const BAR = "hsl(var(--chart-2))";
 const ACCENT = "hsl(var(--chart-1))";
 
-function Panel({ title, subtitle, icon, right, children, className = "", bodyClassName = "p-5" }: {
+function Panel({ title, subtitle, icon, right, children, className = "", bodyClassName = "p-6" }: {
   title: string; subtitle?: string; icon?: React.ReactNode; right?: React.ReactNode;
   children: React.ReactNode; className?: string; bodyClassName?: string;
 }) {
   return (
-    <section className={`rounded-2xl border bg-card shadow-sm flex flex-col min-w-0 ${className}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-3 border-b">
-        <div className="flex items-center gap-2.5 min-w-0">
-          {icon && <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shrink-0">{icon}</div>}
+    <section className={`rounded-3xl border border-border/80 bg-card shadow-sm flex flex-col min-w-0 overflow-hidden ${className}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-5 pb-4 border-b">
+        <div className="flex items-center gap-3 min-w-0">
+          {icon && <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary border border-primary/10 flex items-center justify-center shrink-0 dark:bg-muted dark:text-foreground dark:border-border">{icon}</div>}
           <div className="min-w-0">
-            <h2 className="text-sm font-bold tracking-tight">{title}</h2>
+            <h2 className="text-base font-bold tracking-tight text-foreground">{title}</h2>
             {subtitle && <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>}
           </div>
         </div>
@@ -120,7 +121,7 @@ function StatTile({ label, value, sub, icon, accent }: {
   label: string; value: string; sub?: React.ReactNode; icon: React.ReactNode; accent: string;
 }) {
   return (
-    <div className="relative rounded-2xl border bg-card shadow-sm p-4 overflow-hidden min-w-0">
+    <div className="relative rounded-2xl border border-border/80 bg-card shadow-sm p-5 overflow-hidden min-w-0">
       <div className={`absolute inset-x-0 top-0 h-0.5 ${accent}`} />
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground truncate">{label}</span>
@@ -165,6 +166,54 @@ function ChartTip({ children }: { children: React.ReactNode }) {
   return <div className="rounded-lg border bg-popover text-popover-foreground shadow-md px-3 py-2 text-xs space-y-0.5">{children}</div>;
 }
 
+/**
+ * Page controls, drawn like the ones on the dashboard and Agency Overview so
+ * paging feels the same everywhere in the portal.
+ */
+function Pager({ page, totalPages, onPage, total, pageSize, noun, className = "" }: {
+  page: number; totalPages: number; onPage: (p: number) => void; total: number; pageSize: number; noun: string; className?: string;
+}) {
+  if (total === 0) return null;
+  const list: (number | "…")[] = [];
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || Math.abs(i - page) <= 1) list.push(i);
+    else if (list[list.length - 1] !== "…") list.push("…");
+  }
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  const btn = "h-8 w-8 inline-flex items-center justify-center rounded-lg border bg-background text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:pointer-events-none";
+  return (
+    <div className={`flex flex-col sm:flex-row items-center justify-between gap-3 ${className}`}>
+      <span className="text-xs text-muted-foreground">
+        Showing <span className="font-semibold text-foreground tabular-nums">{from}–{to}</span> of{" "}
+        <span className="font-semibold text-foreground tabular-nums">{total.toLocaleString()}</span> {noun}
+        <span className="hidden sm:inline"> · {pageSize} per page</span>
+      </span>
+      {totalPages > 1 && (
+        <nav className="flex items-center gap-1" aria-label={`${noun} pages`}>
+          <button type="button" aria-label="First page" title="First page" className={btn} disabled={page === 1} onClick={() => onPage(1)}><ChevronsLeft className="w-4 h-4" /></button>
+          <button type="button" aria-label="Previous page" title="Previous page" className={btn} disabled={page === 1} onClick={() => onPage(page - 1)}><ChevronLeft className="w-4 h-4" /></button>
+          {list.map((n, i) => n === "…" ? <span key={`g${i}`} className="px-1 text-xs text-muted-foreground">…</span> : (
+            <button key={n} type="button" onClick={() => onPage(n)} aria-current={n === page ? "page" : undefined}
+              className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-semibold tabular-nums ${n === page ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{n}</button>
+          ))}
+          <button type="button" aria-label="Next page" title="Next page" className={btn} disabled={page === totalPages} onClick={() => onPage(page + 1)}><ChevronRight className="w-4 h-4" /></button>
+          <button type="button" aria-label="Last page" title="Last page" className={btn} disabled={page === totalPages} onClick={() => onPage(totalPages)}><ChevronsRight className="w-4 h-4" /></button>
+        </nav>
+      )}
+    </div>
+  );
+}
+
+/** Keep a page number inside 1..totalPages as the list grows and shrinks. */
+function usePaging(total: number, pageSize: number, resetKey: string) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  useEffect(() => setPage(1), [resetKey]);
+  const safe = Math.min(page, totalPages);
+  return { page: safe, setPage, totalPages, start: (safe - 1) * pageSize, end: safe * pageSize };
+}
+
 /* ── Top 10 numbers ──────────────────────────────────────────────────────── */
 
 type Metric = "count" | "stake";
@@ -206,7 +255,7 @@ function TopNumbers({ state, hot }: { state: TickerState; hot: Set<number> }) {
           <p className="text-xs">The chart fills in as the first POS sales come through.</p>
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[13rem_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
           {/* The leader, stated plainly - the one thing to read off this panel. */}
           <div className="flex lg:flex-col gap-3 lg:gap-4">
             <div className="flex-1 rounded-xl border bg-gradient-to-br from-[hsl(var(--chart-1)/0.12)] to-transparent p-4">
@@ -306,6 +355,8 @@ function TopNumbers({ state, hot }: { state: TickerState; hot: Set<number> }) {
 
 /* ── Agency performance ──────────────────────────────────────────────────── */
 
+const AGENCIES_PER_PAGE = 6;
+
 function AgencyPerformance({ state, now }: { state: TickerState; now: number }) {
   const rows = useMemo(() => {
     const writersBy = new Map<string, number>();
@@ -316,20 +367,24 @@ function AgencyPerformance({ state, now }: { state: TickerState; now: number }) 
   }, [state.agencies, state.writers]);
 
   const max = rows[0]?.stakes ?? 0;
+  const { page, setPage, totalPages, start, end } = usePaging(rows.length, AGENCIES_PER_PAGE, "");
+  const visible = rows.slice(start, end);
 
   return (
     <Panel
       title="Agency performance"
-      subtitle={`${rows.length} agenc${rows.length === 1 ? "y" : "ies"} selling today · ranked by stakes${rows.length > 5 ? " · scroll for all" : ""}`}
+      subtitle={`${rows.length} agenc${rows.length === 1 ? "y" : "ies"} selling today · ranked by amount staked`}
       icon={<Building2 className="w-4 h-4" />}
       className="xl:col-span-3"
-      bodyClassName="p-0"
+      bodyClassName="p-0 flex flex-col"
     >
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground py-10 text-center">No agency has sold yet today.</p>
       ) : (
-        <ul className="space-y-3.5 p-5 max-h-[21rem] overflow-y-auto">
-          {rows.map((a, i) => {
+        <>
+        <ul className="flex-1 space-y-4 px-6 py-5 max-h-[24rem] overflow-y-auto overscroll-contain thin-scroll">
+          {visible.map((a, idx) => {
+            const i = start + idx;
             const share = state.stakes > 0 ? (a.stakes / state.stakes) * 100 : 0;
             const width = max > 0 ? Math.max((a.stakes / max) * 100, 1.5) : 0;
             return (
@@ -353,6 +408,16 @@ function AgencyPerformance({ state, now }: { state: TickerState; now: number }) 
             );
           })}
         </ul>
+        <Pager
+          className="px-6 py-4 border-t bg-muted/20"
+          page={page}
+          totalPages={totalPages}
+          onPage={setPage}
+          total={rows.length}
+          pageSize={AGENCIES_PER_PAGE}
+          noun={rows.length === 1 ? "agency" : "agencies"}
+        />
+        </>
       )}
     </Panel>
   );
@@ -381,6 +446,7 @@ function StakesPerMinute({ state, now }: { state: TickerState; now: number }) {
       subtitle="The last hour"
       icon={<Activity className="w-4 h-4" />}
       className="xl:col-span-2"
+      bodyClassName="p-6 flex flex-col"
     >
       <div className="flex flex-wrap gap-x-6 gap-y-1 mb-3">
         <div>
@@ -398,7 +464,7 @@ function StakesPerMinute({ state, now }: { state: TickerState; now: number }) {
           </div>
         )}
       </div>
-      <div className="h-[190px]" aria-label={`Stakes per minute over the last hour: ${fmtGHS(hour.stakes)} from ${hour.tickets} tickets`} role="img">
+      <div className="flex-1 min-h-[190px] h-[190px] xl:h-auto" aria-label={`Stakes per minute over the last hour: ${fmtGHS(hour.stakes)} from ${hour.tickets} tickets`} role="img">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap={1}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
@@ -468,7 +534,7 @@ function SalesMix({ state }: { state: TickerState }) {
 
   return (
     <Panel title="Sales mix" subtitle="By payment channel, game and bet type" icon={<Ticket className="w-4 h-4" />}>
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-8 md:grid-cols-3 md:divide-x md:[&>*]:px-0 md:[&>*+*]:pl-8">
         <div>
           <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-2">Channel</div>
           <div className="flex h-3 rounded-full overflow-hidden bg-muted gap-[2px]" aria-hidden="true">
@@ -488,11 +554,11 @@ function SalesMix({ state }: { state: TickerState }) {
         </div>
         <div>
           <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-2">Games</div>
-          <ShareList rows={games.slice(0, 5)} total={state.stakes} />
+          <div className="max-h-[13.5rem] overflow-y-auto overscroll-contain pr-1 thin-scroll"><ShareList rows={games} total={state.stakes} /></div>
         </div>
         <div>
           <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-2">Bet types</div>
-          <ShareList rows={betTypes.slice(0, 6)} total={state.stakes} />
+          <div className="max-h-[13.5rem] overflow-y-auto overscroll-contain pr-1 thin-scroll"><ShareList rows={betTypes} total={state.stakes} /></div>
         </div>
       </div>
     </Panel>
@@ -502,6 +568,7 @@ function SalesMix({ state }: { state: TickerState }) {
 /* ── Live feed ───────────────────────────────────────────────────────────── */
 
 const ALL = "_all";
+const FEED_PAGE_SIZE = 20;
 
 function SaleNumbers({ sale }: { sale: TickerSale }) {
   const nums = (sale.numbers ?? "").split(/[^0-9]+/).filter((x) => /^[0-9]{1,3}$/.test(x)).map(Number);
@@ -532,15 +599,30 @@ function LiveFeed({ state, fresh, now }: { state: TickerState; fresh: Set<string
   const [agency, setAgency] = useState(ALL);
   const [game, setGame] = useState(ALL);
   const [q, setQ] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [pageState, setPageState] = useState(1);
 
-  const source = paused && frozen ? frozen : state.feed;
-  const queued = paused && frozen
+  // Page one is live. Any other page holds the list still - otherwise every
+  // new sale would push the row being read onto the next page - and so does
+  // Pause. Either way the sales keep counting in, and one click returns to
+  // the live top.
+  const holding = paused || pageState > 1;
+  const source = holding && frozen ? frozen : state.feed;
+  const queued = holding && frozen
     ? (() => { const i = state.feed.findIndex((f) => f.id === frozen[0]?.id); return i === -1 ? state.feed.length : i; })()
     : 0;
 
+  const goLive = () => { setPaused(false); setFrozen(null); setPageState(1); };
   const togglePause = () => {
-    if (paused) { setPaused(false); setFrozen(null); }
-    else { setFrozen(state.feed); setPaused(true); }
+    if (paused) { goLive(); return; }
+    if (!holding) setFrozen(state.feed);
+    setPaused(true);
+  };
+  const goPage = (n: number) => {
+    if (n > 1 && !holding) setFrozen(state.feed);
+    if (n === 1 && !paused) setFrozen(null);
+    setPageState(n);
+    scrollRef.current?.scrollTo({ top: 0 });
   };
 
   const agencies = useMemo(() => [...state.agencies.values()].sort((a, b) => a.agencyName.localeCompare(b.agencyName)), [state.agencies]);
@@ -558,17 +640,31 @@ function LiveFeed({ state, fresh, now }: { state: TickerState; fresh: Set<string
 
   const filtered = agency !== ALL || game !== ALL || q.trim() !== "";
 
+  // A new filter starts from its own first page.
+  const filterKey = `${agency}|${game}|${q.trim().toLowerCase()}`;
+  const lastFilterKey = useRef(filterKey);
+  useEffect(() => {
+    if (lastFilterKey.current === filterKey) return;
+    lastFilterKey.current = filterKey;
+    if (pageState !== 1) goPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / FEED_PAGE_SIZE));
+  const page = Math.min(pageState, totalPages);
+  const pageRows = rows.slice((page - 1) * FEED_PAGE_SIZE, page * FEED_PAGE_SIZE);
+
   return (
     <Panel
       title="Live feed"
-      subtitle={`Every stake as it is sold · newest first · ${rows.length}${filtered ? " matching" : ""} of the latest ${source.length}`}
+      subtitle={`Every stake as it is sold · newest first · ${state.tickets.toLocaleString()} today${holding ? " · held while you read" : ""}`}
       icon={<Radio className="w-4 h-4" />}
       bodyClassName="p-0"
       right={
         <div className="flex items-center gap-2">
-          {paused && queued > 0 && (
-            <button onClick={togglePause} className="text-[11px] font-bold px-2.5 h-7 rounded-full bg-[hsl(var(--chart-1))] text-white">
-              {queued} new · resume
+          {holding && queued > 0 && (
+            <button onClick={goLive} className="text-[11px] font-bold px-3 h-7 rounded-full bg-[hsl(var(--chart-1))] text-white shadow-sm">
+              {queued} new · back to live
             </button>
           )}
           <Button variant={paused ? "default" : "outline"} size="sm" className="h-7 text-[11px] gap-1.5" onClick={togglePause} aria-pressed={paused}>
@@ -579,7 +675,7 @@ function LiveFeed({ state, fresh, now }: { state: TickerState; fresh: Set<string
       }
     >
       {/* Filters, one row above the list. */}
-      <div className="flex flex-col md:flex-row gap-2 px-5 py-3 border-b bg-muted/20">
+      <div className="flex flex-col md:flex-row gap-2 px-6 py-4 border-b bg-muted/20">
         <div className="relative flex-1 min-w-0">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -615,38 +711,38 @@ function LiveFeed({ state, fresh, now }: { state: TickerState; fresh: Set<string
       ) : (
         <>
           {/* Desktop: a table with a header that stays put while the list scrolls. */}
-          <div className="hidden md:block max-h-[36rem] overflow-auto">
-            <table className="w-full text-xs">
+          <div ref={scrollRef} className="hidden md:block max-h-[38rem] overflow-auto overscroll-contain thin-scroll">
+            <table className="w-full min-w-[60rem] text-xs">
               <thead className="sticky top-0 z-10 bg-card shadow-[0_1px_0_hsl(var(--border))]">
                 <tr className="text-left text-[10px] font-black uppercase tracking-wider text-muted-foreground">
-                  <th className="px-5 py-2.5 font-black">Time</th>
-                  <th className="px-3 py-2.5 font-black">Writer</th>
-                  <th className="px-3 py-2.5 font-black">Agent</th>
-                  <th className="px-3 py-2.5 font-black">Terminal · location</th>
-                  <th className="px-3 py-2.5 font-black">Game · bet</th>
-                  <th className="px-3 py-2.5 font-black">Numbers</th>
-                  <th className="px-5 py-2.5 font-black text-right">Stake</th>
+                  <th className="px-6 py-3 font-black">Time</th>
+                  <th className="px-3 py-3 font-black">Writer</th>
+                  <th className="px-3 py-3 font-black">Agent</th>
+                  <th className="px-3 py-3 font-black">Terminal · location</th>
+                  <th className="px-3 py-3 font-black">Game · bet</th>
+                  <th className="px-3 py-3 font-black">Numbers</th>
+                  <th className="px-6 py-3 font-black text-right">Stake</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((s) => {
+                {pageRows.map((s) => {
                   const isNew = fresh.has(s.id);
                   const dead = s.status === "cancelled" || s.status === "void";
                   return (
                     <tr key={s.id} className={`border-b last:border-0 align-top hover:bg-muted/40 ${isNew ? "ticker-flash" : ""}`}>
-                      <td className="px-5 py-2.5 whitespace-nowrap">
+                      <td className="px-6 py-3 whitespace-nowrap">
                         <div className="font-mono font-bold tabular-nums" title={fmtStamp(s.createdAt)}>{fmtTime(s.createdAt)}</div>
                         <div className="text-[10px] text-muted-foreground font-mono">{s.ticketNumber}</div>
                       </td>
-                      <td className="px-3 py-2.5 min-w-0">
+                      <td className="px-3 py-3 min-w-0">
                         <div className="font-semibold truncate max-w-[11rem]">{s.writerName}</div>
                         <div className="font-mono text-[10px] text-muted-foreground">{s.writerCode}</div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-3">
                         <div className="font-mono font-bold">{s.agentCode}</div>
                         <div className="text-[10px] text-muted-foreground truncate max-w-[9rem]">{s.agencyName}</div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-3">
                         <div className="flex items-center gap-1 font-mono text-[11px]">
                           <MonitorSmartphone className="w-3 h-3 text-muted-foreground shrink-0" />
                           {s.terminalSerial ?? <span className="text-muted-foreground font-sans italic">No terminal</span>}
@@ -655,15 +751,15 @@ function LiveFeed({ state, fresh, now }: { state: TickerState; fresh: Set<string
                           <MapPin className="w-3 h-3 shrink-0" />{s.location ?? "Location not set"}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-3">
                         <div className="font-semibold truncate max-w-[10rem]">{s.gameName} <span className="font-mono text-[10px] text-muted-foreground">#{s.eventNumber}</span></div>
-                        <div className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 whitespace-nowrap">
                           {s.betType ?? "—"}
                           <span className={`px-1 rounded text-[9px] font-black uppercase ${s.model === "prepaid" ? "bg-primary/10 text-primary dark:bg-muted dark:text-foreground" : "bg-[hsl(var(--chart-1)/0.12)] text-[hsl(var(--chart-1))]"}`}>{s.model}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5"><SaleNumbers sale={s} /></td>
-                      <td className="px-5 py-2.5 text-right whitespace-nowrap">
+                      <td className="px-3 py-3"><SaleNumbers sale={s} /></td>
+                      <td className="px-6 py-3 text-right whitespace-nowrap">
                         <div className={`font-black tabular-nums text-sm ${dead ? "line-through text-muted-foreground" : ""}`}>{fmtGHS(s.stake)}</div>
                         <div className="flex justify-end gap-1 mt-0.5">
                           {isNew && <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-[hsl(var(--chart-1))] text-white">New</span>}
@@ -678,12 +774,12 @@ function LiveFeed({ state, fresh, now }: { state: TickerState; fresh: Set<string
           </div>
 
           {/* Phone: one card per sale. */}
-          <ul className="md:hidden max-h-[36rem] overflow-y-auto divide-y">
-            {rows.map((s) => {
+          <ul className="md:hidden max-h-[38rem] overflow-y-auto overscroll-contain divide-y thin-scroll">
+            {pageRows.map((s) => {
               const isNew = fresh.has(s.id);
               const dead = s.status === "cancelled" || s.status === "void";
               return (
-                <li key={s.id} className={`px-4 py-3 ${isNew ? "ticker-flash" : ""}`}>
+                <li key={s.id} className={`px-5 py-3.5 ${isNew ? "ticker-flash" : ""}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-sm font-bold truncate">{s.writerName} <span className="font-mono text-[10px] text-muted-foreground">{s.writerCode}</span></div>
@@ -712,9 +808,19 @@ function LiveFeed({ state, fresh, now }: { state: TickerState; fresh: Set<string
           </ul>
         </>
       )}
-      <div className="px-5 py-2 border-t text-[10px] text-muted-foreground flex items-center justify-between gap-2">
-        <span>Times are Accra (GMT). Hover a time for the exact second.</span>
-        <span className="tabular-nums">Last sale {ago(state.lastSaleAt, now)}</span>
+      <div className="px-6 py-4 border-t bg-muted/20 space-y-3">
+        <Pager
+          page={page}
+          totalPages={totalPages}
+          onPage={goPage}
+          total={rows.length}
+          pageSize={FEED_PAGE_SIZE}
+          noun={filtered ? "matching sales" : "latest sales"}
+        />
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground">
+          <span>Times are Accra (GMT). Hover a time for the exact second.</span>
+          <span className="tabular-nums">Last sale {ago(state.lastSaleAt, now)}</span>
+        </div>
       </div>
     </Panel>
   );
@@ -755,19 +861,23 @@ export default function LiveTicker() {
   const activeAgencies = state ? state.agencies.size : 0;
 
   return (
-    <div className="space-y-5">
+    // p-6 space-y-6: the same root as Inventory and the other admin pages,
+    // so the cards keep the same 24px gutter from the menu and the window
+    // edge. min-w-0 lets wide children (the feed table) scroll inside their
+    // own card instead of pushing the page sideways.
+    <div className="p-4 sm:p-6 space-y-6 min-w-0">
       {/* ── Header ── */}
-      <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-            <Radio className="w-5 h-5" />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-border/80 bg-card/60 backdrop-blur-md p-5 sm:p-6 rounded-3xl shadow-sm">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="p-3 bg-primary/10 text-primary rounded-2xl shadow-inner border border-primary/10 shrink-0">
+            <Radio className="w-7 h-7" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-2xl font-black tracking-tight">Live Ticker</h1>
-            <p className="text-xs text-muted-foreground truncate">Every POS stake the moment it is sold{dayLabel ? ` · ${dayLabel}` : ""}</p>
+            <h1 className="text-2xl font-black tracking-tight text-foreground">Live Ticker</h1>
+            <p className="text-xs text-muted-foreground mt-1 font-medium">Every POS stake the moment it is sold{dayLabel ? ` · ${dayLabel}` : ""}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start lg:self-center">
           <ConnectionPill connection={connection} />
           <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => void reload()} title="Reload today's figures">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
@@ -787,7 +897,7 @@ export default function LiveTicker() {
       )}
 
       {!state ? (
-        <div className="rounded-2xl border bg-card p-16 flex flex-col items-center gap-3 text-muted-foreground">
+        <div className="rounded-3xl border border-border/80 bg-card p-16 flex flex-col items-center gap-3 text-muted-foreground">
           {error ? (
             <>
               <WifiOff className="w-8 h-8 opacity-40" />
@@ -804,7 +914,7 @@ export default function LiveTicker() {
       ) : (
         <>
           {/* ── Today at a glance ── */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-2 xl:grid-cols-4 gap-4">
             <StatTile label="Stakes today" value={fmtGHS(state.stakes)} sub={`Average ${fmtGHS(avg)} a ticket`} icon={<Coins className="w-4 h-4" />} accent="bg-[hsl(var(--chart-1))]" />
             <StatTile label="Tickets sold" value={state.tickets.toLocaleString()} sub={`Last sale ${ago(state.lastSaleAt, now)}`} icon={<Ticket className="w-4 h-4" />} accent="bg-[hsl(var(--chart-2))]" />
             <StatTile label="Active writers" value={state.writers.size.toLocaleString()} sub="Sold at least one ticket today" icon={<UsersIcon className="w-4 h-4" />} accent="bg-emerald-500" />
@@ -815,7 +925,7 @@ export default function LiveTicker() {
           <TopNumbers state={state} hot={hot} />
 
           {/* ── Agency performance, and how the day is moving ── */}
-          <div className="grid gap-5 xl:grid-cols-5">
+          <div className="grid gap-6 xl:grid-cols-5">
             <AgencyPerformance state={state} now={now} />
             <StakesPerMinute state={state} now={now} />
           </div>

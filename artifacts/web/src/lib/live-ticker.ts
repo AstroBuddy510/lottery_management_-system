@@ -87,7 +87,7 @@ export type TickerState = {
 
 export type TickerConnection = "connecting" | "live" | "reconnecting" | "polling" | "forbidden";
 
-const FEED_KEEP = 300;
+const FEED_KEEP = 500;
 const RECONNECT_MAX_MS = 15_000;
 const FALLBACK_AFTER_FAILURES = 3;
 const POLL_FALLBACK_MS = 5_000;
