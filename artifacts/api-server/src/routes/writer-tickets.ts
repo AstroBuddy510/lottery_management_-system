@@ -12,6 +12,7 @@ import {
   type Mechanic,
 } from "../lib/bet-engine";
 import { debitWallet } from "../lib/wallet";
+import { announceTicketsSold } from "../lib/ticker-events";
 
 const router = Router();
 
@@ -231,6 +232,10 @@ async function sellBets(
 
     created.push(ticket);
   }
+
+  // Delivered on commit, so the Live Ticker shows the sale the moment it is
+  // real - and never one that rolled back.
+  await announceTicketsSold(tx, created.map((t) => t.id));
 
   return { tickets: created, total };
 }

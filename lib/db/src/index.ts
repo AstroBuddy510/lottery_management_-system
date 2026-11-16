@@ -60,4 +60,39 @@ pool.on("error", (err) => {
 
 export const db = drizzle(pool, { schema });
 
+/**
+ * A connection string that reaches Postgres directly, not through pgbouncer.
+ *
+ * LISTEN needs a session that stays put. Neon's pooled endpoint runs
+ * pgbouncer in transaction mode, which hands the server connection to the
+ * next client as soon as a statement finishes - so a LISTEN issued through it
+ * is silently forgotten. NOTIFY is different: it is a single statement inside
+ * a transaction and works through the pool, which is why sales keep using
+ * the ordinary pool and only the listener comes here.
+ *
+ * The Neon integration sets DATABASE_URL_UNPOOLED. Without it, the pooled
+ * hostname differs from the direct one only by "-pooler", so dropping that is
+ * the same endpoint without the bouncer.
+ */
+export function directDatabaseUrl(): string {
+  const unpooled = process.env.DATABASE_URL_UNPOOLED?.trim();
+  if (unpooled) return unpooled;
+  return (process.env.DATABASE_URL ?? "").replace("-pooler.", ".");
+}
+
+/**
+ * A single connection of its own, outside the pool, for LISTEN.
+ *
+ * The caller owns it: connect, listen, and end it when no one is watching.
+ * It is deliberately not taken from `pool` - a listener holds its connection
+ * for as long as the page is open, and the pool has three.
+ */
+export function createDirectClient(): pg.Client {
+  return new pg.Client({
+    connectionString: directDatabaseUrl(),
+    connectionTimeoutMillis: 5_000,
+    keepAlive: true,
+  });
+}
+
 export * from "./schema";

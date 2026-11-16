@@ -223,3 +223,16 @@
 .select-scroll [data-radix-select-viewport]::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/*
+ * Live Ticker: a sale that has just arrived glows for a moment, so the eye
+ * finds it without the row moving. Reduced motion shortens it to nothing via
+ * the rule above, and the "new" pill on the row still says it.
+ */
+@keyframes ticker-flash {
+  0%   { background-color: hsl(var(--chart-1) / 0.22); }
+  100% { background-color: transparent; }
+}
+.ticker-flash {
+  animation: ticker-flash 2.4s ease-out 1;
+}

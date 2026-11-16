@@ -36,6 +36,7 @@ import { Layout } from "@/components/layout";
  * React.lazy the default shape it expects.
  */
 const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.Dashboard })));
+const LiveTicker = lazy(() => import("@/pages/live-ticker"));
 const Users = lazy(() => import("@/pages/users").then((m) => ({ default: m.Users })));
 const Settings = lazy(() => import("@/pages/settings").then((m) => ({ default: m.Settings })));
 const Games = lazy(() => import("@/pages/games").then((m) => ({ default: m.Games })));
@@ -137,6 +138,10 @@ function Router() {
 
       <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}
+      </Route>
+
+      <Route path="/live-ticker">
+        {() => <ProtectedRoute component={LiveTicker} roles={['director', 'administrator']} />}
       </Route>
       
       <Route path="/users">

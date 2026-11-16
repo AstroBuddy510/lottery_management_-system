@@ -53,6 +53,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/ticker",
+      "destination": "/api/ticker"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api"
     },

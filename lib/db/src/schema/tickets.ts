@@ -63,6 +63,9 @@ export const ticketsTable = pgTable("tickets", {
     // tickets, newest first. Without it that is a full scan of the table
     // the whole company sells into.
     index("tickets_writer_created_idx").on(table.writerId, table.createdAt.desc()),
+    // The Live Ticker reads "everything sold today", across every writer and
+    // game. Neither index above serves a range on the time alone.
+    index("tickets_created_at_idx").on(table.createdAt.desc()),
     // Settlement and the live board sweep one game at a time, by state.
     index("tickets_game_status_idx").on(table.gameId, table.status),
     // Reprinting a slip finds every ticket sold on it.

@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Menu, X, Bell, ChevronDown, LayoutDashboard, UserRound, TrendingUp, Trophy, CreditCard, BadgeCheck,
   ReceiptText, Package, FileBarChart, Settings, Calculator, Building2, Scale, Users, ScanSearch, Receipt,
-  Wallet, PiggyBank, ShieldAlert, Gamepad2, Contact, Landmark, type LucideIcon,
+  Wallet, PiggyBank, ShieldAlert, Gamepad2, Contact, Landmark, Radio, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-client-react";
@@ -41,6 +41,7 @@ const ALL = ["director", "administrator", "cashier", "gross_entry", "wins_entry"
  */
 const NAV_ITEMS: NavEntry[] = [
   { label: "Dashboard", path: "/dashboard", roles: ALL, icon: LayoutDashboard },
+  { label: "Live Ticker", path: "/live-ticker", roles: OFFICE, icon: Radio },
   { label: "My Writers", path: "/my-writers", roles: ["agent"], icon: UserRound },
   { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "agent"], icon: TrendingUp },
   { label: "Wins Entries", path: "/entries/wins", roles: ["wins_entry", "agent"], icon: Trophy },

@@ -57,6 +57,8 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
+        // The Live Ticker's WebSocket is on /api/ticker.
+        ws: true,
       },
     },
   },
@@ -68,6 +70,8 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:8080",
         changeOrigin: true,
+        // The Live Ticker's WebSocket is on /api/ticker.
+        ws: true,
       },
     },
   },
