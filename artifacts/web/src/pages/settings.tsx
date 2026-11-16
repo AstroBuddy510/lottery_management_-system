@@ -4,6 +4,7 @@ import {
   useListTimeWindows, useCreateTimeWindow, useUpdateTimeWindow, useDeleteTimeWindow,
   useListRecurringExpenses, useCreateRecurringExpense, useUpdateRecurringExpense, useDeleteRecurringExpense,
   useListGameTemplates, useCreateGameTemplate, useUpdateGameTemplate, useDeleteGameTemplate,
+  useListEntryChangeRequests, getListEntryChangeRequestsQueryKey,
   getGetSettingsQueryKey, getListTimeWindowsQueryKey, getListRecurringExpensesQueryKey, getListGameTemplatesQueryKey,
   TimeWindow, GameTemplate,
 } from "@workspace/api-client-react";
@@ -41,6 +42,19 @@ import { useToast } from "@/hooks/use-toast";
 import { LayoutGrid, List } from "lucide-react";
 import { AdminBetTypes } from "@/pages/admin-bet-types";
 import { AdminHedgeSettings } from "@/pages/admin-hedge-settings";
+import { ChangeRequestsPanel } from "@/components/change-requests-panel";
+
+const SETTINGS_TABS = ["rates", "auto-postpaid", "change-requests", "folders", "hours", "expenses", "templates", "bet-types", "hedge"] as const;
+
+/** The tab named in ?tab=, so a link (or the old Change Requests address) can open one directly. */
+function tabFromUrl(): string {
+  try {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    return t && (SETTINGS_TABS as readonly string[]).includes(t) ? t : "rates";
+  } catch {
+    return "rates";
+  }
+}
 
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -99,6 +113,25 @@ type RecurringExpenseRow = {
 export function Settings() {
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  const [tab, setTab] = useState<string>(tabFromUrl);
+  const changeTab = (next: string) => {
+    setTab(next);
+    // Keep the address in step so a refresh or a shared link lands on the same tab.
+    try {
+      const url = new URL(window.location.href);
+      if (next === "rates") url.searchParams.delete("tab");
+      else url.searchParams.set("tab", next);
+      window.history.replaceState(window.history.state, "", url);
+    } catch { /* address bar is a convenience */ }
+  };
+  // Same query the Change Requests tab reads, so the badge and the queue agree.
+  const { data: changeRequests } = useListEntryChangeRequests({}, {
+    query: { queryKey: getListEntryChangeRequestsQueryKey({}), refetchInterval: 60_000 },
+  });
+  const pendingChangeRequests = Array.isArray(changeRequests)
+    ? changeRequests.filter(r => r.status === "pending_admin" || r.status === "pending_director").length
+    : 0;
 
   // ── Settings data ──
   const { data: settings, isLoading: loadingSettings } = useGetSettings({ query: { queryKey: getGetSettingsQueryKey(), staleTime: 0 } });
@@ -426,10 +459,16 @@ export function Settings() {
         </p>
       </div>
 
-      <Tabs defaultValue="rates">
+      <Tabs value={tab} onValueChange={changeTab}>
         <TabsList className="mb-4 flex h-auto w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="rates">Commission Rates</TabsTrigger>
           <TabsTrigger value="auto-postpaid">Auto Settlement</TabsTrigger>
+          <TabsTrigger value="change-requests" className="gap-1.5">
+            Change Requests
+            {pendingChangeRequests > 0 && (
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold inline-flex items-center justify-center">{pendingChangeRequests}</span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="folders">Folder Settings</TabsTrigger>
           <TabsTrigger value="hours">Cashier Hours</TabsTrigger>
           <TabsTrigger value="expenses">Expense Categories</TabsTrigger>
@@ -486,6 +525,11 @@ export function Settings() {
         {/* ── Automated Postpaid Settlement ── */}
         <TabsContent value="auto-postpaid" className="space-y-4">
           <AutoPostpaidSettings />
+        </TabsContent>
+
+        {/* ── Entry Change Requests (moved here from the main menu) ── */}
+        <TabsContent value="change-requests">
+          <ChangeRequestsPanel variant="review" />
         </TabsContent>
 
         <TabsContent value="folders" className="space-y-4">

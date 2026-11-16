@@ -113,6 +113,19 @@ function ProtectedRoute({ component: Component, roles, bare }: { component: Reac
   );
 }
 
+/**
+ * Change requests moved into Settings for administrators and directors.
+ * Agents keep this address - it is where their own menu points - and anyone
+ * else holding an old link is taken to the new tab.
+ */
+function ChangeRequestsRoute() {
+  const { user, isLoading } = useAuth();
+  if (!isLoading && (user?.role === "administrator" || user?.role === "director")) {
+    return <Redirect to="/settings?tab=change-requests" />;
+  }
+  return <ProtectedRoute component={EntryChangeRequests} roles={['agent']} />;
+}
+
 function Router() {
   return (
     <Switch>
@@ -295,7 +308,7 @@ function Router() {
       </Route>
 
       <Route path="/entry-change-requests">
-        {() => <ProtectedRoute component={EntryChangeRequests} roles={['agent', 'administrator', 'director']} />}
+        {() => <ChangeRequestsRoute />}
       </Route>
 
       <Route path="/notifications">

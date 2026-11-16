@@ -37,7 +37,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Wins & Debt Overview", path: "/wins-debt", roles: ["director", "administrator"] },
   { label: "Reserve Fund", path: "/reserve", roles: ["director", "administrator"] },
   { label: "Inventory", path: "/inventory", roles: ["cashier", "administrator", "director"] },
-  { label: "Change Requests", path: "/entry-change-requests", roles: ["agent", "administrator", "director"] },
   { label: "Notifications", path: "/notifications", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
 ];
 
