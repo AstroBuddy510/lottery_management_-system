@@ -23,7 +23,9 @@ import { TokenSalesPanel } from "@/pages/token-sales";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 import { generateDailySettlementPDF } from "@/lib/pdf-generator";
-import { Activity, AlertTriangle, ArrowRightLeft, Banknote, Calendar, CheckCircle2, ChevronRight, Clock, Coins, FileDown, FileText, Filter, Loader2, Plus, Printer, QrCode, Search, Trash2, TrendingDown, TrendingUp, User, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRightLeft, Banknote, Calendar, CheckCircle2, ChevronRight, Clock, Coins, FileDown, FileText, Filter, Loader2, Plus, Printer, QrCode, Scale, Search, Trash2, TrendingDown, TrendingUp, User, XCircle } from "lucide-react";
+import { Panel, ScrollTable, Pager, usePaged, ReportActions, DirectionBadge, SignedAmount, StatTile, PAGE_SIZE } from "@/components/data-kit";
+import { exportReportPdf, printReport, money, type TableReport } from "@/lib/table-report";
 import { AdminPostpaidSettlement } from "@/pages/admin-postpaid-settlement";
 import { UnitRequests } from "@/pages/unit-requests";
 import { TokenSupply } from "@/pages/token-supply";
@@ -36,6 +38,13 @@ type CreatedPayment = {
 };
 
 const today = () => new Date().toISOString().split("T")[0];
+
+/** "16 Nov 2026" from a YYYY-MM-DD day. */
+function fmtDay(d?: string | null) {
+  if (!d) return "—";
+  const t = new Date(`${d.slice(0, 10)}T12:00:00Z`);
+  return Number.isNaN(t.getTime()) ? d : t.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
 
 function fmtTime(ts?: string | null) {
   if (!ts) return "—";
@@ -285,6 +294,75 @@ export function Payments() {
   }).length;
   const outstandingCount    = settlements.filter(r => r.hasCalc && settlementStatus(r).label !== "Settled").length;
 
+  /* ── Paging, and the same rows as paper ── */
+  const pBoard   = usePaged(settlements, PAGE_SIZE, boardDate);
+  const pPending = usePaged(pendingList, 12);
+  const pHistory = usePaged(paymentList, PAGE_SIZE, `${filterAgentId}|${filterFrom}|${filterTo}`);
+  const historyIn  = paymentList.filter(p => !p.isVoided && p.transactionType === "pay_in").reduce((s, p) => s + Number(p.amount), 0);
+  const historyOut = paymentList.filter(p => !p.isVoided && p.transactionType === "pay_out").reduce((s, p) => s + Number(p.amount), 0);
+
+  /** The whole board - every page, not just the one on screen. */
+  const boardReport = (): TableReport => ({
+    title: "Settlement Board",
+    fileName: `settlement_board_${boardDate}`,
+    orientation: "landscape",
+    meta: [{ label: "Settlement Date", value: fmtDay(boardDate) }],
+    summary: [
+      `${settlements.length} active agenc${settlements.length === 1 ? "y" : "ies"} · ${settledCount} settled · ${outstandingCount} outstanding`,
+      `Collected ${money(boardTotalCollected)} · Paid out ${money(boardTotalOut)}`,
+    ],
+    sections: [{
+      columns: [
+        { header: "Agent" }, { header: "Code" },
+        { header: "Balance Due", align: "right" }, { header: "Collected", align: "right" },
+        { header: "Paid Out", align: "right" }, { header: "Net Position", align: "right" }, { header: "Status" },
+      ],
+      rows: settlements.map(r => [
+        agentMap[r.agent.id]?.name ?? r.agent.fullCode,
+        r.agent.fullCode,
+        r.hasCalc ? money(r.balanceDue) : "—",
+        r.collected > 0 ? money(r.collected) : "—",
+        r.paidOut > 0 ? money(r.paidOut) : "—",
+        r.hasCalc || r.collected > 0 ? money(r.collected - r.paidOut) : "—",
+        settlementStatus(r).label.replace("GH₵", "GHS"),
+      ]),
+      totals: ["TOTAL", "", money(boardTotalDue), money(boardTotalCollected), money(boardTotalOut), money(boardTotalCollected - boardTotalOut),
+        `Outstanding ${money(Math.max(0, boardTotalDue - boardTotalCollected + boardTotalOut))}`],
+      empty: "No active agents.",
+    }],
+  });
+
+  const historyReport = (): TableReport => ({
+    title: "Transaction History",
+    fileName: "transaction_history",
+    orientation: "landscape",
+    meta: [
+      { label: "Agent", value: filterAgentId ? (agentMap[filterAgentId]?.name ?? "—") : "All agents" },
+      { label: "Period", value: filterFrom || filterTo ? `${filterFrom ? fmtDay(filterFrom) : "start"} – ${filterTo ? fmtDay(filterTo) : "today"}` : "All dates" },
+    ],
+    summary: [
+      `${paymentList.length} transaction(s) · Pay-In ${money(historyIn)} · Pay-Out ${money(historyOut)}`,
+      `Net ${money(historyIn - historyOut)}`,
+    ],
+    sections: [{
+      columns: [
+        { header: "Receipt #" }, { header: "Date" }, { header: "Time" }, { header: "Agent" },
+        { header: "Direction" }, { header: "Gross", align: "right" }, { header: "Net Amount", align: "right" }, { header: "Status" },
+      ],
+      rows: paymentList.map(p => [
+        p.receiptNumber ?? "—",
+        fmtDay(p.paymentDate?.split("T")[0]),
+        fmtTime(p.createdAt),
+        `${agentMap[p.agentId]?.name ?? "—"} (${agentMap[p.agentId]?.code ?? ""})`,
+        p.transactionType === "pay_out" ? "Pay-Out" : "Pay-In",
+        p.grossAmount ? money(p.grossAmount) : "—",
+        `${p.transactionType === "pay_out" ? "-" : "+"}${money(p.amount)}`,
+        p.isVoided ? "Voided" : "Valid",
+      ]),
+      empty: "No transactions for this selection.",
+    }],
+  });
+
   /* ── Form helpers ── */
   const gross        = Number(form.grossAmount) || 0;
   const expenseTotal = expenseItems.reduce((s, i) => s + (Number(i.amount) || 0), 0);
@@ -430,108 +508,68 @@ export function Payments() {
   };
 
   return (
-    <div className="p-6 space-y-6 relative min-h-screen">
-      {/* Background radial glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-64 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent blur-3xl pointer-events-none" />
+    <div className="p-4 sm:p-6 space-y-6 min-w-0">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-4 relative z-10">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">Cashier Station</h1>
-          <p className="text-xs text-muted-foreground mt-0.5 font-medium">Payment collection · settlement tracking · receipts</p>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-border/80 bg-card/60 backdrop-blur-md p-5 sm:p-6 rounded-3xl shadow-sm">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="p-3 bg-primary/10 text-primary rounded-2xl shadow-inner border border-primary/10 shrink-0">
+            <Banknote className="w-7 h-7" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black tracking-tight text-foreground">Payments</h1>
+            <p className="text-xs text-muted-foreground mt-1 font-medium">Cashier station · payment collection, settlement tracking and receipts</p>
+          </div>
         </div>
-        <Button onClick={() => { resetForm(); setOpen(true); }} className="gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5">
+        <Button onClick={() => { resetForm(); setOpen(true); }} className="gap-2 rounded-xl font-bold self-start lg:self-center">
           <Plus className="w-4 h-4" />
           Record Payment
         </Button>
       </div>
 
       {/* ── Time window banner ── */}
-      <div className="relative z-10">
-        <WindowBanner windows={windows} />
-      </div>
+      <WindowBanner windows={windows} />
 
       {/* ── Today's cash position ── */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 relative z-10">
-        {/* Pay-In Today */}
-        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-emerald-500/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4.5 flex flex-col justify-between min-h-[110px]">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Pay-In Today</span>
-            <div className="p-1.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <div className="text-xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">{fmtGHS(todayPayIn)}</div>
-            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">{todayValid.filter(p => p.transactionType === "pay_in").length} transaction(s)</div>
-          </div>
-        </div>
-
-        {/* Pay-Out Today */}
-        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-orange-500/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4.5 flex flex-col justify-between min-h-[110px]">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Pay-Out Today</span>
-            <div className="p-1.5 rounded-lg bg-orange-500/10 dark:bg-orange-500/5 text-orange-600 dark:text-orange-400 border border-orange-500/25">
-              <TrendingDown className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <div className="text-xl font-bold font-mono tracking-tight text-orange-600 dark:text-orange-400">{fmtGHS(todayPayOut)}</div>
-            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">{todayValid.filter(p => p.transactionType === "pay_out").length} transaction(s)</div>
-          </div>
-        </div>
-
-        {/* Net Cash Position */}
-        <div className={`bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4.5 flex flex-col justify-between min-h-[110px] ${
-          netPosition >= 0 ? "hover:border-indigo-500/20" : "hover:border-rose-500/20"
-        }`}>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Net Cash Position</span>
-            <div className={`p-1.5 rounded-lg border ${
-              netPosition >= 0 
-                ? "bg-indigo-500/10 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border-indigo-500/25" 
-                : "bg-rose-500/10 dark:bg-rose-500/5 text-rose-600 dark:text-rose-400 border-rose-500/25"
-            }`}>
-              <Banknote className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <div className={`text-xl font-bold font-mono tracking-tight ${netPosition >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-rose-600 dark:text-rose-400"}`}>{fmtGHS(netPosition)}</div>
-            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">Pay-In minus Pay-Out</div>
-          </div>
-        </div>
-
-        {/* Settlement Status */}
-        <div className="bg-card/75 backdrop-blur-md border border-border/50 shadow-sm hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-2xl overflow-hidden p-4.5 flex flex-col justify-between min-h-[110px]">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider">Settlement Status</span>
-            <div className="p-1.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
-              <Activity className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2.5">
-            <div className="flex items-baseline gap-1">
-              <span className="text-xl font-bold font-mono tracking-tight text-emerald-600 dark:text-emerald-400">{settledCount}</span>
-              <span className="text-[10px] text-muted-foreground/70 font-semibold mr-1.5">settled</span>
-              {outstandingCount > 0 && (
-                <>
-                  <span className="text-lg font-bold font-mono tracking-tight text-rose-600 dark:text-rose-400">{outstandingCount}</span>
-                  <span className="text-[10px] text-rose-500 font-semibold">pending</span>
-                </>
-              )}
-            </div>
-            <div className="text-[9.5px] text-muted-foreground/70 mt-1 font-semibold">for {boardDate === todayStr ? "today" : boardDate}</div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatTile
+          label="Pay-In Today"
+          value={fmtGHS(todayPayIn)}
+          sub={`${todayValid.filter(p => p.transactionType === "pay_in").length} transaction(s)`}
+          icon={TrendingUp}
+          tone="in"
+        />
+        <StatTile
+          label="Pay-Out Today"
+          value={fmtGHS(todayPayOut)}
+          sub={`${todayValid.filter(p => p.transactionType === "pay_out").length} transaction(s)`}
+          icon={TrendingDown}
+          tone="out"
+        />
+        <StatTile
+          label="Net Cash Position"
+          value={fmtGHS(netPosition)}
+          sub="Pay-In minus Pay-Out"
+          icon={Banknote}
+          tone={netPosition >= 0 ? "default" : "bad"}
+        />
+        <StatTile
+          label="Settlement Status"
+          value={<>{settledCount} <span className="text-xs font-bold text-muted-foreground">settled</span>{outstandingCount > 0 && <> · <span className="text-rose-600 dark:text-rose-400">{outstandingCount}</span> <span className="text-xs font-bold text-rose-500">pending</span></>}</>}
+          sub={`for ${boardDate === todayStr ? "today" : fmtDay(boardDate)}`}
+          icon={Activity}
+          tone="in"
+        />
       </div>
 
       {/* ── Main tabs ── */}
-      <Tabs defaultValue="settlement" className="relative z-10 space-y-6">
-        <TabsList className="w-full justify-start border-b border-border/40 rounded-none h-auto p-0 bg-transparent gap-4">
-          <TabsTrigger value="settlement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+      <Tabs defaultValue="settlement" className="space-y-5 min-w-0">
+        {/* Scrolls sideways on a narrow screen instead of wrapping into a jumble. */}
+        <TabsList className="w-full justify-start border-b border-border/60 rounded-none h-auto p-0 bg-transparent gap-1 overflow-x-auto overflow-y-hidden flex-nowrap thin-scroll [&>button]:shrink-0">
+          <TabsTrigger value="settlement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Settlement Board
           </TabsTrigger>
-          <TabsTrigger value="postpaid" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
+          <TabsTrigger value="postpaid" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
             Postpaid Settlement
             {postpaidDeclared > 0 && (
               <span className="ml-2 bg-amber-500 text-white rounded-full px-1.5 py-0.5 text-[8.5px] font-extrabold shadow-xs">
@@ -539,7 +577,7 @@ export function Payments() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="pending-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
+          <TabsTrigger value="pending-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
             Pending Cash Requests
             {pendingList.length > 0 && (
               <span className="ml-2 bg-rose-500 text-white rounded-full px-1.5 py-0.5 text-[8.5px] font-extrabold shadow-xs">
@@ -547,309 +585,294 @@ export function Payments() {
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="unit-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+          <TabsTrigger value="unit-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Unit Requests
           </TabsTrigger>
-          <TabsTrigger value="token-supply" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+          <TabsTrigger value="token-supply" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             E-Token Supply
           </TabsTrigger>
-          <TabsTrigger value="token-transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+          <TabsTrigger value="token-transactions" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             E-Token Transactions
           </TabsTrigger>
-          <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-indigo-600 data-[state=active]:text-indigo-600 dark:data-[state=active]:border-indigo-400 dark:data-[state=active]:text-indigo-400 px-5 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
+          <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Transaction History
           </TabsTrigger>
         </TabsList>
 
         {/* ── Settlement Board ── */}
-        <TabsContent value="settlement" className="space-y-4 outline-none">
-          {/* Date + summary header */}
-          <div className="flex items-center justify-between flex-wrap gap-4 bg-card/45 backdrop-blur-md border border-border/40 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <Label className="text-xs font-bold text-muted-foreground whitespace-nowrap">Settlement Date</Label>
-              <div className="relative">
-                <Input 
-                  type="date" 
-                  value={boardDate} 
-                  onChange={e => setBoardDate(e.target.value)} 
-                  className="h-9 text-xs w-44 bg-background/60 border-border/60 rounded-xl px-3 focus:ring-1 focus:ring-primary" 
-                />
-              </div>
-              {boardDate !== todayStr && (
-                <Button size="sm" variant="ghost" className="h-9 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 rounded-xl px-3" onClick={() => setBoardDate(todayStr)}>
-                  Today
+        <TabsContent value="settlement" className="outline-none">
+          <Panel
+            title="Settlement Board"
+            icon={Scale}
+            subtitle={`What each agency owes for ${fmtDay(boardDate)}, against what was collected and paid out.`}
+            actions={
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="date"
+                    value={boardDate}
+                    onChange={e => setBoardDate(e.target.value)}
+                    aria-label="Settlement date"
+                    className="h-8 w-40 rounded-lg text-xs"
+                  />
+                  {boardDate !== todayStr && (
+                    <Button size="sm" variant="ghost" className="h-8 rounded-lg px-2.5 text-xs font-bold" onClick={() => setBoardDate(todayStr)}>
+                      Today
+                    </Button>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 rounded-lg px-3 text-xs font-bold"
+                  disabled={boardPayments.length === 0}
+                  title={boardPayments.length === 0 ? "No payments on this date" : "The day's payments as a settlement statement"}
+                  onClick={() => {
+                    const agentMapObj: Record<string, string> = {};
+                    Object.entries(agentMap).forEach(([id, info]) => {
+                      if (info) agentMapObj[id] = `${info.code} (${info.name})`;
+                    });
+                    generateDailySettlementPDF(boardDate, boardTotalCollected, boardTotalOut, boardTotalCollected - boardTotalOut, boardPayments, agentMapObj);
+                  }}
+                >
+                  <FileText className="h-3.5 w-3.5" /> Daily statement
                 </Button>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              {boardCalcs.length === 0 && (
-                <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-500/10 text-[10px] font-extrabold uppercase tracking-wide px-2.5 py-0.5 rounded-lg shadow-sm">
-                  No calculations run for this date
-                </Badge>
-              )}
-              <Button
-                onClick={() => {
-                  const agentMapObj: Record<string, string> = {};
-                  Object.entries(agentMap).forEach(([id, info]) => {
-                    if (info) {
-                      agentMapObj[id] = `${info.code} (${info.name})`;
-                    }
-                  });
-                  generateDailySettlementPDF(
-                    boardDate,
-                    boardTotalCollected,
-                    boardTotalOut,
-                    boardTotalCollected - boardTotalOut,
-                    boardPayments,
-                    agentMapObj
-                  );
-                }}
-                disabled={boardPayments.length === 0}
-                size="sm"
-                className="bg-[#ff6700] hover:bg-[#ff6700]/90 text-white flex items-center gap-1.5 font-semibold rounded-xl h-9 px-3"
-              >
-                <Printer className="w-4 h-4" />
-                Print Settlement PDF
-              </Button>
-            </div>
-          </div>
-
-          {/* Settlement table */}
-          <div className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/30">
-                <TableRow className="border-b border-border/40">
-                  <TableHead className="text-xs font-bold text-muted-foreground pl-5">Agent</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Balance Due</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Collected</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Paid Out</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Net Position</TableHead>
-                  <TableHead className="text-center text-xs font-bold text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground pr-5">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {settlements.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-xs font-medium">
-                      No active agents found.
-                    </TableCell>
-                  </TableRow>
-                ) : settlements.map(row => {
-                  const st = settlementStatus(row);
-                  const netCollected = row.collected - row.paidOut;
-                  const shortfall = row.balanceDue - netCollected;
-                  const { agent } = row;
-                  const name = agentMap[agent.id]?.name ?? agent.fullCode;
-                  
-                  const rowClass = !row.hasCalc 
-                    ? "opacity-60 border-b border-border/40 hover:bg-muted/5 transition-colors" 
-                    : shortfall > 0.005 
-                      ? "bg-rose-500/5 dark:bg-rose-500/[0.02] border-b border-border/40 border-l-2 border-l-rose-500 hover:bg-rose-500/10 dark:hover:bg-rose-500/[0.05] transition-colors" 
-                      : shortfall < -0.005 
-                        ? "bg-amber-500/5 dark:bg-amber-500/[0.02] border-b border-border/40 border-l-2 border-l-amber-500 hover:bg-amber-500/10 dark:hover:bg-amber-500/[0.05] transition-colors" 
-                        : "bg-emerald-500/5 dark:bg-emerald-500/[0.02] border-b border-border/40 border-l-2 border-l-emerald-500 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/[0.05] transition-colors";
-
-                  return (
-                    <TableRow key={agent.id} className={rowClass}>
-                      <TableCell className="pl-5 py-3.5">
-                        <div className="font-bold text-xs text-foreground">{name}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{agent.fullCode}</div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs">
-                        {row.hasCalc ? fmtGHS(row.balanceDue) : <span className="text-muted-foreground/50 text-[10px]">—</span>}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                        {row.collected > 0 ? fmtGHS(row.collected) : <span className="text-muted-foreground/40">—</span>}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-orange-600 dark:text-orange-400 font-medium">
-                        {row.paidOut > 0 ? fmtGHS(row.paidOut) : <span className="text-muted-foreground/40">—</span>}
-                      </TableCell>
-                      <TableCell className={`text-right font-mono text-xs font-bold ${netCollected >= 0 ? "text-indigo-600 dark:text-indigo-400" : "text-rose-600 dark:text-rose-400"}`}>
-                        {row.hasCalc || row.collected > 0 ? fmtGHS(netCollected) : <span className="text-muted-foreground/50 text-[10px]">—</span>}
-                      </TableCell>
-                      <TableCell className="text-center py-3.5">
-                        <span className={`text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-lg tracking-wider uppercase border shadow-xs ${st.bg}`}>
-                          {st.label}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right pr-5 py-3.5">
-                        <div className="flex justify-end gap-1.5">
-                          {row.hasCalc && shortfall > 0.005 && (
-                            <Button size="sm" className="h-7 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs" onClick={() => prefillAgent(agent.id, shortfall, "pay_in")}>
-                              Collect {fmtGHS(shortfall)}
-                            </Button>
-                          )}
-                          {row.hasCalc && row.balanceDue < -0.005 && Math.abs(row.paidOut) < Math.abs(row.balanceDue) - 0.005 && (
-                            <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold rounded-lg text-orange-600 dark:text-orange-400 border-orange-500/20 hover:bg-orange-500/10" onClick={() => prefillAgent(agent.id, Math.abs(row.balanceDue) - row.paidOut, "pay_out")}>
-                              Pay Out {fmtGHS(Math.abs(row.balanceDue) - row.paidOut)}
-                            </Button>
-                          )}
-                          {!row.hasCalc && (row.collected > 0 || row.paidOut > 0) && (
-                            <span className="text-[9.5px] text-muted-foreground font-semibold uppercase tracking-wider">Has Txns</span>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-
-            {/* Board totals footer */}
-            {(boardCalcs.length > 0 || boardPayments.length > 0) && (
-              <div className="border-t border-border/40 bg-muted/40 px-5 py-3.5 flex items-center gap-6 flex-wrap text-xs font-bold text-foreground">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Total Due:</span>
-                  <span className="font-mono">{fmtGHS(boardTotalDue)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Collected:</span>
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400">{fmtGHS(boardTotalCollected)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Paid Out:</span>
-                  <span className="font-mono text-orange-600 dark:text-orange-400">{fmtGHS(boardTotalOut)}</span>
-                </div>
-                <div className="flex items-center gap-2 ml-auto">
-                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Outstanding:</span>
-                  <span className={`font-mono text-sm font-extrabold ${boardTotalDue - boardTotalCollected > 0.005 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                    {fmtGHS(Math.max(0, boardTotalDue - boardTotalCollected + boardTotalOut))}
-                  </span>
-                </div>
+                <ReportActions
+                  label="the settlement board"
+                  disabled={settlements.length === 0}
+                  onPdf={() => exportReportPdf(boardReport())}
+                  onPrint={() => printReport(boardReport())}
+                />
+              </>
+            }
+            footer={
+              <>
+                {(boardCalcs.length > 0 || boardPayments.length > 0) && (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 border-t bg-muted/30 px-5 py-3 text-xs font-bold sm:flex sm:flex-wrap sm:items-center">
+                    <span className="flex items-center gap-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Total due</span><span className="font-mono">{fmtGHS(boardTotalDue)}</span></span>
+                    <span className="flex items-center gap-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Collected</span><span className="font-mono text-emerald-600 dark:text-emerald-400">{fmtGHS(boardTotalCollected)}</span></span>
+                    <span className="flex items-center gap-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Paid out</span><span className="font-mono text-orange-600 dark:text-orange-400">{fmtGHS(boardTotalOut)}</span></span>
+                    <span className="flex items-center gap-2 sm:ml-auto"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Outstanding</span>
+                      <span className={`font-mono text-sm font-black ${boardTotalDue - boardTotalCollected > 0.005 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                        {fmtGHS(Math.max(0, boardTotalDue - boardTotalCollected + boardTotalOut))}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                <Pager page={pBoard.page} totalPages={pBoard.totalPages} onPage={pBoard.setPage} total={pBoard.total} size={pBoard.size} noun="agencies" />
+              </>
+            }
+          >
+            {boardCalcs.length === 0 && (
+              <div className="flex items-center gap-2 border-b bg-amber-500/5 px-5 py-2.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> No calculations have been run for this date, so balances due are blank.
               </div>
             )}
-          </div>
+            <ScrollTable minWidth="58rem">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-5">Agent</TableHead>
+                    <TableHead className="text-right">Balance Due</TableHead>
+                    <TableHead className="text-right">Collected</TableHead>
+                    <TableHead className="text-right">Paid Out</TableHead>
+                    <TableHead className="text-right">Net Position</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right pr-5">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {settlements.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="py-12 text-center text-xs font-medium text-muted-foreground">No active agents found.</TableCell>
+                    </TableRow>
+                  ) : pBoard.rows.map(row => {
+                    const st = settlementStatus(row);
+                    const netCollected = row.collected - row.paidOut;
+                    const shortfall = row.balanceDue - netCollected;
+                    const { agent } = row;
+                    const name = agentMap[agent.id]?.name ?? agent.fullCode;
+                    const edge = !row.hasCalc
+                      ? "opacity-60"
+                      : shortfall > 0.005
+                        ? "border-l-2 border-l-rose-500 bg-rose-500/[0.03]"
+                        : shortfall < -0.005
+                          ? "border-l-2 border-l-amber-500 bg-amber-500/[0.03]"
+                          : "border-l-2 border-l-emerald-500 bg-emerald-500/[0.03]";
+                    return (
+                      <TableRow key={agent.id} className={`hover:bg-muted/30 ${edge}`}>
+                        <TableCell className="pl-5 py-3">
+                          <div className="text-xs font-bold text-foreground">{name}</div>
+                          <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{agent.fullCode}</div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs">
+                          {row.hasCalc ? fmtGHS(row.balanceDue) : <span className="text-[10px] text-muted-foreground/50">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          {row.collected > 0 ? fmtGHS(row.collected) : <span className="text-muted-foreground/40">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs font-semibold text-orange-600 dark:text-orange-400">
+                          {row.paidOut > 0 ? fmtGHS(row.paidOut) : <span className="text-muted-foreground/40">—</span>}
+                        </TableCell>
+                        <TableCell className={`text-right font-mono text-xs font-bold ${netCollected >= 0 ? "text-foreground" : "text-rose-600 dark:text-rose-400"}`}>
+                          {row.hasCalc || row.collected > 0 ? fmtGHS(netCollected) : <span className="text-[10px] text-muted-foreground/50">—</span>}
+                        </TableCell>
+                        <TableCell className="py-3 text-center">
+                          <span className={`whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider ${st.bg}`}>{st.label}</span>
+                        </TableCell>
+                        <TableCell className="py-3 pr-5 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            {row.hasCalc && shortfall > 0.005 && (
+                              <Button size="sm" className="h-7 rounded-lg bg-emerald-600 text-[10px] font-bold text-white hover:bg-emerald-700" onClick={() => prefillAgent(agent.id, shortfall, "pay_in")}>
+                                Collect {fmtGHS(shortfall)}
+                              </Button>
+                            )}
+                            {row.hasCalc && row.balanceDue < -0.005 && Math.abs(row.paidOut) < Math.abs(row.balanceDue) - 0.005 && (
+                              <Button size="sm" variant="outline" className="h-7 rounded-lg border-orange-500/30 text-[10px] font-bold text-orange-600 hover:bg-orange-500/10 dark:text-orange-400" onClick={() => prefillAgent(agent.id, Math.abs(row.balanceDue) - row.paidOut, "pay_out")}>
+                                Pay Out {fmtGHS(Math.abs(row.balanceDue) - row.paidOut)}
+                              </Button>
+                            )}
+                            {!row.hasCalc && (row.collected > 0 || row.paidOut > 0) && (
+                              <span className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Has txns</span>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollTable>
+          </Panel>
         </TabsContent>
 
-        {/* ── Pending Cash Requests ── */}
         {/* ── Postpaid Settlement ── */}
-        <TabsContent value="postpaid" className="space-y-4 outline-none">
+        <TabsContent value="postpaid" className="outline-none">
           <AdminPostpaidSettlement />
         </TabsContent>
 
-        <TabsContent value="pending-requests" className="space-y-4 outline-none">
-          <div className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/30">
-                <TableRow className="border-b border-border/40">
-                  <TableHead className="text-xs font-bold text-muted-foreground pl-5">Agent</TableHead>
-                  <TableHead className="text-xs font-bold text-muted-foreground">Request Date</TableHead>
-                  <TableHead className="text-xs font-bold text-muted-foreground">Method</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Amount</TableHead>
-                  <TableHead className="text-center text-xs font-bold text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground pr-5">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingPending ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground text-xs font-medium">
-                      <Activity className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-600/60" />
-                      Loading requests…
-                    </TableCell>
-                  </TableRow>
-                ) : pendingList.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground text-xs font-medium">
-                      No pending cash requests found.
-                    </TableCell>
-                  </TableRow>
-                ) : pendingList.map(req => {
+        <TabsContent value="pending-requests" className="outline-none">
+          <Panel
+            title="Pending Cash Requests"
+            icon={Clock}
+            subtitle="Agents who have asked to settle in cash. Approve once the money is counted; the receipt is issued on approval."
+            actions={
+              pendingList.length > 0 ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="rounded-full border bg-muted/50 px-2.5 py-1 font-bold tabular-nums">{pendingList.length} waiting</span>
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 font-bold tabular-nums text-amber-700 dark:text-amber-400">
+                    {fmtGHS(pendingList.reduce((s, r) => s + Number(r.amount), 0))}
+                  </span>
+                </div>
+              ) : undefined
+            }
+            footer={<Pager page={pPending.page} totalPages={pPending.totalPages} onPage={pPending.setPage} total={pPending.total} size={pPending.size} noun="requests" />}
+          >
+            {loadingPending ? (
+              <div className="py-14 text-center text-xs font-medium text-muted-foreground">
+                <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading requests…
+              </div>
+            ) : pendingList.length === 0 ? (
+              <div className="py-14 text-center text-muted-foreground">
+                <CheckCircle2 className="mx-auto h-8 w-8 opacity-30" />
+                <p className="mt-2 text-sm font-semibold">No pending cash requests</p>
+                <p className="mt-1 text-xs">New requests from agents appear here.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 p-5 sm:grid-cols-2 2xl:grid-cols-3">
+                {pPending.rows.map(req => {
                   const agentInfo = agentMap[req.agentId];
-                  const name = agentInfo?.name ?? "—";
-                  const code = agentInfo?.code ?? "";
                   return (
-                    <TableRow key={req.id} className="hover:bg-muted/10 border-b border-border/40 transition-colors">
-                      <TableCell className="pl-5 py-3.5">
-                        <div className="font-bold text-xs text-foreground">{name}</div>
-                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{code}</div>
-                      </TableCell>
-                      <TableCell className="text-xs text-foreground/80 font-medium py-3.5">
-                        {req.paymentDate}
-                      </TableCell>
-                      <TableCell className="text-xs font-extrabold uppercase tracking-wide text-foreground/80 py-3.5">
-                        {req.paymentMethod}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 py-3.5">
-                        {fmtGHS(Number(req.amount))}
-                      </TableCell>
-                      <TableCell className="text-center py-3.5">
-                        <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-lg tracking-wider uppercase border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400 shadow-xs">
-                          PENDING CASHIER
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right pr-5 py-3.5">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button size="sm" className="h-7 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs" onClick={() => handleApprove(req.id, req.amount)} disabled={approveMutation.isPending}>
-                            Approve & Collect
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-7 text-[10px] font-bold rounded-lg text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/10" onClick={() => handleReject(req.id)} disabled={rejectMutation.isPending}>
-                            Reject
-                          </Button>
+                    <article key={req.id} className="flex min-w-0 flex-col gap-4 rounded-2xl border border-border/80 bg-background/60 p-4 shadow-sm transition-shadow hover:shadow-md">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary dark:bg-muted dark:text-foreground">
+                            <User className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-bold">{agentInfo?.name ?? "—"}</div>
+                            <div className="font-mono text-[10px] text-muted-foreground">{agentInfo?.code ?? ""}</div>
+                          </div>
                         </div>
-                      </TableCell>
-                    </TableRow>
+                        <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400">Pending</span>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Amount</div>
+                        <div className="text-2xl font-black tabular-nums tracking-tight">{fmtGHS(Number(req.amount))}</div>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" />{fmtDay(req.paymentDate)}</span>
+                        <span className="inline-flex items-center gap-1 font-semibold uppercase"><Banknote className="h-3 w-3" />{req.paymentMethod}</span>
+                      </div>
+                      <div className="mt-auto flex gap-2">
+                        <Button size="sm" className="h-8 flex-1 rounded-lg bg-emerald-600 text-xs font-bold text-white hover:bg-emerald-700" onClick={() => handleApprove(req.id, req.amount)} disabled={approveMutation.isPending}>
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve &amp; collect
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8 rounded-lg border-rose-500/30 text-xs font-bold text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => handleReject(req.id)} disabled={rejectMutation.isPending}>
+                          <XCircle className="mr-1 h-3.5 w-3.5" /> Reject
+                        </Button>
+                      </div>
+                    </article>
                   );
                 })}
-              </TableBody>
-            </Table>
-          </div>
+              </div>
+            )}
+          </Panel>
         </TabsContent>
 
-        {/* ── Transaction History ── */}
         {/* ── Writer unit purchases ── */}
-        <TabsContent value="unit-requests" className="space-y-4 outline-none">
+        <TabsContent value="unit-requests" className="outline-none">
           <UnitRequests />
         </TabsContent>
 
         {/* ── E-token supply chain ── */}
-        <TabsContent value="token-supply" className="space-y-4 outline-none">
+        <TabsContent value="token-supply" className="outline-none">
           <TokenSupply />
         </TabsContent>
 
         {/* Sits between supply and the cash ledger: where the units came from,
             where they went, then the money that came back. */}
-        <TabsContent value="token-transactions" className="space-y-4 outline-none">
+        <TabsContent value="token-transactions" className="outline-none">
           <TokenSalesPanel embedded />
         </TabsContent>
 
-        <TabsContent value="history" className="space-y-4 outline-none">
-          {/* Filters */}
-          <div className="bg-card/45 border border-border/40 backdrop-blur-md rounded-2xl p-4 shadow-sm relative">
-            <div className="flex items-center justify-between mb-3.5">
-              <span className="text-[10px] font-extrabold text-muted-foreground/80 uppercase tracking-wider flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5" />
-                Filter Transactions
-              </span>
-              <div className="flex items-center gap-1.5">
-                {(filterAgentId || filterFrom || filterTo) && (
-                  <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/20" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>
-                    Clear filters
-                  </Button>
+        {/* ── Transaction History ── */}
+        <TabsContent value="history" className="outline-none">
+          <Panel
+            title="Transaction History"
+            icon={ArrowRightLeft}
+            subtitle="Every cash Pay-In and Pay-Out recorded at the desk, newest first."
+            actions={
+              <ReportActions
+                label="the transaction history"
+                disabled={paymentList.length === 0}
+                onPdf={exportHistoryPdf}
+                onPrint={() => printReport(historyReport())}
+              />
+            }
+            footer={
+              <>
+                {!loadingPayments && paymentList.filter(p => !p.isVoided).length > 0 && (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 border-t bg-muted/30 px-5 py-3 text-xs font-bold sm:flex sm:flex-wrap sm:items-center">
+                    <span className="flex items-center gap-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Pay-In</span><span className="font-mono text-emerald-600 dark:text-emerald-400">{fmtGHS(historyIn)}</span></span>
+                    <span className="flex items-center gap-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Pay-Out</span><span className="font-mono text-orange-600 dark:text-orange-400">{fmtGHS(historyOut)}</span></span>
+                    <span className="flex items-center gap-2"><span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Net</span><span className="font-mono">{fmtGHS(historyIn - historyOut)}</span></span>
+                    <span className="col-span-2 text-[10px] font-semibold text-muted-foreground sm:ml-auto">
+                      {paymentList.filter(p => !p.isVoided).length} valid
+                      {paymentList.some(p => p.isVoided) && <span className="text-rose-500"> · {paymentList.filter(p => p.isVoided).length} voided</span>}
+                    </span>
+                  </div>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1.5 rounded-lg text-[10px] font-bold"
-                  disabled={exporting || paymentList.length === 0}
-                  onClick={exportHistoryPdf}
-                  title={paymentList.length === 0 ? "Nothing to export for this selection" : "Export what is on screen to PDF"}
-                >
-                  {exporting ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <FileDown className="h-3 w-3" />
-                  )}
-                  Export to PDF
-                </Button>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Pager page={pHistory.page} totalPages={pHistory.totalPages} onPage={pHistory.setPage} total={pHistory.total} size={pHistory.size} noun="transactions" />
+              </>
+            }
+          >
+            {/* Filters, one row above the table */}
+            <div className="grid grid-cols-1 gap-3 border-b bg-muted/20 px-5 py-4 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:items-end">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground">Agent</Label>
+                <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Filter className="h-3 w-3" /> Agent</Label>
                 <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
-                  <SelectTrigger className="h-9 text-xs bg-background/60 border-border/60 rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_all">All agents</SelectItem>
                     {agentList.map(a => <SelectItem key={a.id} value={a.id}>{a.user?.fullName ?? a.fullCode} ({a.fullCode})</SelectItem>)}
@@ -857,130 +880,86 @@ export function Payments() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground">From</Label>
-                <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 text-xs bg-background/60 border-border/60 rounded-xl" />
+                <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">From</Label>
+                <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 rounded-lg text-xs" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground">To</Label>
-                <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 text-xs bg-background/60 border-border/60 rounded-xl" />
+                <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">To</Label>
+                <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 rounded-lg text-xs" />
               </div>
+              {(filterAgentId || filterFrom || filterTo) ? (
+                <Button size="sm" variant="ghost" className="h-9 rounded-lg text-xs font-bold" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>
+                  Clear filters
+                </Button>
+              ) : <span className="hidden lg:block" />}
             </div>
-          </div>
 
-          {/* Transaction table */}
-          <div className="border border-border/40 bg-card/65 backdrop-blur-md shadow-sm rounded-2xl overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/30">
-                <TableRow className="border-b border-border/40">
-                  <TableHead className="text-xs font-bold text-muted-foreground pl-5">Receipt #</TableHead>
-                  <TableHead className="text-xs font-bold text-muted-foreground">Date</TableHead>
-                  <TableHead className="text-xs font-bold text-muted-foreground">Time</TableHead>
-                  <TableHead className="text-xs font-bold text-muted-foreground">Agent</TableHead>
-                  <TableHead className="text-xs font-bold text-muted-foreground">Type</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Gross</TableHead>
-                  <TableHead className="text-right text-xs font-bold text-muted-foreground">Net Amount</TableHead>
-                  <TableHead className="text-xs font-bold text-muted-foreground">Status</TableHead>
-                  {canVoid && <TableHead className="w-16 text-right pr-5 text-xs font-bold text-muted-foreground">Void</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingPayments ? (
+            <ScrollTable minWidth="64rem">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-xs font-medium">
-                      <Activity className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-600/60" />
-                      Loading transactions…
-                    </TableCell>
+                    <TableHead className="pl-5">Receipt #</TableHead>
+                    <TableHead>Date · Time</TableHead>
+                    <TableHead>Agent</TableHead>
+                    <TableHead>Direction</TableHead>
+                    <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">Net Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    {canVoid && <TableHead className="pr-5 text-right">Void</TableHead>}
                   </TableRow>
-                ) : paymentList.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-xs font-medium">
-                      No transactions found.
-                    </TableCell>
-                  </TableRow>
-                ) : paymentList.map(p => (
-                  <TableRow key={p.id} className={`border-b border-border/40 transition-colors ${p.isVoided ? "opacity-45 bg-muted/10 line-through" : "hover:bg-muted/10"}`}>
-                    <TableCell className="text-xs font-mono font-bold text-muted-foreground pl-5 py-3.5">{p.receiptNumber ?? "—"}</TableCell>
-                    <TableCell className="text-xs font-medium text-foreground/80 py-3.5">{p.paymentDate?.split("T")[0]}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground/70 font-mono py-3.5">{fmtTime(p.createdAt)}</TableCell>
-                    <TableCell className="py-3.5">
-                      <div className="text-xs font-bold text-foreground">{agentMap[p.agentId]?.name ?? "—"}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{agentMap[p.agentId]?.code ?? ""}</div>
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      <Badge
-                        variant={p.transactionType === "pay_in" ? "default" : "secondary"}
-                        className={`text-[9.5px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border shadow-xs ${
-                          p.transactionType === "pay_out" 
-                            ? "bg-orange-500/10 border-orange-500/20 text-orange-700 dark:text-orange-400" 
-                            : "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
-                        }`}
-                      >
-                        {p.transactionType === "pay_in" ? "Pay-In" : "Pay-Out"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-right font-mono text-muted-foreground py-3.5">
-                      {p.grossAmount ? fmtGHS(Number(p.grossAmount)) : "—"}
-                    </TableCell>
-                    <TableCell className={`text-xs text-right font-mono font-bold py-3.5 ${
-                      p.isVoided
-                        ? "text-muted-foreground"
-                        : p.transactionType === "pay_out" 
-                          ? "text-orange-600 dark:text-orange-400" 
-                          : "text-indigo-600 dark:text-indigo-400"
-                    }`}>
-                      {fmtGHS(Number(p.amount))}
-                    </TableCell>
-                    <TableCell className="py-3.5">
-                      <Badge variant={p.isVoided ? "destructive" : "outline"} className={`text-[9.5px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border ${
-                        p.isVoided
-                          ? "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400"
-                          : "bg-indigo-500/5 border-indigo-500/10 text-indigo-700 dark:text-indigo-400"
-                      }`}>
-                        {p.isVoided ? "Voided" : "Valid"}
-                      </Badge>
-                    </TableCell>
-                    {canVoid && (
-                      <TableCell className="text-right pr-5 py-3.5">
-                        {!p.isVoided && (
-                          <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-500/10" onClick={() => handleVoid(p.id)}>
-                            Void
-                          </Button>
-                        )}
+                </TableHeader>
+                <TableBody>
+                  {loadingPayments ? (
+                    <TableRow>
+                      <TableCell colSpan={canVoid ? 8 : 7} className="py-12 text-center text-xs font-medium text-muted-foreground">
+                        <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading transactions…
                       </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            {/* History totals footer */}
-            {!loadingPayments && paymentList.filter(p => !p.isVoided).length > 0 && (
-              <div className="border-t border-border/40 bg-muted/40 px-5 py-3.5 flex items-center gap-6 flex-wrap text-xs font-bold text-foreground">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Pay-In:</span>
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                    {fmtGHS(paymentList.filter(p => !p.isVoided && p.transactionType === "pay_in").reduce((s, p) => s + Number(p.amount), 0))}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground/80 uppercase tracking-wider font-extrabold">Pay-Out:</span>
-                  <span className="font-mono text-orange-600 dark:text-orange-400">
-                    {fmtGHS(paymentList.filter(p => !p.isVoided && p.transactionType === "pay_out").reduce((s, p) => s + Number(p.amount), 0))}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 ml-auto">
-                  <span className="text-[10px] text-muted-foreground font-semibold">
-                    {paymentList.filter(p => !p.isVoided).length} valid transaction(s)
-                  </span>
-                  {paymentList.some(p => p.isVoided) && (
-                    <span className="text-[10px] text-rose-500 font-semibold">
-                      · {paymentList.filter(p => p.isVoided).length} voided
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+                    </TableRow>
+                  ) : paymentList.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={canVoid ? 8 : 7} className="py-12 text-center text-xs font-medium text-muted-foreground">No transactions found.</TableCell>
+                    </TableRow>
+                  ) : pHistory.rows.map(p => {
+                    const dir = p.transactionType === "pay_out" ? "out" : "in";
+                    return (
+                      <TableRow key={p.id} className={p.isVoided ? "bg-muted/20 opacity-50" : "hover:bg-muted/30"}>
+                        <TableCell className="py-3 pl-5 font-mono text-xs font-bold text-muted-foreground">{p.receiptNumber ?? "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap py-3 text-xs">
+                          <div className="font-semibold">{fmtDay(p.paymentDate?.split("T")[0])}</div>
+                          <div className="font-mono text-[10px] text-muted-foreground">{fmtTime(p.createdAt)}</div>
+                        </TableCell>
+                        <TableCell className="py-3">
+                          <div className="text-xs font-bold">{agentMap[p.agentId]?.name ?? "—"}</div>
+                          <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{agentMap[p.agentId]?.code ?? ""}</div>
+                        </TableCell>
+                        <TableCell className="py-3"><DirectionBadge direction={dir} /></TableCell>
+                        <TableCell className="py-3 text-right font-mono text-xs text-muted-foreground">
+                          {p.grossAmount ? fmtGHS(Number(p.grossAmount)) : "—"}
+                        </TableCell>
+                        <TableCell className={`py-3 text-right text-xs ${p.isVoided ? "line-through" : ""}`}>
+                          <SignedAmount direction={dir} muted={!!p.isVoided}>{fmtGHS(Number(p.amount))}</SignedAmount>
+                        </TableCell>
+                        <TableCell className="py-3">
+                          <span className={`rounded-full border px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider ${p.isVoided ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400" : "border-border bg-muted/50 text-muted-foreground"}`}>
+                            {p.isVoided ? "Voided" : "Valid"}
+                          </span>
+                        </TableCell>
+                        {canVoid && (
+                          <TableCell className="py-3 pr-5 text-right">
+                            {!p.isVoided && (
+                              <Button size="sm" variant="ghost" className="h-7 rounded-lg text-[10px] font-bold text-rose-600 hover:bg-rose-500/10 dark:text-rose-400" onClick={() => handleVoid(p.id)}>
+                                Void
+                              </Button>
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollTable>
+          </Panel>
         </TabsContent>
       </Tabs>
 

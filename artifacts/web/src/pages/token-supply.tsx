@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Coins, Send, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Loader2, Coins, Send, AlertTriangle, CheckCircle2, Layers, Warehouse, Users, ArrowUpRight, Wallet } from "lucide-react";
+import { Panel, ScrollTable, ReportActions, StatTile } from "@/components/data-kit";
+import { exportReportPdf, printReport, money, type TableReport } from "@/lib/table-report";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -116,19 +118,54 @@ export function TokenSupply() {
 
   const r = data?.reconciliation;
   const balanced = Number(r?.variance ?? 0) === 0;
+  const floats = data?.floats ?? [];
+
+  const report = (): TableReport => ({
+    title: "E-Token Supply",
+    fileName: `etoken_supply_${new Date().toISOString().slice(0, 10)}`,
+    summary: [
+      `Generated ${money(r?.totalMinted ?? 0)} · In pool ${money(r?.poolBalance ?? 0)}`,
+      `Held by cashiers ${money(r?.heldByCashiers ?? 0)} · Sold to writers ${money(r?.disbursedToWriters ?? 0)}`,
+      balanced ? "Books balanced" : `Out of balance by ${money(r?.variance ?? 0)}`,
+    ],
+    sections: [{
+      heading: "Cashier floats",
+      columns: [{ header: "Cashier" }, { header: "Received", align: "right" }, { header: "Sold", align: "right" }, { header: "Float Balance", align: "right" }],
+      rows: floats.map((f) => [f.cashierName, money(f.totalReceived), money(f.totalDisbursed), money(f.balance)]),
+      totals: ["TOTAL",
+        money(floats.reduce((t, f) => t + Number(f.totalReceived), 0)),
+        money(floats.reduce((t, f) => t + Number(f.totalDisbursed), 0)),
+        money(floats.reduce((t, f) => t + Number(f.balance), 0))],
+      empty: "No cashier has been recharged yet.",
+    }],
+  });
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Total Generated" value={fmtGHS(r?.totalMinted ?? 0)} hint="Units ever created" />
-        <Stat label="In Pool" value={fmtGHS(r?.poolBalance ?? 0)} hint="Not yet issued" tone="text-primary" />
-        <Stat label="Held by Cashiers" value={fmtGHS(r?.heldByCashiers ?? 0)} hint="Float awaiting sale" />
-        <Stat label="Sold to Writers" value={fmtGHS(r?.disbursedToWriters ?? 0)} hint="Disbursed" tone="text-emerald-600" />
+    <div className="space-y-6">
+      {/* ── Section toolbar ── */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/10 bg-primary/10 text-primary dark:border-border dark:bg-muted dark:text-foreground">
+            <Layers className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold tracking-tight">E-Token Supply</h3>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">Generated = pool + cashier floats + units sold to writers.</p>
+          </div>
+        </div>
+        <ReportActions label="the e-token supply" disabled={!data} onPdf={() => exportReportPdf(report())} onPrint={() => printReport(report())} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Total generated" value={fmtGHS(r?.totalMinted ?? 0)} sub="Units ever created" icon={Coins} />
+        <StatTile label="In pool" value={fmtGHS(r?.poolBalance ?? 0)} sub="Not yet issued" icon={Warehouse} />
+        <StatTile label="Held by cashiers" value={fmtGHS(r?.heldByCashiers ?? 0)} sub="Float awaiting sale" icon={Wallet} tone="warn" />
+        <StatTile label="Sold to writers" value={fmtGHS(r?.disbursedToWriters ?? 0)} sub="Disbursed" icon={ArrowUpRight} tone="in" />
       </div>
 
       {/* The books either balance or they do not; say which. */}
       <div
-        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+        className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-xs font-semibold ${
           balanced
             ? "bg-emerald-500/5 border-emerald-300/50 text-emerald-800 dark:text-emerald-300"
             : "bg-destructive/5 border-destructive/40 text-destructive"
@@ -143,8 +180,8 @@ export function TokenSupply() {
       </div>
 
       {isAdmin && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card className="rounded-2xl border-border/80 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Coins className="h-4 w-4 text-amber-500" /> Generate Units
@@ -175,7 +212,7 @@ export function TokenSupply() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="rounded-2xl border-border/80 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Send className="h-4 w-4 text-indigo-500" /> Recharge Cashier
@@ -220,46 +257,36 @@ export function TokenSupply() {
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Cashier Floats</CardTitle>
-          <CardDescription className="text-xs">
-            What each cashier holds and has sold on.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
+      <Panel title="Cashier floats" icon={Users} subtitle="What each cashier holds and has sold on.">
+        <ScrollTable minWidth="36rem" maxHeight="28rem">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-5">Cashier</TableHead>
+                <TableHead className="text-right">Received</TableHead>
+                <TableHead className="text-right">Sold</TableHead>
+                <TableHead className="pr-5 text-right">Float Balance</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {floats.length === 0 ? (
                 <TableRow>
-                  <TableHead>Cashier</TableHead>
-                  <TableHead className="text-right">Received</TableHead>
-                  <TableHead className="text-right">Sold</TableHead>
-                  <TableHead className="text-right">Float Balance</TableHead>
+                  <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">No cashier has been recharged yet.</TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(data?.floats ?? []).length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-sm text-muted-foreground">
-                      No cashier has been recharged yet.
-                    </TableCell>
+              ) : (
+                floats.map((f) => (
+                  <TableRow key={f.cashierId} className="hover:bg-muted/30">
+                    <TableCell className="py-3 pl-5 text-sm font-semibold">{f.cashierName}</TableCell>
+                    <TableCell className="py-3 text-right font-mono text-xs tabular-nums text-emerald-600 dark:text-emerald-400">{fmtGHS(f.totalReceived)}</TableCell>
+                    <TableCell className="py-3 text-right font-mono text-xs tabular-nums text-orange-600 dark:text-orange-400">{fmtGHS(f.totalDisbursed)}</TableCell>
+                    <TableCell className="py-3 pr-5 text-right font-mono text-sm font-black tabular-nums">{fmtGHS(f.balance)}</TableCell>
                   </TableRow>
-                ) : (
-                  data!.floats.map((f) => (
-                    <TableRow key={f.cashierId}>
-                      <TableCell className="font-medium text-sm">{f.cashierName}</TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{fmtGHS(f.totalReceived)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{fmtGHS(f.totalDisbursed)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-sm font-bold">{fmtGHS(f.balance)}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </ScrollTable>
+      </Panel>
     </div>
   );
 }

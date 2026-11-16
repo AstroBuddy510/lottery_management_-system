@@ -2427,3 +2427,83 @@ export async function generatePaymentsHistoryPDF(
 
   doc.save(`transaction-history-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
+
+// ─── GENERIC TABLE REPORT ───
+/**
+ * Any on-screen section as a PDF: the same letterhead as every other report,
+ * then one table per section. The Payments screens use this for their
+ * Export PDF buttons, and lib/table-report.ts prints the same spec, so the
+ * paper and the PDF of a section always carry the same rows.
+ */
+export type TableReportColumn = { header: string; align?: "left" | "right" | "center" };
+export type TableReportSection = {
+  heading?: string;
+  columns: TableReportColumn[];
+  rows: string[][];
+  /** A bold closing row, e.g. totals. Same length as columns. */
+  totals?: string[];
+  empty?: string;
+};
+export type TableReport = {
+  title: string;
+  fileName: string;
+  /** Lines under the "Summary" label in the letterhead. */
+  summary: string[];
+  meta?: { label: string; value: string }[];
+  sections: TableReportSection[];
+  orientation?: "portrait" | "landscape";
+};
+
+export async function generateTableReportPDF(report: TableReport) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF({ orientation: report.orientation ?? "portrait" }) as any;
+  let y = drawBrandHeader(
+    doc,
+    report.title,
+    [
+      { label: "Report ID", value: `RPT-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) },
+      ...(report.meta ?? []),
+    ],
+    "Summary",
+    report.summary,
+    logoImg,
+  );
+
+  for (const section of report.sections) {
+    if (section.heading) {
+      if (y > doc.internal.pageSize.height - 40) { doc.addPage(); y = 20; }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(0, 78, 152);
+      doc.text(section.heading, 15, y);
+      y += 3;
+    }
+    const aligns = section.columns.map((c) => c.align ?? "left");
+    const body: any[] = section.rows.length
+      ? section.rows.map((r) => [...r])
+      : [[{ content: section.empty ?? "Nothing to show.", colSpan: section.columns.length, styles: { halign: "center", textColor: [140, 140, 140] } }]];
+    if (section.totals && section.rows.length) {
+      body.push(section.totals.map((t) => ({ content: t, styles: { fontStyle: "bold", fillColor: [236, 242, 250] } })));
+    }
+    autoTable(doc, {
+      head: [section.columns.map((c) => c.header)],
+      body,
+      startY: y,
+      theme: "striped",
+      headStyles: { ...tableTheme.headStyles, halign: "left" },
+      bodyStyles: { ...tableTheme.bodyStyles },
+      alternateRowStyles: tableTheme.alternateRowStyles,
+      columnStyles: Object.fromEntries(aligns.map((a, i) => [i, { halign: a }])),
+      didParseCell: (data: any) => {
+        if (data.section === "head") data.cell.styles.halign = aligns[data.column.index] ?? "left";
+      },
+      margin: tableTheme.margin,
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
+  if (y > doc.internal.pageSize.height - 45) doc.addPage();
+  drawSignatureBlock(doc, "Prepared By (Cashier)", "Approved By");
+  doc.save(report.fileName.endsWith(".pdf") ? report.fileName : `${report.fileName}.pdf`);
+}

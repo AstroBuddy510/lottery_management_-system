@@ -9,7 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import { Clock, AlertTriangle, Banknote, Smartphone, Filter, CheckCircle2 } from "lucide-react";
+import { Clock, AlertTriangle, Banknote, Smartphone, Filter, CheckCircle2, Hourglass, History, Receipt } from "lucide-react";
+import { Panel, ScrollTable, Pager, usePaged, ReportActions } from "@/components/data-kit";
+import { exportReportPdf, printReport, money, type TableReport } from "@/lib/table-report";
 import { fmtGHS } from "@/lib/utils";
 
 /**
@@ -125,13 +127,11 @@ function StatCard({
   accent?: string;
 }) {
   return (
-    <Card className={accent}>
-      <CardContent className="pt-5 pb-4">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{label}</div>
-        <div className={`text-2xl font-bold tabular-nums mt-1 ${tone}`}>{fmtGHS(value)}</div>
-        {sub && <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>}
-      </CardContent>
-    </Card>
+    <div className={`min-w-0 rounded-2xl border border-border/80 bg-card p-4 shadow-sm ${accent}`}>
+      <div className="truncate text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`mt-1.5 truncate text-xl font-black tracking-tight tabular-nums ${tone}`}>{fmtGHS(value)}</div>
+      {sub && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{sub}</div>}
+    </div>
   );
 }
 
@@ -207,10 +207,93 @@ export function AdminPostpaidSettlement() {
   const declaredCount = rows.filter((r) => r.ledger.paymentDeclaredAt).length;
   const filtered = !!(filterWriter || filterFrom || filterTo);
 
+  const POSTPAID_PAGE = 15;
+  const pOwed = usePaged(rows, POSTPAID_PAGE);
+  const pPaid = usePaged(payments, POSTPAID_PAGE, historyUrl);
+
+  const day = (d: string | null) => (d ? format(new Date(d), "d MMM yyyy") : "—");
+
+  /** Both halves of the desk, every row, as one document. */
+  const report = (): TableReport => ({
+    title: "Postpaid Settlement",
+    fileName: `postpaid_settlement_${format(new Date(), "yyyy-MM-dd")}`,
+    orientation: "landscape",
+    meta: [
+      { label: "History Filter", value: filtered ? [filterFrom && `from ${filterFrom}`, filterTo && `to ${filterTo}`, filterWriter && "one writer"].filter(Boolean).join(", ") : "None" },
+    ],
+    summary: [
+      `Cash to collect ${money(oTotals?.payable ?? 0)} across ${rows.length} ledger(s)${declaredCount ? `, ${declaredCount} declared` : ""}`,
+      `Cash collected ${money(hTotals?.collected ?? 0)} · Cash ${money(hTotals?.cash ?? 0)} · Mobile Money ${money(hTotals?.momo ?? 0)}`,
+    ],
+    sections: [
+      {
+        heading: "Awaiting payment",
+        columns: [
+          { header: "Date" }, { header: "Writer" }, { header: "Draw" },
+          { header: "Gross", align: "right" }, { header: "Commission", align: "right" },
+          { header: "Payable", align: "right" }, { header: "Wins", align: "right" }, { header: "Status" },
+        ],
+        rows: rows.map((r) => [
+          day(r.ledger.ledgerDate),
+          `${r.writer?.fullName ?? "—"}\n${r.writer?.fullCode ?? ""}`,
+          `${r.game?.name ?? "—"}\n${r.game?.eventNumber ?? ""}`,
+          money(r.ledger.totalStakes),
+          `-${money(r.ledger.commissionAmount)} (${pctText(r.ledger.commissionPct)})`,
+          money(r.ledger.amountPayable),
+          money(r.ledger.totalWinnings),
+          r.ledger.unsettledAtCalculation ? "Unsettled at calculation" : r.ledger.paymentDeclaredAt ? (r.ledger.paymentDeclaredMethod === "momo" ? "MoMo sent" : "Cash declared") : "Awaiting payment",
+        ]),
+        totals: ["TOTAL", "", "", money(oTotals?.grossSales ?? 0), `-${money(oTotals?.commission ?? 0)}`, money(oTotals?.payable ?? 0), money(oTotals?.winsRecorded ?? 0), ""],
+        empty: "Nothing outstanding.",
+      },
+      {
+        heading: "Payment history",
+        columns: [
+          { header: "Paid" }, { header: "Writer" }, { header: "Draw" },
+          { header: "Gross", align: "right" }, { header: "Commission", align: "right" },
+          { header: "Amount Paid", align: "right" }, { header: "Wins", align: "right" },
+          { header: "Method" }, { header: "Confirmed by" },
+        ],
+        rows: payments.map((p) => [
+          p.settledAt ? format(new Date(p.settledAt), "d MMM yyyy HH:mm") : "—",
+          `${p.writerName ?? "—"}\n${p.writerCode ?? ""}`,
+          `${p.gameName ?? "—"}\n${p.eventNumber ?? ""}`,
+          money(p.grossSales),
+          p.legacy ? "—" : `-${money(p.commissionAmount)}`,
+          money(p.amountPaid),
+          money(p.winsRecorded),
+          p.settlementMethod === "momo" ? "Mobile Money" : p.settlementMethod === "token_credit" ? "Token Credit" : "Cash",
+          p.settledByName ?? "not recorded",
+        ]),
+        totals: ["TOTAL", "", "", money(hTotals?.grossSales ?? 0), `-${money(hTotals?.commission ?? 0)}`, money(hTotals?.collected ?? 0), money(hTotals?.winsRecorded ?? 0), "", ""],
+        empty: filtered ? "No payments match these filters." : "No payments collected yet.",
+      },
+    ],
+  });
+
   return (
     <div className="space-y-6">
+      {/* ── Section toolbar ── */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/10 bg-primary/10 text-primary dark:border-border dark:bg-muted dark:text-foreground">
+            <Receipt className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold tracking-tight">Postpaid Settlement</h3>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">What postpaid writers still owe, and every settlement already collected.</p>
+          </div>
+        </div>
+        <ReportActions
+          label="postpaid settlement"
+          disabled={loadingOutstanding || loadingHistory || (rows.length === 0 && payments.length === 0)}
+          onPdf={() => exportReportPdf(report())}
+          onPrint={() => printReport(report())}
+        />
+      </div>
+
       {/* ── The numbers that matter, in the order the money moves ── */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label="Cash to collect"
           value={oTotals?.payable ?? "0"}
@@ -262,16 +345,13 @@ export function AdminPostpaidSettlement() {
       )}
 
       {/* ── Still owed ── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Awaiting payment</CardTitle>
-          <CardDescription className="text-xs">
-            Payable is gross sales less the writer's commission at the rate frozen when betting
-            closed. Wins are shown for the record only.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border overflow-x-auto">
+      <Panel
+        title="Awaiting payment"
+        icon={Hourglass}
+        subtitle="Payable is gross sales less the writer's commission at the rate frozen when betting closed. Wins are shown for the record only."
+        footer={<Pager page={pOwed.page} totalPages={pOwed.totalPages} onPage={pOwed.setPage} total={pOwed.total} size={pOwed.size} noun="ledgers" />}
+      >
+          <ScrollTable minWidth="76rem" maxHeight="34rem">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -301,7 +381,7 @@ export function AdminPostpaidSettlement() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  rows.map((row) => {
+                  pOwed.rows.map((row) => {
                     const l = row.ledger;
                     const declared = !!l.paymentDeclaredAt;
                     const overdue = !!l.unsettledAtCalculation;
@@ -378,21 +458,17 @@ export function AdminPostpaidSettlement() {
                 )}
               </TableBody>
             </Table>
-          </div>
-        </CardContent>
-      </Card>
+          </ScrollTable>
+      </Panel>
 
       {/* ── Already paid ── */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Payment history</CardTitle>
-              <CardDescription className="text-xs">
-                Every postpaid settlement collected, and which cashier took it.
-              </CardDescription>
-            </div>
-            {filtered && (
+      <Panel
+        title="Payment history"
+        icon={History}
+        subtitle="Every postpaid settlement collected, and which cashier took it."
+        footer={<Pager page={pPaid.page} totalPages={pPaid.totalPages} onPage={pPaid.setPage} total={pPaid.total} size={pPaid.size} noun="payments" />}
+        actions={
+            filtered ? (
               <Button
                 size="sm"
                 variant="ghost"
@@ -405,11 +481,10 @@ export function AdminPostpaidSettlement() {
               >
                 Clear filters
               </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-xl border bg-muted/20 p-3">
+            ) : undefined
+        }
+      >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-b bg-muted/20 px-5 py-4">
             <div className="space-y-1.5">
               <Label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground flex items-center gap-1">
                 <Filter className="h-3 w-3" /> Writer
@@ -437,7 +512,7 @@ export function AdminPostpaidSettlement() {
             </div>
           </div>
 
-          <div className="rounded-md border overflow-x-auto">
+          <ScrollTable minWidth="72rem" maxHeight="34rem">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -466,7 +541,7 @@ export function AdminPostpaidSettlement() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  payments.map((p) => (
+                  pPaid.rows.map((p) => (
                     <TableRow key={p.ledgerId}>
                       <TableCell className="text-xs whitespace-nowrap">
                         {p.settledAt ? (
@@ -535,9 +610,10 @@ export function AdminPostpaidSettlement() {
                 )}
               </TableBody>
             </Table>
+          </ScrollTable>
 
             {!loadingHistory && payments.length > 0 && (
-              <div className="border-t bg-muted/40 px-4 py-3 flex flex-wrap items-center gap-5 text-xs font-bold">
+              <div className="border-t bg-muted/30 px-5 py-3 flex flex-wrap items-center gap-5 text-xs font-bold">
                 <span className="flex items-center gap-2">
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Collected:</span>
                   <span className="tabular-nums text-emerald-600">{fmtGHS(hTotals?.collected ?? "0")}</span>
@@ -551,9 +627,7 @@ export function AdminPostpaidSettlement() {
                 </span>
               </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
+      </Panel>
     </div>
   );
 }

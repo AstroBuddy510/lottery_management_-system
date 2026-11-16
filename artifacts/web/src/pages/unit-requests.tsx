@@ -1,5 +1,4 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,6 +7,8 @@ import { Loader2, Check, Coins, Banknote, Smartphone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 import { Wallet } from "lucide-react";
+import { Panel, ScrollTable, Pager, usePaged, ReportActions, StatTile, PAGE_SIZE } from "@/components/data-kit";
+import { exportReportPdf, printReport, money, type TableReport } from "@/lib/table-report";
 
 /**
  * Paid unit purchases awaiting a cashier. Paystack confirming the charge
@@ -98,143 +99,166 @@ export function UnitRequests() {
   const floatBalance = Number(float?.wallet?.balance ?? 0);
   const short = floatBalance < total;
 
+  const paged = usePaged(list, PAGE_SIZE);
+
+  const confirmAndCredit = (r: PurchaseRequest) => {
+    if (
+      r.paymentMethod === "cash" &&
+      !confirm(
+        pct > 0
+          ? `Have you received ${fmtGHS(r.amount)} in cash from ${r.writerName}?\n\nThis credits ${fmtGHS(unitsFor(r.amount))} of units — the payment plus ${(pct * 100).toFixed(0)}% commission — and that full amount leaves your float. It cannot be undone.`
+          : `Have you received ${fmtGHS(r.amount)} in cash from ${r.writerName}?\n\nCrediting issues the units from your float and cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    credit.mutate(r.id);
+  };
+
+  const when = (r: PurchaseRequest) => format(new Date(r.paidAt ?? r.createdAt), "d MMM · h:mm a");
+
+  const report = (): TableReport => ({
+    title: "Unit Requests",
+    fileName: `unit_requests_${format(new Date(), "yyyy-MM-dd")}`,
+    summary: [
+      `${list.length} request(s) awaiting credit · ${money(total)} paid by writers`,
+      pct > 0 ? `${money(totalUnits)} of units to issue · float ${money(floatBalance)}` : `Float ${money(floatBalance)}`,
+    ],
+    sections: [{
+      columns: [
+        { header: "Writer" }, { header: "Paid / requested" }, { header: "Method" }, { header: "Reference" },
+        { header: "Amount", align: "right" }, { header: "Units issued", align: "right" },
+      ],
+      rows: list.map((r) => [
+        `${r.writerName}\n${r.writerCode}${r.writerPhone ? ` · ${r.writerPhone}` : ""}`,
+        `${when(r)}${r.paidAt ? "" : " (requested)"}`,
+        r.paymentMethod === "cash" ? "Cash" : "Mobile Money",
+        r.paystackReference ?? "—",
+        money(r.amount),
+        money(unitsFor(r.amount)),
+      ]),
+      totals: ["TOTAL", "", "", "", money(total), money(totalUnits)],
+      empty: "No requests awaiting credit.",
+    }],
+  });
+
+  const creditButton = (r: PurchaseRequest, wide = false) => (
+    <Button size="sm" className={`h-8 rounded-lg text-xs font-bold ${wide ? "w-full" : ""}`} disabled={credit.isPending} onClick={() => confirmAndCredit(r)}>
+      {credit.isPending && credit.variables === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+      <span className="ml-1.5">{r.paymentMethod === "cash" ? "Cash received · Credit" : "Credit units"}</span>
+    </Button>
+  );
+
+  const methodChip = (r: PurchaseRequest) =>
+    r.paymentMethod === "cash" ? (
+      <Badge className="border border-amber-300/60 bg-amber-500/15 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+        <Banknote className="mr-1 h-3 w-3" /> CASH
+      </Badge>
+    ) : (
+      <Badge className="border border-emerald-300/60 bg-emerald-500/15 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+        <Smartphone className="mr-1 h-3 w-3" /> MoMo
+      </Badge>
+    );
+
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Coins className="h-4 w-4 text-amber-500" /> Unit Requests
-          </CardTitle>
-          <CardDescription>
-            Writers buying e-token units. Mobile money arrives already paid; a cash request is
-            waiting for the writer to hand you the money. Crediting issues the units from your float.
-          </CardDescription>
-        </div>
-        <div className="flex items-center gap-4 shrink-0">
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold flex items-center gap-1 justify-end">
-              <Wallet className="h-3 w-3" /> My Float
-            </div>
-            <div className={`text-lg font-bold tabular-nums ${short ? "text-destructive" : ""}`}>
-              {fmtGHS(floatBalance)}
-            </div>
-          </div>
-          {list.length > 0 && (
-            <div className="text-right">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Awaiting</div>
-              <div className="text-lg font-bold tabular-nums">{fmtGHS(total)}</div>
-              {pct > 0 && (
-                <div className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
-                  {fmtGHS(totalUnits)} of float needed
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <div className="space-y-6">
+      {/* Figures first: what is queued, and whether the float can cover it. */}
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="My float" value={fmtGHS(floatBalance)} sub={short && list.length > 0 ? "Not enough for the queue" : "Units available to issue"} icon={Wallet} tone={short && list.length > 0 ? "bad" : "default"} />
+        <StatTile label="Requests waiting" value={String(list.length)} sub={`${list.filter((r) => r.paymentMethod === "cash").length} cash · ${list.filter((r) => r.paymentMethod !== "cash").length} mobile money`} icon={Coins} />
+        <StatTile label="Paid by writers" value={fmtGHS(total)} sub="Cash and MoMo awaiting credit" icon={Banknote} tone="in" />
+        <StatTile label="Float needed" value={fmtGHS(totalUnits)} sub={pct > 0 ? `Includes ${(pct * 100).toFixed(0)}% commission` : "Units to issue"} icon={Wallet} tone="out" />
+      </div>
+
+      <Panel
+        title="Unit Requests"
+        icon={Coins}
+        subtitle="Writers buying e-token units. Mobile money arrives already paid; a cash request waits for the writer to hand you the money. Crediting issues the units from your float."
+        actions={<ReportActions label="unit requests" disabled={list.length === 0} onPdf={() => exportReportPdf(report())} onPrint={() => printReport(report())} />}
+        footer={<Pager page={paged.page} totalPages={paged.totalPages} onPage={paged.setPage} total={paged.total} size={paged.size} noun="requests" />}
+      >
         {short && list.length > 0 && (
-          <p className="text-xs rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-amber-900 dark:text-amber-200">
-            Your float does not cover everything queued. Ask an administrator to
-            recharge you — units are disbursed from your float, not created here.
+          <p className="border-b border-amber-300/60 bg-amber-50 px-5 py-2.5 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+            Your float does not cover everything queued. Ask an administrator to recharge you — units are disbursed from your float, not created here.
           </p>
         )}
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Writer</TableHead>
-                <TableHead>Paid</TableHead>
-                <TableHead>Reference</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8"><Loader2 className="h-4 w-4 animate-spin inline" /></TableCell></TableRow>
-              ) : list.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">No requests awaiting credit.</TableCell></TableRow>
-              ) : (
-                list.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <span className="block text-sm font-medium">{r.writerName}</span>
-                      <span className="block text-[11px] font-mono text-muted-foreground">
-                        {r.writerCode}{r.writerPhone ? ` · ${r.writerPhone}` : ""}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">
-                      {r.paidAt
-                        ? format(new Date(r.paidAt), "d MMM · h:mm a")
-                        : format(new Date(r.createdAt), "d MMM · h:mm a")}
-                      {!r.paidAt && (
-                        <span className="block text-[10px] text-muted-foreground">requested</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {r.paymentMethod === "cash" ? (
-                        <>
-                          <Badge className="bg-amber-500/15 text-amber-700 border border-amber-300/60 text-[10px] font-bold dark:text-amber-300">
-                            <Banknote className="mr-1 h-3 w-3" /> CASH
-                          </Badge>
-                          <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                            Collect {fmtGHS(r.amount)} first
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <Badge className="bg-emerald-500/15 text-emerald-700 border border-emerald-300/60 text-[10px] font-bold dark:text-emerald-300">
-                            <Smartphone className="mr-1 h-3 w-3" /> MoMo
-                          </Badge>
+
+        {isLoading ? (
+          <div className="py-12 text-center"><Loader2 className="inline h-4 w-4 animate-spin" /></div>
+        ) : list.length === 0 ? (
+          <div className="py-14 text-center text-muted-foreground">
+            <Check className="mx-auto h-8 w-8 opacity-30" />
+            <p className="mt-2 text-sm font-semibold">No requests awaiting credit</p>
+          </div>
+        ) : (
+          <>
+            {/* Wide screens: a table that scrolls both ways */}
+            <div className="hidden md:block">
+              <ScrollTable minWidth="52rem">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="pl-5">Writer</TableHead>
+                      <TableHead>Paid</TableHead>
+                      <TableHead>Method · Reference</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="pr-5 text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paged.rows.map((r) => (
+                      <TableRow key={r.id} className="hover:bg-muted/30">
+                        <TableCell className="py-3 pl-5">
+                          <span className="block text-sm font-semibold">{r.writerName}</span>
+                          <span className="block font-mono text-[11px] text-muted-foreground">{r.writerCode}{r.writerPhone ? ` · ${r.writerPhone}` : ""}</span>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap py-3 text-xs">
+                          {when(r)}
+                          {!r.paidAt && <span className="block text-[10px] text-muted-foreground">requested</span>}
+                        </TableCell>
+                        <TableCell className="py-3">
+                          {methodChip(r)}
                           <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
-                            {r.paystackReference ?? "—"}
+                            {r.paymentMethod === "cash" ? `Collect ${fmtGHS(r.amount)} first` : r.paystackReference ?? "—"}
                           </span>
-                        </>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      <div className="font-bold">{fmtGHS(r.amount)}</div>
-                      {pct > 0 && (
-                        <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">
-                          issues {fmtGHS(unitsFor(r.amount))}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs"
-                        disabled={credit.isPending}
-                        onClick={() => {
-                          if (
-                            r.paymentMethod === "cash" &&
-                            !confirm(
-                              pct > 0
-                                ? `Have you received ${fmtGHS(r.amount)} in cash from ${r.writerName}?\n\nThis credits ${fmtGHS(unitsFor(r.amount))} of units — the payment plus ${(pct * 100).toFixed(0)}% commission — and that full amount leaves your float. It cannot be undone.`
-                                : `Have you received ${fmtGHS(r.amount)} in cash from ${r.writerName}?\n\nCrediting issues the units from your float and cannot be undone.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          credit.mutate(r.id);
-                        }}
-                      >
-                        {credit.isPending && credit.variables === r.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Check className="h-3.5 w-3.5" />
-                        )}
-                        <span className="ml-1.5">{r.paymentMethod === "cash" ? "Cash received · Credit" : "Credit Units"}</span>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+                        </TableCell>
+                        <TableCell className="py-3 text-right tabular-nums">
+                          <div className="font-bold">{fmtGHS(r.amount)}</div>
+                          {pct > 0 && <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">issues {fmtGHS(unitsFor(r.amount))}</div>}
+                        </TableCell>
+                        <TableCell className="py-3 pr-5 text-right">{creditButton(r)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollTable>
+            </div>
+
+            {/* Phones: one card per request */}
+            <div className="grid gap-3 p-4 md:hidden">
+              {paged.rows.map((r) => (
+                <article key={r.id} className="rounded-2xl border border-border/80 bg-background/60 p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold">{r.writerName}</div>
+                      <div className="font-mono text-[10px] text-muted-foreground">{r.writerCode}</div>
+                    </div>
+                    {methodChip(r)}
+                  </div>
+                  <div className="mt-3 flex items-end justify-between gap-3">
+                    <div>
+                      <div className="text-xl font-black tabular-nums">{fmtGHS(r.amount)}</div>
+                      {pct > 0 && <div className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">issues {fmtGHS(unitsFor(r.amount))}</div>}
+                    </div>
+                    <div className="text-right text-[11px] text-muted-foreground">{when(r)}</div>
+                  </div>
+                  <div className="mt-3">{creditButton(r, true)}</div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </Panel>
+    </div>
   );
 }

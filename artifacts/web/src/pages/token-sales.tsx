@@ -10,6 +10,8 @@ import { Loader2, Coins, ArrowDownCircle, ArrowUpCircle, Users, RotateCcw } from
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
 import { cn, fmtGHS } from "@/lib/utils";
+import { Panel, ScrollTable, Pager, usePaged, ReportActions, DirectionBadge, SignedAmount, PAGE_SIZE } from "@/components/data-kit";
+import { exportReportPdf, printReport, money, type TableReport } from "@/lib/table-report";
 
 /**
  * E-token transaction history.
@@ -148,6 +150,43 @@ export function TokenSalesPanel({ embedded = false }: { embedded?: boolean }) {
   const narrowedToParty = agentId !== "all" || writerId !== "all";
   const rows = sales.data?.transactions ?? [];
   const s = sales.data?.summary;
+  const paged = usePaged(rows, PAGE_SIZE, query);
+
+  const report = (): TableReport => ({
+    title: "E-Token Transactions",
+    fileName: `etoken_transactions_${from || "start"}_to_${to || "today"}`,
+    orientation: "landscape",
+    meta: [
+      { label: "Period", value: from || to ? `${from || "start"} to ${to || "today"}` : "All time" },
+      { label: "Scope", value: isCashier ? "My float" : "All cashiers" },
+    ],
+    summary: [
+      `${rows.length} movement(s)${sales.data?.truncated ? " (most recent only)" : ""} · ${s?.writersServed ?? 0} writer(s) served`,
+      `Pay-Out to writers ${money(s?.issued ?? 0)} · Pay-In to floats ${money(s?.received ?? 0)}${Number(s?.reversed ?? 0) > 0 ? ` · Reversed ${money(s?.reversed)}` : ""}`,
+    ],
+    sections: [{
+      columns: [
+        { header: "When" }, { header: "Direction" }, { header: "Movement" }, { header: "Writer" }, { header: "Agency" },
+        { header: "Paid by" }, ...(isCashier ? [] : [{ header: "Cashier" }]),
+        { header: "Amount", align: "right" as const }, { header: "Float after", align: "right" as const },
+      ],
+      rows: rows.map((t) => {
+        const dir = directionOf(t);
+        return [
+          format(new Date(t.createdAt), "d MMM yyyy HH:mm"),
+          dir === "in" ? "Pay-In" : "Pay-Out",
+          (MOVEMENT[t.transactionType] ?? MOVEMENT["disbursement"]!).label,
+          t.writerName ? `${t.writerName}\n${t.writerCode ?? ""}` : "—",
+          t.agentCode ? `${t.agentCode}${t.agencyName ? ` · ${t.agencyName}` : ""}` : "—",
+          t.paymentMethod ? (t.paymentMethod === "momo" ? "Mobile money" : t.paymentMethod) : "—",
+          ...(isCashier ? [] : [t.cashierName]),
+          `${dir === "in" ? "+" : "-"}${money(t.amount)}`,
+          money(t.balanceAfter),
+        ];
+      }),
+      empty: "No e-token movements for this selection.",
+    }],
+  });
 
   return (
     <div className={embedded ? "space-y-6" : "p-6 space-y-6"}>
@@ -170,9 +209,9 @@ export function TokenSalesPanel({ embedded = false }: { embedded?: boolean }) {
       )}
 
       {/* ---- Totals, over the whole filtered set rather than the page ------ */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
         <Stat
-          label={isCashier ? "Issued to writers" : "Issued to writers"}
+          label="Pay-Out · issued to writers"
           value={s ? fmtGHS(s.issued) : "—"}
           icon={ArrowUpCircle}
           tone="out"
@@ -181,7 +220,7 @@ export function TokenSalesPanel({ embedded = false }: { embedded?: boolean }) {
             belongs to no agency. Narrowing to one would always report zero,
             which reads as a bug rather than as "not applicable" - so say so. */}
         <Stat
-          label={isCashier ? "Received from company" : "Issued to cashiers"}
+          label={isCashier ? "Pay-In · from company" : "Pay-In · to cashier floats"}
           value={narrowedToParty ? "—" : s ? fmtGHS(s.received) : "—"}
           icon={ArrowDownCircle}
           tone="in"
@@ -197,7 +236,7 @@ export function TokenSalesPanel({ embedded = false }: { embedded?: boolean }) {
       </div>
 
       {/* ---- Filters ------------------------------------------------------- */}
-      <Card>
+      <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardContent className="space-y-3 pt-5">
           <div className="flex flex-wrap items-center gap-1.5">
             {RANGES.map((r) => (
@@ -315,61 +354,54 @@ export function TokenSalesPanel({ embedded = false }: { embedded?: boolean }) {
       </Card>
 
       {/* ---- The ledger ---------------------------------------------------- */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Transactions</CardTitle>
-          <CardDescription className="text-xs">
-            {sales.isLoading
-              ? "Loading…"
-              : `${rows.length} shown${
-                  sales.data?.truncated ? " (most recent — narrow the dates to see the rest)" : ""
-                }. Newest first.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {sales.isError && (
-            <p className="py-6 text-center text-sm text-destructive">
-              {(sales.error as Error).message}
-            </p>
-          )}
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
+      <Panel
+        title="Transactions"
+        icon={Coins}
+        subtitle={
+          sales.isLoading
+            ? "Loading…"
+            : `${rows.length} movement(s)${sales.data?.truncated ? " — the most recent; narrow the dates to see the rest" : ""}. Pay-In fills a float; Pay-Out issues units to a writer. Newest first.`
+        }
+        actions={<ReportActions label="e-token transactions" disabled={rows.length === 0} onPdf={() => exportReportPdf(report())} onPrint={() => printReport(report())} />}
+        footer={<Pager page={paged.page} totalPages={paged.totalPages} onPage={paged.setPage} total={paged.total} size={paged.size} noun="movements" />}
+      >
+        {sales.isError && (
+          <p className="py-6 text-center text-sm text-destructive">{(sales.error as Error).message}</p>
+        )}
+        <ScrollTable minWidth={isCashier ? "58rem" : "66rem"}>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="pl-5">When</TableHead>
+                <TableHead>Direction</TableHead>
+                <TableHead>Writer</TableHead>
+                <TableHead>Agency</TableHead>
+                <TableHead>Paid by</TableHead>
+                {!isCashier && <TableHead>Cashier</TableHead>}
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="pr-5 text-right">Float after</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sales.isLoading ? (
                 <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Movement</TableHead>
-                  <TableHead>Writer</TableHead>
-                  <TableHead>Agency</TableHead>
-                  <TableHead>Paid by</TableHead>
-                  {!isCashier && <TableHead>Cashier</TableHead>}
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead className="text-right">Float after</TableHead>
+                  <TableCell colSpan={isCashier ? 7 : 8} className="py-10 text-center">
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sales.isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={isCashier ? 7 : 8} className="py-10 text-center">
-                      <Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" />
-                    </TableCell>
-                  </TableRow>
-                ) : rows.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={isCashier ? 7 : 8}
-                      className="py-10 text-center text-xs text-muted-foreground"
-                    >
-                      No e-token movements for this selection.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  rows.map((t) => <Row key={t.id} t={t} showCashier={!isCashier} />)
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+              ) : rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={isCashier ? 7 : 8} className="py-10 text-center text-xs text-muted-foreground">
+                    No e-token movements for this selection.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paged.rows.map((t) => <Row key={t.id} t={t} showCashier={!isCashier} />)
+              )}
+            </TableBody>
+          </Table>
+        </ScrollTable>
+      </Panel>
     </div>
   );
 }
@@ -404,18 +436,18 @@ function Stat({
   hint?: string;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">
+    <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
+      <div className="flex items-center gap-1.5 truncate text-[10px] font-black uppercase tracking-wider text-muted-foreground">
         <Icon
           className={cn(
             "h-3.5 w-3.5",
             tone === "in" && "text-emerald-600 dark:text-emerald-400",
-            tone === "out" && "text-blue-600 dark:text-blue-400",
+            tone === "out" && "text-orange-600 dark:text-orange-400",
           )}
         />
         {label}
       </div>
-      <div className="mt-1.5 text-xl font-bold tabular-nums">{value}</div>
+      <div className={cn("mt-1.5 truncate text-xl font-black tracking-tight tabular-nums", tone === "in" && "text-emerald-600 dark:text-emerald-400", tone === "out" && "text-orange-600 dark:text-orange-400")}>{value}</div>
       {hint && <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">{hint}</div>}
     </div>
   );
@@ -439,20 +471,26 @@ const MOVEMENT: Record<string, { label: string; tone: string; icon: any }> = {
   },
 };
 
+/**
+ * Which way the units moved, seen from the cashier's float: a receipt from
+ * the company fills it (Pay-In), an issue to a writer empties it (Pay-Out).
+ * A reversal is a correcting entry that puts units back, so it reads as in.
+ */
+function directionOf(t: Txn): "in" | "out" {
+  return t.transactionType === "disbursement" ? "out" : "in";
+}
+
 function Row({ t, showCashier }: { t: Txn; showCashier: boolean }) {
   const m = MOVEMENT[t.transactionType] ?? MOVEMENT["disbursement"]!;
-  const Icon = m.icon;
+  const dir = directionOf(t);
   return (
-    <TableRow>
-      <TableCell className="whitespace-nowrap text-[11px] text-muted-foreground">
-        {format(new Date(t.createdAt), "d MMM yyyy")}
-        <div className="font-mono text-[10px]">{format(new Date(t.createdAt), "HH:mm")}</div>
+    <TableRow className="hover:bg-muted/30">
+      <TableCell className="whitespace-nowrap py-3 pl-5 text-[11px]">
+        <div className="font-semibold">{format(new Date(t.createdAt), "d MMM yyyy")}</div>
+        <div className="font-mono text-[10px] text-muted-foreground">{format(new Date(t.createdAt), "HH:mm")}</div>
       </TableCell>
-      <TableCell>
-        <Badge variant="outline" className={cn("gap-1 text-[9px] font-bold", m.tone)}>
-          <Icon className="h-3 w-3" />
-          {m.label}
-        </Badge>
+      <TableCell className="py-3">
+        <DirectionBadge direction={dir} detail={m.label} />
       </TableCell>
       <TableCell>
         {t.writerName ? (
@@ -486,10 +524,10 @@ function Row({ t, showCashier }: { t: Txn; showCashier: boolean }) {
         )}
       </TableCell>
       {showCashier && <TableCell className="text-xs">{t.cashierName}</TableCell>}
-      <TableCell className="text-right text-xs font-semibold tabular-nums">
-        {fmtGHS(t.amount)}
+      <TableCell className="py-3 text-right text-xs">
+        <SignedAmount direction={dir}>{fmtGHS(t.amount)}</SignedAmount>
       </TableCell>
-      <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+      <TableCell className="py-3 pr-5 text-right font-mono text-xs tabular-nums text-muted-foreground">
         {fmtGHS(t.balanceAfter)}
       </TableCell>
     </TableRow>
