@@ -17,6 +17,7 @@ import {
 import { generatePadlockAssignmentsPDF } from "@/lib/pdf-generator";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
 import { TerminalsManager } from "@/components/terminals-manager";
+import { ThermalRollsManager } from "@/components/thermal-rolls-manager";
 import { TerminalOverviewPanel } from "@/components/terminal-overview-panel";
 import { useListTerminals, getListTerminalsQueryKey, type TerminalWithStatus } from "@workspace/api-client-react";
 import { useAuth } from "@/lib/auth";
@@ -56,7 +57,8 @@ import {
   AlertCircle,
   FolderLock,
   Printer,
-  FileDown
+  FileDown,
+  ScrollText,
 } from "lucide-react";
 import {
   PieChart,
@@ -75,7 +77,7 @@ export function Inventory() {
   // server; showing a cashier the buttons would only produce a 403.
   const canManageTerminals = user?.role === "director" || user?.role === "administrator";
 
-  const [activeTab, setActiveTab] = useState<"overview" | "booklets" | "padlocks" | "terminals">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "booklets" | "thermal" | "padlocks" | "terminals">("overview");
   const [bookletSubTab, setBookletSubTab] = useState<"batches" | "allocations" | "balances">("batches");
   const [padlockSubTab, setPadlockSubTab] = useState<"registry" | "assignments">("registry");
 
@@ -528,10 +530,11 @@ export function Inventory() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex bg-muted/80 border p-1 rounded-2xl self-start lg:self-center gap-1">
+        <div className="flex flex-wrap bg-muted/80 border p-1 rounded-2xl self-start lg:self-center gap-1">
           {[
             { id: "overview", label: "Overview", icon: <BarChart2 className="w-3.5 h-3.5" /> },
             { id: "booklets", label: "Booklets", icon: <FileSpreadsheet className="w-3.5 h-3.5" /> },
+            { id: "thermal", label: "Thermal Rolls", icon: <ScrollText className="w-3.5 h-3.5" /> },
             { id: "padlocks", label: "Digital Padlocks", icon: <Lock className="w-3.5 h-3.5" /> },
             { id: "terminals", label: "Terminals Management", icon: <Smartphone className="w-3.5 h-3.5" /> },
           ].map(tab => (
@@ -988,7 +991,20 @@ export function Inventory() {
           </motion.div>
         )}
 
-        {/* ─── TAB: PADLOCKS ─── */}
+        {/* ─── TAB: THERMAL ROLLS ─── */}
+        {activeTab === "thermal" && (
+          <motion.div
+            key="thermal"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -15 }}
+            transition={{ duration: 0.3 }}
+          >
+            <ThermalRollsManager role={user?.role} />
+          </motion.div>
+        )}
+
+        {/* ─── TAB: TERMINALS ─── */}
         {activeTab === "terminals" && (
           <motion.div
             key="terminals"
