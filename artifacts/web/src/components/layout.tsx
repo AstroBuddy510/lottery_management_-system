@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, X, Bell } from "lucide-react";
+import { Menu, X, Bell, ChevronDown } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,17 @@ interface NavItem {
   roles: string[];
 }
 
-const NAV_ITEMS: NavItem[] = [
+/** A heading in the menu that opens to show related pages. */
+interface NavGroup {
+  label: string;
+  group: true;
+  children: NavItem[];
+}
+
+type NavEntry = NavItem | NavGroup;
+const isGroup = (e: NavEntry): e is NavGroup => "group" in e;
+
+const NAV_ITEMS: NavEntry[] = [
   { label: "Dashboard", path: "/dashboard", roles: ["director", "administrator", "cashier", "gross_entry", "wins_entry", "agent"] },
   { label: "Agency Overview", path: "/agencies", roles: ["director", "administrator"] },
   { label: "Users & Agents", path: "/users", roles: ["administrator", "director", "cashier"] },
@@ -30,8 +40,14 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Payments", path: "/payments", roles: ["cashier", "administrator", "director"] },
   { label: "POS Wins Payment", path: "/pos-wins-payment", roles: ["cashier"] },
   { label: "Master Wallet", path: "/master-wallet", roles: ["director", "administrator"] },
-  { label: "Staffs & Employees", path: "/staffs-employees", roles: ["cashier", "administrator", "director"] },
-  { label: "Agency Staff Expenses", path: "/agency-staff-expenses", roles: ["cashier", "administrator", "director"] },
+  {
+    label: "Personnel Management",
+    group: true,
+    children: [
+      { label: "Internal Employees", path: "/staffs-employees", roles: ["cashier", "administrator", "director"] },
+      { label: "External Employees", path: "/agency-staff-expenses", roles: ["cashier", "administrator", "director"] },
+    ],
+  },
   { label: "Company Expenses", path: "/company-expenses", roles: ["cashier", "administrator", "director"] },
   { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier", "administrator"] },
   { label: "Run Draws", path: "/calculations", roles: ["director", "administrator"] },
@@ -51,14 +67,18 @@ const ROLE_LABELS: Record<string, string> = {
   agent: "Agent",
 };
 
-function NavLink({ item }: { item: NavItem }) {
+const isActivePath = (location: string, path: string) =>
+  location === path || (path !== "/dashboard" && location.startsWith(path));
+
+function NavLink({ item, nested }: { item: NavItem; nested?: boolean }) {
   const [location] = useLocation();
-  const active = location === item.path || (item.path !== "/dashboard" && location.startsWith(item.path));
+  const active = isActivePath(location, item.path);
 
   return (
     <Link href={item.path}>
       <span className={cn(
         "block px-3 py-2 rounded text-sm font-medium transition-colors cursor-pointer",
+        nested && "py-1.5 text-[13px]",
         active
           ? "bg-primary text-primary-foreground"
           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -69,6 +89,38 @@ function NavLink({ item }: { item: NavItem }) {
   );
 }
 
+function NavGroupLink({ group }: { group: NavGroup }) {
+  const [location] = useLocation();
+  const holdsActive = group.children.some(c => isActivePath(location, c.path));
+  // Open whenever you are on one of its pages; otherwise remember the choice.
+  const [open, setOpen] = useState(holdsActive);
+  useEffect(() => { if (holdsActive) setOpen(true); }, [holdsActive]);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className={cn(
+          "w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded text-sm font-medium text-left transition-colors",
+          holdsActive && !open
+            ? "bg-primary text-primary-foreground"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        )}
+      >
+        <span className="truncate">{group.label}</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 opacity-70 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="mt-0.5 ml-3 pl-2 border-l border-sidebar-border space-y-0.5">
+          {group.children.map(c => <NavLink key={c.path} item={c} nested />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { data: unread } = useGetUnreadCount({
@@ -76,9 +128,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   });
   const unreadCount = unread?.count ?? 0;
 
-  const visibleItems = NAV_ITEMS.filter(item =>
-    user?.role && item.roles.includes(user.role)
-  );
+  const canSee = (item: NavItem) => !!user?.role && item.roles.includes(user.role);
+  // A group shows only the pages this role may open, and disappears if none.
+  const visibleItems: NavEntry[] = NAV_ITEMS.flatMap((entry): NavEntry[] => {
+    if (!isGroup(entry)) return canSee(entry) ? [entry] : [];
+    const children = entry.children.filter(canSee);
+    return children.length ? [{ ...entry, children }] : [];
+  });
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [location] = useLocation();
@@ -102,6 +158,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
           {visibleItems.map(item => {
+            if (isGroup(item)) return <NavGroupLink key={item.label} group={item} />;
             if (item.path === "/notifications") {
               return (
                 <div key={item.path} className="relative">
@@ -137,7 +194,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop: the sidebar is always there. */}
-      <aside className="hidden lg:flex w-56 flex-shrink-0 flex-col bg-sidebar border-r border-sidebar-border">
+      <aside className="hidden lg:flex w-60 flex-shrink-0 flex-col bg-sidebar border-r border-sidebar-border">
         {sidebar}
       </aside>
 
