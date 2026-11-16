@@ -18,6 +18,7 @@ import { GetWriterReportParams, GetAgentReportParams } from "@workspace/api-zod"
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
 import { quoteDueLedgers } from "../lib/postpaid";
+import { TICKET_VALIDITY_DAYS } from "../lib/receipt";
 
 const router = Router();
 
@@ -1344,6 +1345,279 @@ router.get(
         agencyCount: new Set(selling.map((c) => writerById.get(c.writerId)?.agentId).filter(Boolean)).size,
       },
       rows,
+    });
+  },
+);
+
+// ── GET /reports/wins-debt-overview ───────────────────────────────────────────
+/**
+ * Wins & Debt Overview: what the company owes on wins, and what is owed to it,
+ * across every way a sale can be made.
+ *
+ * Wins, by channel:
+ *   POS prepaid / POS postpaid  winning portal tickets and where each stands
+ *                               in the payout pipeline (unclaimed, with the
+ *                               cashier, awaiting funds, transfer sent, paid,
+ *                               flagged, withheld, or expired unclaimed)
+ *   Manual                      wins agents keyed in, pending or calculated.
+ *                               The deeper manual analysis (reserve cover,
+ *                               aging queue) stays on /reports/wins-debt.
+ *
+ * Debts, as of now:
+ *   postpaid writers   quoted and unpaid on the postpaid ledger; "overdue"
+ *                      once Run Draws has passed the draw with it unpaid
+ *   agencies           the running agency balance: negative is the agency
+ *                      owing the company, positive the company owing it -
+ *                      the convention the agent and payment screens use
+ *
+ * The period filters what was won (by draw date for tickets, entry date for
+ * manual wins). Positions - the pipeline, the debts, the wallet - are now.
+ */
+router.get(
+  "/reports/wins-debt-overview",
+  requireAuth,
+  requireRole("director", "administrator"),
+  async (req, res) => {
+    const isDate = (v: unknown): v is string =>
+      typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+    const rawFrom = req.query["dateFrom"];
+    const rawTo = req.query["dateTo"];
+    if ((rawFrom && !isDate(rawFrom)) || (rawTo && !isDate(rawTo))) {
+      res.status(400).json({ error: "Dates must be YYYY-MM-DD" });
+      return;
+    }
+    const from = isDate(rawFrom) ? rawFrom : null;
+    const to = isDate(rawTo) ? rawTo : null;
+    if (from && to && from > to) {
+      res.status(400).json({ error: "The From date is after the To date" });
+      return;
+    }
+
+    await quoteDueLedgers(db);
+
+    const days = TICKET_VALIDITY_DAYS;
+    // A ticket can be claimed until the end of the day it expires (Accra is
+    // GMT all year), the same rule the claim screen enforces.
+    const validUntil = sql`(date_trunc('day', (g.close_at at time zone 'UTC') + make_interval(days => ${days})) + interval '1 day')`;
+    const nowUtc = sql`(now() at time zone 'UTC')`;
+    const state = sql`case
+        when p.id is null then 'missing'
+        when p.status in ('pending', 'approved') and ${nowUtc} >= ${validUntil} then 'expired'
+        when p.status in ('pending', 'approved') then 'unclaimed'
+        else p.status::text end`;
+    const channel = sql`case when t.token_transaction_id is null then 'postpaid' else 'prepaid' end`;
+
+    const posQuery = (periodFilter: ReturnType<typeof sql>) => db.execute(sql`
+      select ${channel} as channel, ${state} as state,
+             count(*)::int as n,
+             coalesce(sum(coalesce(p.payout_amount, t.win_amount)), 0)::text as amount,
+             count(*) filter (where p.status in ('pending', 'approved')
+                               and ${nowUtc} < ${validUntil}
+                               and ${nowUtc} >= ${validUntil} - interval '3 days')::int as expiring_n,
+             coalesce(sum(p.payout_amount) filter (where p.status in ('pending', 'approved')
+                               and ${nowUtc} < ${validUntil}
+                               and ${nowUtc} >= ${validUntil} - interval '3 days'), 0)::text as expiring_amount
+        from tickets t
+        join games g on g.id = t.game_id
+        left join payout_requests p on p.ticket_id = t.id
+       where t.is_winner and t.win_amount > 0 and t.status not in ('cancelled', 'void')
+         ${periodFilter}
+       group by 1, 2`);
+
+    const drawFrom = from ? sql`and (g.close_at at time zone 'UTC')::date >= ${from}::date` : sql``;
+    const drawTo = to ? sql`and (g.close_at at time zone 'UTC')::date <= ${to}::date` : sql``;
+    const entryFrom = from ? sql`and e.entry_date >= ${from}::date` : sql``;
+    const entryTo = to ? sql`and e.entry_date <= ${to}::date` : sql``;
+
+    const [posPeriod, posNow, manualPeriod, ledgerAging, debtors, agencies, wallet] = await Promise.all([
+      posQuery(sql`${drawFrom} ${drawTo}`),
+      posQuery(sql``),
+      db.execute(sql`
+        select count(*)::int as n,
+               coalesce(sum(e.wins_amount), 0)::text as amount,
+               count(*) filter (where e.locked)::int as settled_n,
+               coalesce(sum(e.wins_amount) filter (where e.locked), 0)::text as settled_amount,
+               count(*) filter (where not e.locked)::int as pending_n,
+               coalesce(sum(e.wins_amount) filter (where not e.locked), 0)::text as pending_amount
+          from wins_entries e
+         where true ${entryFrom} ${entryTo}`),
+      db.execute(sql`
+        with open_ledgers as (
+          select l.*,
+                 greatest(l.amount_payable - l.amount_paid, 0) as owed,
+                 (l.unsettled_at_calculation is not null or l.settlement_status = 'overdue') as overdue,
+                 (current_date - l.ledger_date) as age
+            from postpaid_daily_ledger l
+           where l.settlement_status <> 'settled'
+        )
+        select
+          coalesce(sum(owed) filter (where commission_pct is not null), 0)::text as outstanding,
+          count(*) filter (where commission_pct is not null and owed > 0)::int as outstanding_n,
+          coalesce(sum(owed) filter (where commission_pct is not null and overdue), 0)::text as overdue,
+          count(*) filter (where commission_pct is not null and overdue and owed > 0)::int as overdue_n,
+          coalesce(sum(total_stakes) filter (where commission_pct is null), 0)::text as not_yet_due,
+          count(distinct writer_id) filter (where commission_pct is not null and owed > 0)::int as writers_owing,
+          coalesce(sum(owed) filter (where commission_pct is not null and age <= 1), 0)::text as age_0_1,
+          coalesce(sum(owed) filter (where commission_pct is not null and age between 2 and 7), 0)::text as age_2_7,
+          coalesce(sum(owed) filter (where commission_pct is not null and age between 8 and 30), 0)::text as age_8_30,
+          coalesce(sum(owed) filter (where commission_pct is not null and age > 30), 0)::text as age_30_plus
+          from open_ledgers`),
+      db.execute(sql`
+        select w.id as writer_id, w.full_code as writer_code, w.full_name as writer_name,
+               a.full_code as agent_code, coalesce(a.agency_name, u.full_name) as agency_name,
+               sum(greatest(l.amount_payable - l.amount_paid, 0))::text as owed,
+               bool_or(l.unsettled_at_calculation is not null or l.settlement_status = 'overdue') as overdue,
+               min(l.ledger_date)::text as oldest,
+               count(*)::int as draws
+          from postpaid_daily_ledger l
+          join writers w on w.id = l.writer_id
+          join agents a on a.id = w.agent_id
+          join users u on u.id = a.user_id
+         where l.settlement_status <> 'settled' and l.commission_pct is not null
+           and l.amount_payable > l.amount_paid
+         group by w.id, w.full_code, w.full_name, a.full_code, a.agency_name, u.full_name
+         order by sum(greatest(l.amount_payable - l.amount_paid, 0)) desc
+         limit 15`),
+      db.execute(sql`
+        select a.id as agent_id, a.full_code as agent_code, coalesce(a.agency_name, u.full_name) as agency_name,
+               a.outstanding_debt::text as balance, a.debt_since, a.status
+          from agents a
+          join users u on u.id = a.user_id
+         where a.outstanding_debt <> 0
+         order by a.outstanding_debt asc`),
+      db.execute(sql`select available::text, held::text from master_wallet where id = 1`).catch(() => ({ rows: [] })),
+    ]);
+
+    type Raw = Record<string, unknown>;
+    const pes = (v: unknown) => Math.round(Number(v ?? 0) * 100);
+    const cedis = (p: number) => (p / 100).toFixed(2);
+    type Bucket = { count: number; amount: number };
+    const zero = (): Bucket => ({ count: 0, amount: 0 });
+    const out = (b: Bucket) => ({ count: b.count, amount: cedis(b.amount) });
+
+    const STATES = ["missing", "unclaimed", "expired", "verified", "awaiting_funds", "processing", "paid", "rejected", "withheld"] as const;
+    type State = (typeof STATES)[number];
+    const tally = (rows: Raw[]) => {
+      const by: Record<"prepaid" | "postpaid", Record<State, Bucket>> = {
+        prepaid: Object.fromEntries(STATES.map((s) => [s, zero()])) as Record<State, Bucket>,
+        postpaid: Object.fromEntries(STATES.map((s) => [s, zero()])) as Record<State, Bucket>,
+      };
+      const expiring = zero();
+      for (const r of rows) {
+        const ch = r["channel"] === "prepaid" ? "prepaid" : "postpaid";
+        const st = (STATES as readonly string[]).includes(String(r["state"])) ? (r["state"] as State) : "unclaimed";
+        by[ch][st].count += Number(r["n"]);
+        by[ch][st].amount += pes(r["amount"]);
+        expiring.count += Number(r["expiring_n"]);
+        expiring.amount += pes(r["expiring_amount"]);
+      }
+      return { by, expiring };
+    };
+    const period = tally(posPeriod.rows as Raw[]);
+    const now = tally(posNow.rows as Raw[]);
+
+    const sumStates = (b: Record<State, Bucket>, states: State[]): Bucket =>
+      states.reduce((acc, s) => ({ count: acc.count + b[s].count, amount: acc.amount + b[s].amount }), zero());
+
+    const posChannel = (ch: "prepaid" | "postpaid", label: string) => {
+      const b = period.by[ch];
+      return {
+        channel: ch,
+        label,
+        recorded: out(sumStates(b, [...STATES])),
+        settled: out(b.paid),
+        inProgress: out(sumStates(b, ["verified", "awaiting_funds", "processing"])),
+        unclaimed: out(sumStates(b, ["unclaimed", "missing"])),
+        flagged: out(b.rejected),
+        lost: out(sumStates(b, ["expired", "withheld"])),
+      };
+    };
+    const m = (manualPeriod.rows as Raw[])[0] ?? {};
+    const channels = [
+      posChannel("prepaid", "POS prepaid"),
+      posChannel("postpaid", "POS postpaid"),
+      {
+        channel: "manual",
+        label: "Manual (agent entry)",
+        recorded: { count: Number(m["n"] ?? 0), amount: cedis(pes(m["amount"])) },
+        settled: { count: Number(m["settled_n"] ?? 0), amount: cedis(pes(m["settled_amount"])) },
+        inProgress: { count: Number(m["pending_n"] ?? 0), amount: cedis(pes(m["pending_amount"])) },
+        unclaimed: null,
+        flagged: null,
+        lost: null,
+      },
+    ];
+
+    const both = (s: State): Bucket => ({
+      count: now.by.prepaid[s].count + now.by.postpaid[s].count,
+      amount: now.by.prepaid[s].amount + now.by.postpaid[s].amount,
+    });
+    const pipeline = Object.fromEntries(STATES.map((s) => [s, out(both(s))])) as Record<State, { count: number; amount: string }>;
+    const posOwed = sumStates(
+      Object.fromEntries(STATES.map((s) => [s, both(s)])) as Record<State, Bucket>,
+      ["missing", "unclaimed", "verified", "awaiting_funds", "processing", "rejected"],
+    );
+
+    const L = (ledgerAging.rows as Raw[])[0] ?? {};
+    const agencyRows = (agencies.rows as Raw[]).map((r) => ({
+      agentId: String(r["agent_id"]),
+      agentCode: String(r["agent_code"]),
+      agencyName: r["agency_name"] ? String(r["agency_name"]) : null,
+      balance: cedis(pes(r["balance"])),
+      debtSince: r["debt_since"] ? new Date(r["debt_since"] as string).toISOString() : null,
+      status: String(r["status"] ?? "active"),
+    }));
+    const owedByAgencies = agencyRows.filter((a) => Number(a.balance) < 0).reduce((s, a) => s - pes(a.balance), 0);
+    const owedToAgencies = agencyRows.filter((a) => Number(a.balance) > 0).reduce((s, a) => s + pes(a.balance), 0);
+
+    const W = (wallet.rows as Raw[])[0];
+    const available = W ? pes(W["available"]) : 0;
+    const held = W ? pes(W["held"]) : 0;
+    const awaiting = both("awaiting_funds").amount;
+
+    res.json({
+      period: { dateFrom: from, dateTo: to },
+      validityDays: days,
+      channels,
+      pipeline: { ...pipeline, expiringSoon: out(now.expiring) },
+      posOwed: out(posOwed),
+      postpaid: {
+        outstanding: cedis(pes(L["outstanding"])),
+        outstandingDraws: Number(L["outstanding_n"] ?? 0),
+        overdue: cedis(pes(L["overdue"])),
+        overdueDraws: Number(L["overdue_n"] ?? 0),
+        notYetDue: cedis(pes(L["not_yet_due"])),
+        writersOwing: Number(L["writers_owing"] ?? 0),
+        aging: {
+          days0to1: cedis(pes(L["age_0_1"])),
+          days2to7: cedis(pes(L["age_2_7"])),
+          days8to30: cedis(pes(L["age_8_30"])),
+          over30: cedis(pes(L["age_30_plus"])),
+        },
+        topDebtors: (debtors.rows as Raw[]).map((r) => ({
+          writerId: String(r["writer_id"]),
+          writerCode: String(r["writer_code"]),
+          writerName: String(r["writer_name"]),
+          agentCode: String(r["agent_code"]),
+          agencyName: r["agency_name"] ? String(r["agency_name"]) : null,
+          owed: cedis(pes(r["owed"])),
+          overdue: Boolean(r["overdue"]),
+          oldest: String(r["oldest"]),
+          draws: Number(r["draws"]),
+        })),
+      },
+      agencies: {
+        owedByAgencies: cedis(owedByAgencies),
+        owedToAgencies: cedis(owedToAgencies),
+        list: agencyRows,
+      },
+      wallet: {
+        available: cedis(available),
+        held: cedis(held),
+        awaitingFunds: cedis(awaiting),
+        shortfall: cedis(Math.max(awaiting - available, 0)),
+        present: Boolean(W),
+      },
     });
   },
 );

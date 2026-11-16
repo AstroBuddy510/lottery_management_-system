@@ -924,6 +924,175 @@ export async function generateSalesChannelsReportPDF(opts: {
   doc.save(`sales_by_channel_${stamp}.pdf`);
 }
 
+// ─── 3e. WINS & DEBT OVERVIEW PDF ───
+type PdfAmt = { count: number; amount: string };
+export async function generateWinsDebtOverviewPDF(opts: {
+  periodLabel: string;
+  overview: {
+    validityDays: number;
+    channels: Array<{ label: string; recorded: PdfAmt; settled: PdfAmt; inProgress: PdfAmt; unclaimed: PdfAmt | null; flagged: PdfAmt | null; lost: PdfAmt | null }>;
+    pipeline: Record<string, PdfAmt>;
+    posOwed: PdfAmt;
+    postpaid: {
+      outstanding: string; outstandingDraws: number; overdue: string; overdueDraws: number; notYetDue: string; writersOwing: number;
+      aging: { days0to1: string; days2to7: string; days8to30: string; over30: string };
+      topDebtors: Array<{ writerCode: string; writerName: string; agentCode: string; owed: string; overdue: boolean; oldest: string; draws: number }>;
+    };
+    agencies: { owedByAgencies: string; owedToAgencies: string; list: Array<{ agentCode: string; agencyName: string | null; balance: string; debtSince: string | null }> };
+    wallet: { available: string; held: string; awaitingFunds: string; shortfall: string };
+  };
+  headline: { owedOnWins: string; owedToCompany: string; manualPending: string; manualDeficit: string };
+  totals: Record<"recorded" | "settled" | "inProgress" | "unclaimed" | "flagged" | "lost", PdfAmt>;
+}) {
+  const { periodLabel, overview: o, headline: h, totals: t } = opts;
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF({ orientation: "landscape" }) as any;
+  const pageWidth = doc.internal.pageSize.width;
+  const pageHeight = doc.internal.pageSize.height;
+  const cell = (v: PdfAmt | null) => (v ? `${fmt(v.amount)}\n${v.count}` : "n/a");
+
+  const startY = drawBrandHeader(
+    doc,
+    "Wins & Debt Overview",
+    [
+      { label: "Report ID", value: `WDO-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Wins Period", value: periodLabel },
+      { label: "Positions As Of", value: new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) },
+    ],
+    "Position",
+    [
+      `Owed on wins: ${fmt(h.owedOnWins)}  (POS ${fmt(o.posOwed.amount)}, manual pending ${fmt(h.manualPending)}, deficit ${fmt(h.manualDeficit)})`,
+      `Owed to the company: ${fmt(h.owedToCompany)}  (postpaid ${fmt(o.postpaid.outstanding)}, agencies ${fmt(o.agencies.owedByAgencies)})`,
+      `Master Wallet: ${fmt(o.wallet.available)} available, ${fmt(o.wallet.held)} held${Number(o.wallet.shortfall) > 0 ? `, short ${fmt(o.wallet.shortfall)}` : ""}`,
+    ],
+    logoImg,
+  );
+
+  const headLeft = (data: any) => {
+    if (data.section === "head" && data.column.index === 0) data.cell.styles.halign = "left";
+  };
+
+  autoTable(doc, {
+    head: [["Wins by channel", "Won", "Settled / paid", "In progress", "Unclaimed", "Flagged", "Expired / withheld"]],
+    body: [
+      ...o.channels.map((c) => [c.label, cell(c.recorded), cell(c.settled), cell(c.inProgress), cell(c.unclaimed), cell(c.flagged), cell(c.lost)]),
+      ["TOTAL", cell(t.recorded), cell(t.settled), cell(t.inProgress), cell(t.unclaimed), cell(t.flagged), cell(t.lost)],
+    ],
+    startY,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: { 0: { halign: "left", cellWidth: 50 } },
+    didParseCell: (data: any) => {
+      headLeft(data);
+      if (data.section === "body" && data.row.index === o.channels.length) {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.fillColor = [235, 241, 250];
+      }
+    },
+    margin: tableTheme.margin,
+  });
+
+  const p = o.pipeline;
+  const half = (pageWidth - 30 - 8) / 2;
+  let y = doc.lastAutoTable.finalY + 8;
+  if (y > pageHeight - 70) { doc.addPage(); y = 20; }
+
+  autoTable(doc, {
+    head: [["POS payout pipeline (now)", "Tickets", "Amount"]],
+    body: [
+      ["Unclaimed", p.unclaimed.count, fmt(p.unclaimed.amount)],
+      ["  of which expire within 3 days", p.expiringSoon.count, fmt(p.expiringSoon.amount)],
+      ["With cashier (verified, held)", p.verified.count, fmt(p.verified.amount)],
+      ["Awaiting funds", p.awaiting_funds.count, fmt(p.awaiting_funds.amount)],
+      ["Transfer sent", p.processing.count, fmt(p.processing.amount)],
+      ["Flagged by cashier", p.rejected.count, fmt(p.rejected.amount)],
+      ["Withheld", p.withheld.count, fmt(p.withheld.amount)],
+      [`Expired unclaimed (${o.validityDays}-day window)`, p.expired.count, fmt(p.expired.amount)],
+      ["Paid (all time)", p.paid.count, fmt(p.paid.amount)],
+      ...(p.missing.count > 0 ? [["No payout record", p.missing.count, fmt(p.missing.amount)]] : []),
+    ],
+    startY: y,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: { 0: { halign: "left" } },
+    didParseCell: headLeft,
+    margin: { left: 15, right: 15 + half + 8 },
+  });
+  const leftEnd = doc.lastAutoTable.finalY;
+
+  autoTable(doc, {
+    head: [["Owed to the company (now)", "Amount"]],
+    body: [
+      [`Postpaid outstanding (${o.postpaid.outstandingDraws} draws, ${o.postpaid.writersOwing} writers)`, fmt(o.postpaid.outstanding)],
+      [`  of which overdue (${o.postpaid.overdueDraws} draws)`, fmt(o.postpaid.overdue)],
+      ["  0 - 1 days old", fmt(o.postpaid.aging.days0to1)],
+      ["  2 - 7 days old", fmt(o.postpaid.aging.days2to7)],
+      ["  8 - 30 days old", fmt(o.postpaid.aging.days8to30)],
+      ["  over 30 days old", fmt(o.postpaid.aging.over30)],
+      ["Postpaid not yet due (betting open)", fmt(o.postpaid.notYetDue)],
+      ["Agencies owe the company", fmt(o.agencies.owedByAgencies)],
+      ["Company owes agencies", fmt(o.agencies.owedToAgencies)],
+    ],
+    startY: y,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: { 0: { halign: "left" } },
+    didParseCell: headLeft,
+    margin: { left: 15 + half + 8, right: 15 },
+  });
+
+  y = Math.max(leftEnd, doc.lastAutoTable.finalY) + 8;
+  if (y > pageHeight - 60) { doc.addPage(); y = 20; }
+
+  if (o.postpaid.topDebtors.length > 0) {
+    autoTable(doc, {
+      head: [["Postpaid writer", "Agency", "Owing since", "Draws", "Status", "Owed"]],
+      body: o.postpaid.topDebtors.map((d) => [`${d.writerName} (${d.writerCode})`, d.agentCode, fmtDate(d.oldest), d.draws, d.overdue ? "Overdue" : "Due", fmt(d.owed)]),
+      startY: y,
+      theme: "striped",
+      headStyles: tableTheme.headStyles,
+      bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+      columnStyles: { 0: { halign: "left" }, 1: { halign: "left" } },
+      didParseCell: (data: any) => {
+        if (data.section === "head" && data.column.index <= 1) data.cell.styles.halign = "left";
+      },
+      margin: tableTheme.margin,
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  const owing = o.agencies.list.filter((a) => Number(a.balance) !== 0);
+  if (owing.length > 0) {
+    if (y > pageHeight - 50) { doc.addPage(); y = 20; }
+    autoTable(doc, {
+      head: [["Agency", "Code", "Owing since", "Position", "Balance"]],
+      body: owing.map((a) => [
+        a.agencyName ?? a.agentCode, a.agentCode,
+        a.debtSince && Number(a.balance) < 0 ? fmtDate(a.debtSince) : "-",
+        Number(a.balance) < 0 ? "Owes company" : "Company owes",
+        fmt(Math.abs(Number(a.balance))),
+      ]),
+      startY: y,
+      theme: "striped",
+      headStyles: tableTheme.headStyles,
+      bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+      columnStyles: { 0: { halign: "left" }, 1: { halign: "left" } },
+      didParseCell: (data: any) => {
+        if (data.section === "head" && data.column.index <= 1) data.cell.styles.halign = "left";
+      },
+      margin: tableTheme.margin,
+    });
+  }
+
+  if (doc.lastAutoTable.finalY > pageHeight - 45) doc.addPage();
+  drawSignatureBlock(doc, "Prepared By (Accounts)", "Director Signatory");
+  doc.save(`wins_and_debt_overview_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 // ─── 3c. MASTER WALLET LEDGER PDF ───
 /** The Master Wallet's movements, as filed. Each row carries the balances it left. */
 export async function generateMasterWalletLedgerPDF(
