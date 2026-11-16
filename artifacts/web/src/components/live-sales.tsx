@@ -187,7 +187,26 @@ export function LiveSalesPanel({
             </div>
 
             {Array.isArray(data?.breakdown) && data.breakdown.length > 0 && (
-              <div className="rounded-xl border overflow-auto max-h-80 [&_thead]:sticky [&_thead]:top-0 [&_thead]:bg-muted/95 [&_thead]:backdrop-blur">
+              /*
+               * A fixed-height box that scrolls its own rows, so the card is the
+               * same size whether three agents are selling or thirty.
+               *
+               * This box is the scroll container. The shared <Table> wraps its
+               * <table> in a div of its own with overflow-auto, and a sticky
+               * header sticks to the NEAREST overflow ancestor - that inner div,
+               * which never scrolls - so the header used to scroll away with
+               * the rows. [&>div]:overflow-visible takes that wrapper out of the
+               * way here only. The header cells are what stick (more reliable
+               * than the thead across browsers), on a solid background so rows
+               * do not show through, with the bottom rule drawn as a shadow
+               * because a collapsed border does not travel with a sticky cell.
+               */
+              <div
+                className="h-[18.5rem] overflow-y-auto overscroll-contain rounded-xl border thin-scroll [&>div]:overflow-visible [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-muted [&_th]:shadow-[inset_0_-1px_0_hsl(var(--border))] [&_thead_tr]:border-b-0"
+                role="region"
+                aria-label="Live sales by agent"
+                tabIndex={0}
+              >
                 <Table>
                   <TableHeader>
                     <TableRow>
