@@ -1093,6 +1093,58 @@ export async function generateWinsDebtOverviewPDF(opts: {
   doc.save(`wins_and_debt_overview_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
+// ─── 3f. RESERVE ALLOCATION HISTORY PDF ───
+export async function generateReserveAllocationsPDF(
+  rows: Array<{ allocationDate: string; writerFullCode?: string | null; writerFullName?: string | null; writerId: string; reason?: string | null; amountDrawn: string; reserveBalanceAfter: string }>,
+  dateFrom: string,
+  dateTo: string,
+  total: number,
+) {
+  const logoImg = await getLogoImage();
+  const doc = new jsPDF() as any;
+  const writers = new Set(rows.map((r) => r.writerId)).size;
+  const startY = drawBrandHeader(
+    doc,
+    "Reserve Allocation History",
+    [
+      { label: "Report ID", value: `RAH-${Date.now().toString().slice(-6)}` },
+      { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
+      { label: "Period Covered", value: dateFrom || dateTo ? `${fmtDate(dateFrom)} - ${fmtDate(dateTo || new Date().toISOString())}` : "All periods" },
+    ],
+    "Summary",
+    [
+      `${rows.length} draw${rows.length === 1 ? "" : "s"} for ${writers} writer${writers === 1 ? "" : "s"}`,
+      `Total drawn from the reserve: ${fmt(total)}`,
+    ],
+    logoImg,
+  );
+  autoTable(doc, {
+    head: [["Date", "Writer", "Reason", "Drawn", "Balance after"]],
+    body: [
+      ...rows.map((r) => [
+        fmtDate(r.allocationDate),
+        `${r.writerFullCode ?? r.writerId.slice(0, 8)}${r.writerFullName ? `\n${r.writerFullName}` : ""}`,
+        r.reason ?? "Reserve allocation",
+        fmt(r.amountDrawn),
+        fmt(r.reserveBalanceAfter),
+      ]),
+      [{ content: "TOTAL DRAWN", colSpan: 3, styles: { fontStyle: "bold", halign: "left" } }, { content: fmt(total), styles: { fontStyle: "bold" } }, ""],
+    ],
+    startY,
+    theme: "striped",
+    headStyles: tableTheme.headStyles,
+    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    columnStyles: { 0: { halign: "left", cellWidth: 26 }, 1: { halign: "left", cellWidth: 40 }, 2: { halign: "left" } },
+    didParseCell: (data: any) => {
+      if (data.section === "head" && data.column.index <= 2) data.cell.styles.halign = "left";
+    },
+    margin: tableTheme.margin,
+  });
+  if (doc.lastAutoTable.finalY > doc.internal.pageSize.height - 45) doc.addPage();
+  drawSignatureBlock(doc, "Prepared By (Accounts)", "Director Signatory");
+  doc.save(`reserve_allocations_${dateFrom || "start"}_to_${dateTo || "today"}.pdf`);
+}
+
 // ─── 3c. MASTER WALLET LEDGER PDF ───
 /** The Master Wallet's movements, as filed. Each row carries the balances it left. */
 export async function generateMasterWalletLedgerPDF(
