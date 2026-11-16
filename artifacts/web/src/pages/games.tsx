@@ -30,7 +30,10 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, ChevronLeft, ChevronRight, Play, Square, Archive, Clock, Calendar, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { generateGameEventReportPDF } from "@/lib/pdf-generator";
+import { generateGameEventReportPDF, printWith } from "@/lib/pdf-generator";
+import { Panel, ScrollTable, Pager, usePaged, ReportActions, StatTile, PAGE_SIZE } from "@/components/data-kit";
+import { exportReportPdf, printReport, type TableReport } from "@/lib/table-report";
+import { Gamepad2, Radio, PowerOff, Lock, Timer, Plus, Printer, FileDown } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -311,6 +314,8 @@ function StatPill({ label, count, activeColor, bgClass, icon }: { label: string;
 
 /* ─── main component ───────────────────────────────────────────────────────── */
 
+const GAME_TAB = "shrink-0 gap-1.5 rounded-none border-b-2 border-transparent bg-transparent px-3 py-3 text-xs font-bold shadow-none transition-all hover:text-foreground/80 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none";
+
 export function Games() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -536,6 +541,106 @@ export function Games() {
     currentPageSafe * itemsPerPage
   );
 
+  const CARDS_PER_PAGE = 9;
+  const pLive = usePaged(liveGames, CARDS_PER_PAGE);
+  const pOffline = usePaged(offlineGames, CARDS_PER_PAGE);
+  const [folderPages, setFolderPages] = useState<Record<string, number>>({});
+  const auditAgents = usePaged<any>(auditReport?.agents, PAGE_SIZE, selectedGameForAudit?.id ?? "");
+  const auditWriters = usePaged<any>(auditReport?.writers, PAGE_SIZE, selectedGameForAudit?.id ?? "");
+
+  // The next game due to close, for the header tiles.
+  const nextToClose = [...liveGames, ...offlineGames]
+    .filter((g) => new Date(g.closeAt) > getServerNow())
+    .sort((a, b) => new Date(a.closeAt).getTime() - new Date(b.closeAt).getTime())[0];
+
+  /** Every game, by state; the closed list carries the archive's current filters. */
+  const registerReport = (): TableReport => {
+    const rows = (list: Game[]) =>
+      list.map((g) => [
+        `#${g.eventNumber}`,
+        g.name,
+        formatDateTime(g.goLiveAt),
+        formatDateTime(g.closeAt),
+        g.status === "closed" ? (g.closeType === "manual" ? `Closed (manual${g.closedByName ? `, ${g.closedByName}` : ""})` : "Closed (auto)") : g.status === "live" ? "Live" : "Offline",
+      ]);
+    const columns = [{ header: "Event" }, { header: "Game" }, { header: "Goes live" }, { header: "Closes" }, { header: "Status" }];
+    return {
+      title: "Games Register",
+      fileName: `games_register_${new Date().toISOString().slice(0, 10)}`,
+      orientation: "landscape",
+      meta: [{ label: "Closed games", value: showAllClosed ? "All" : "Last 3 days" + (closedDate ? `, ${closedDate}` : "") + (closedSearch.trim() ? `, "${closedSearch.trim()}"` : "") }],
+      summary: [`${liveCount} live · ${offlineCount} offline · ${closedCount} closed`],
+      sections: [
+        { heading: `Live (${liveGames.length})`, columns, rows: rows(liveGames), empty: "No live games." },
+        { heading: `Offline (${offlineGames.length})`, columns, rows: rows(offlineGames), empty: "No offline games." },
+        { heading: `Closed (${filteredClosedGames.length} shown)`, columns, rows: rows(filteredClosedGames), empty: "No closed games for these filters." },
+      ],
+    };
+  };
+
+  const auditPdf = () => {
+    if (selectedGameForAudit && auditReport) {
+      return generateGameEventReportPDF(
+        selectedGameForAudit.name,
+        selectedGameForAudit.eventNumber,
+        selectedGameForAudit.closeAt,
+        auditReport.totals,
+        auditReport.agents,
+        auditReport.writers,
+      );
+    }
+    return undefined;
+  };
+
+  /** A month folder's games as a paged, scrolling table. */
+  const renderFolderTable = (key: string, games: Game[], onOpen: (g: Game) => void) => {
+    const size = PAGE_SIZE;
+    const pages = Math.max(1, Math.ceil(games.length / size));
+    const page = Math.min(folderPages[key] ?? 1, pages);
+    const rows = games.slice((page - 1) * size, page * size);
+    return (
+      <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+        <ScrollTable minWidth="40rem" maxHeight="28rem">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-36 pl-5">Event Number</TableHead>
+                <TableHead>Game Name</TableHead>
+                <TableHead>Close Date</TableHead>
+                <TableHead className="pr-5 text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((g) => (
+                <TableRow key={g.id} className="hover:bg-muted/30">
+                  <TableCell className="pl-5 font-mono text-xs font-bold">
+                    {isAdminOrDirector ? (
+                      <button onClick={() => onOpen(g)} className="text-left font-bold text-primary hover:underline">#{g.eventNumber}</button>
+                    ) : (
+                      <span className="font-semibold text-muted-foreground">#{g.eventNumber}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-sm font-semibold">{g.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{formatDateTime(g.closeAt)}</TableCell>
+                  <TableCell className="pr-5 text-right">
+                    {isAdminOrDirector ? (
+                      <Button size="sm" variant="outline" className="h-7 rounded-lg px-2.5 text-[11px] font-bold" onClick={() => onOpen(g)}>
+                        View Audit Ledger
+                      </Button>
+                    ) : (
+                      <span className="text-[10px] font-medium italic text-muted-foreground">Restricted</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollTable>
+        <Pager page={page} totalPages={pages} onPage={(n) => setFolderPages((prev) => ({ ...prev, [key]: n }))} total={games.length} size={size} noun="games" />
+      </div>
+    );
+  };
+
   const renderGameCard = (g: Game) => {
     const cfg = STATUS_CONFIG[g.status] ?? STATUS_CONFIG.offline;
     const isClosed = g.status === "closed";
@@ -544,7 +649,7 @@ export function Games() {
     return (
       <div
         key={g.id}
-        className="border border-border/40 rounded-2xl bg-card/75 backdrop-blur-sm p-5 flex flex-col gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group"
+        className="border border-border/80 rounded-2xl bg-card shadow-sm p-5 flex flex-col gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group min-w-0"
       >
         {/* Hover subtle glow effect */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500/20 via-primary/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -663,55 +768,58 @@ export function Games() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Games</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Manage your lottery draw events. Separate game states using category tabs.
-          </p>
+    <div className="p-4 sm:p-6 space-y-6 min-w-0">
+      {/* ── Header, as on Inventory, Payments and Reports ── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-border/80 bg-card/60 backdrop-blur-md p-5 sm:p-6 rounded-3xl shadow-sm">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="p-3 bg-primary/10 text-primary rounded-2xl shadow-inner border border-primary/10 shrink-0">
+            <Gamepad2 className="w-7 h-7" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black tracking-tight text-foreground">Games Management</h1>
+            <p className="text-xs text-muted-foreground mt-1 font-medium">
+              Draw events: schedule them, take them live, close them, and audit what each one sold.
+            </p>
+          </div>
         </div>
-        <Button
-          size="sm"
-          className="bg-accent hover:bg-accent/90 text-white font-semibold shrink-0"
-          onClick={() => { setForm(EMPTY_FORM); setCreateOpen(true); }}
-        >
-          + Add Game
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+          <ReportActions
+            label="the games register"
+            disabled={gameList.length === 0}
+            onPdf={() => exportReportPdf(registerReport())}
+            onPrint={() => printReport(registerReport())}
+          />
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 rounded-lg text-xs font-bold"
+            onClick={() => { setForm(EMPTY_FORM); setCreateOpen(true); }}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Game
+          </Button>
+        </div>
       </div>
 
-      {/* Stats strip */}
-      <div className="flex gap-4">
-        <StatPill
-          label="Live"
-          count={liveCount}
-          activeColor="text-emerald-600 dark:text-emerald-400"
-          bgClass="bg-emerald-50/10 dark:bg-emerald-950/5 border-emerald-100/50 dark:border-emerald-900/20"
-          icon={<Play className="w-4.5 h-4.5 fill-current text-emerald-500 dark:text-emerald-400 animate-pulse" />}
-        />
-        <StatPill
-          label="Offline"
-          count={offlineCount}
-          activeColor="text-slate-600 dark:text-slate-400"
-          bgClass="bg-slate-50/10 dark:bg-slate-950/5 border-slate-200/50 dark:border-slate-800/40"
-          icon={<Square className="w-4.5 h-4.5 text-slate-500 dark:text-slate-400 fill-current" />}
-        />
-        <StatPill
-          label="Closed"
-          count={closedCount}
-          activeColor="text-rose-600 dark:text-rose-400"
-          bgClass="bg-rose-50/10 dark:bg-rose-950/5 border-rose-100/50 dark:border-rose-900/20"
-          icon={<Archive className="w-4.5 h-4.5 text-rose-500 dark:text-rose-400" />}
+      {/* ── At a glance ── */}
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Live" value={String(liveCount)} sub={liveCount ? "Taking bets now" : "Nothing taking bets"} icon={Radio} tone={liveCount ? "in" : "muted"} />
+        <StatTile label="Offline" value={String(offlineCount)} sub="Scheduled or paused" icon={PowerOff} tone="muted" />
+        <StatTile label="Closed" value={String(closedCount)} sub="In the archive" icon={Lock} />
+        <StatTile
+          label="Next to close"
+          value={nextToClose ? nextToClose.name : "—"}
+          sub={nextToClose ? `#${nextToClose.eventNumber} · ${formatDateTime(nextToClose.closeAt)}` : "No game scheduled to close"}
+          icon={Timer}
+          tone={nextToClose ? "warn" : "muted"}
         />
       </div>
 
       {isLoading ? (
         <div className="text-center py-16 text-muted-foreground text-sm">Loading games…</div>
       ) : (
-        <Tabs defaultValue="live" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-3">
-            <TabsTrigger value="live" className="relative">
+        <Tabs defaultValue="live" className="space-y-5 min-w-0">
+          <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto overflow-y-hidden rounded-none border-b border-border/60 bg-transparent p-0 flex-nowrap thin-scroll">
+            <TabsTrigger value="live" className={GAME_TAB}>
+              <Radio className="h-3.5 w-3.5" />
               Live
               {liveCount > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-black rounded-full bg-green-500 text-white leading-none">
@@ -719,7 +827,8 @@ export function Games() {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="offline">
+            <TabsTrigger value="offline" className={GAME_TAB}>
+              <PowerOff className="h-3.5 w-3.5" />
               Offline
               {offlineCount > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-black rounded-full bg-slate-500 text-white leading-none">
@@ -727,7 +836,8 @@ export function Games() {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="closed">
+            <TabsTrigger value="closed" className={GAME_TAB}>
+              <Archive className="h-3.5 w-3.5" />
               Closed
               {closedCount > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-black rounded-full bg-rose-500 text-white leading-none">
@@ -739,35 +849,45 @@ export function Games() {
 
           <TabsContent value="live" className="space-y-4 outline-none">
             {liveGames.length === 0 ? (
-              <div className="text-center py-16 border rounded-xl text-muted-foreground bg-card">
+              <div className="text-center py-16 border border-dashed rounded-2xl text-muted-foreground bg-card/60">
                 <div className="text-3xl mb-2">🟢</div>
                 <div className="font-medium text-sm">No live games</div>
                 <div className="text-xs mt-1">There are currently no active games accepting entries.</div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {liveGames.map(renderGameCard)}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+                  {pLive.rows.map(renderGameCard)}
+                </div>
+                {pLive.totalPages > 1 && (
+                  <div className="overflow-hidden rounded-2xl border border-border/80 bg-card"><Pager page={pLive.page} totalPages={pLive.totalPages} onPage={pLive.setPage} total={pLive.total} size={pLive.size} noun="live games" className="border-t-0" /></div>
+                )}
               </div>
             )}
           </TabsContent>
 
           <TabsContent value="offline" className="space-y-4 outline-none">
             {offlineGames.length === 0 ? (
-              <div className="text-center py-16 border rounded-xl text-muted-foreground bg-card">
+              <div className="text-center py-16 border border-dashed rounded-2xl text-muted-foreground bg-card/60">
                 <div className="text-3xl mb-2">⚙️</div>
                 <div className="font-medium text-sm">No offline games</div>
                 <div className="text-xs mt-1">No pending or offline games available.</div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {offlineGames.map(renderGameCard)}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+                  {pOffline.rows.map(renderGameCard)}
+                </div>
+                {pOffline.totalPages > 1 && (
+                  <div className="overflow-hidden rounded-2xl border border-border/80 bg-card"><Pager page={pOffline.page} totalPages={pOffline.totalPages} onPage={pOffline.setPage} total={pOffline.total} size={pOffline.size} noun="offline games" className="border-t-0" /></div>
+                )}
               </div>
             )}
           </TabsContent>
 
           <TabsContent value="closed" className="space-y-4 outline-none">
             {/* Filter Panel */}
-            <div className="bg-card border rounded-xl p-4 space-y-3">
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-3">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div className="flex-1 max-w-md relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -798,6 +918,12 @@ export function Games() {
                       Show older completed games
                     </Label>
                   </div>
+                  <ReportActions
+                    label="the closed games"
+                    disabled={filteredClosedGames.length === 0}
+                    onPdf={() => exportReportPdf({ ...registerReport(), title: "Closed Games", fileName: `closed_games_${new Date().toISOString().slice(0, 10)}`, sections: registerReport().sections.slice(2) })}
+                    onPrint={() => printReport({ ...registerReport(), title: "Closed Games", sections: registerReport().sections.slice(2) })}
+                  />
                 </div>
               </div>
             </div>
@@ -853,7 +979,7 @@ export function Games() {
 
               if (sortedGroupKeys.length === 0) {
                 return (
-                  <div className="text-center py-16 border rounded-xl text-muted-foreground bg-card">
+                  <div className="text-center py-16 border border-dashed rounded-2xl text-muted-foreground bg-card/60">
                     <div className="text-3xl mb-2">🔒</div>
                     <div className="font-medium text-sm">No closed games found</div>
                     <div className="text-xs mt-1">Adjust search terms, date filters, or toggle older games to find archived records.</div>
@@ -865,7 +991,7 @@ export function Games() {
 
               if (sortedGroupKeys.length === 0) {
                 return (
-                  <div className="text-center py-16 border rounded-xl text-muted-foreground bg-card">
+                  <div className="text-center py-16 border border-dashed rounded-2xl text-muted-foreground bg-card/60">
                     <div className="text-3xl mb-2">🔒</div>
                     <div className="font-medium text-sm">No closed games found</div>
                     <div className="text-xs mt-1">Adjust search terms, date filters, or toggle older games to find archived records.</div>
@@ -881,7 +1007,7 @@ export function Games() {
                       const group = monthlyGroups[key];
                       const isExpanded = !!expandedFolders[key];
                       return (
-                        <div key={key} className={`border border-border/40 rounded-2xl bg-card/65 backdrop-blur-sm hover:shadow-md transition-all duration-300 ${isContentMode ? "p-5" : "p-4"}`}>
+                        <div key={key} className={`border border-border/80 rounded-2xl bg-card shadow-sm hover:shadow-md transition-all duration-300 min-w-0 ${isContentMode ? "p-5" : "p-4"}`}>
                           <div
                             onClick={() => toggleFolder(key)}
                             className="flex items-center justify-between cursor-pointer select-none group"
@@ -922,53 +1048,8 @@ export function Games() {
                           </div>
                           
                           {isExpanded && (
-                            <div className="mt-4 pl-4 sm:pl-8 border-l border-dashed border-border/80 ml-6 space-y-2 animate-in slide-in-from-top-2 duration-200">
-                              <div className="border border-border/40 rounded-xl overflow-hidden bg-background/30">
-                                <Table>
-                                  <TableHeader className="bg-muted/30">
-                                    <TableRow>
-                                      <TableHead className="w-32 font-semibold text-xs">Event Number</TableHead>
-                                      <TableHead className="font-semibold text-xs">Game Name</TableHead>
-                                      <TableHead className="font-semibold text-xs">Close Date</TableHead>
-                                      <TableHead className="text-right font-semibold text-xs">Action</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {group.games.map((g) => (
-                                      <TableRow key={g.id} className="hover:bg-muted/15 border-b border-border/20 last:border-0">
-                                        <TableCell className="font-mono font-bold text-xs">
-                                          {isAdminOrDirector ? (
-                                            <button
-                                              onClick={() => handleOpenAudit(g)}
-                                              className="text-primary hover:underline hover:text-primary/95 text-left font-bold"
-                                            >
-                                              #{g.eventNumber}
-                                            </button>
-                                          ) : (
-                                            <span className="text-muted-foreground font-semibold">#{g.eventNumber}</span>
-                                          )}
-                                        </TableCell>
-                                        <TableCell className="font-semibold text-xs sm:text-sm">{g.name}</TableCell>
-                                        <TableCell className="text-xs font-mono text-muted-foreground">{formatDateTime(g.closeAt)}</TableCell>
-                                        <TableCell className="text-right">
-                                          {isAdminOrDirector ? (
-                                            <Button
-                                              size="sm"
-                                              variant="outline"
-                                              className="h-7 text-[11px] px-2.5 rounded-lg border-border/85"
-                                              onClick={() => handleOpenAudit(g)}
-                                            >
-                                              View Audit Ledger
-                                            </Button>
-                                          ) : (
-                                            <span className="text-[10px] text-muted-foreground italic font-medium">Restricted</span>
-                                          )}
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
+                            <div className="mt-4 ml-2 sm:ml-6 sm:pl-6 sm:border-l border-dashed border-border/80 space-y-2 animate-in slide-in-from-top-2 duration-200 min-w-0">
+                              {renderFolderTable(key, group.games, handleOpenAudit)}
                             </div>
                           )}
                         </div>
@@ -1119,7 +1200,7 @@ export function Games() {
           setAuditReport(null);
         }
       }}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl w-[calc(100vw-2rem)] max-h-[88vh] overflow-y-auto thin-scroll">
           <DialogHeader>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
@@ -1158,25 +1239,13 @@ export function Games() {
                 )}
               </div>
               {auditReport && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (selectedGameForAudit && auditReport) {
-                      generateGameEventReportPDF(
-                        selectedGameForAudit.name,
-                        selectedGameForAudit.eventNumber,
-                        selectedGameForAudit.closeAt,
-                        auditReport.totals,
-                        auditReport.agents,
-                        auditReport.writers
-                      );
-                    }
-                  }}
-                  className="bg-accent hover:bg-accent/90 text-white font-semibold flex items-center gap-1.5 shrink-0"
-                >
-                  <Archive className="w-4 h-4" />
-                  Export to PDF
-                </Button>
+                <div className="flex shrink-0 items-center gap-2 sm:mr-6">
+                  <ReportActions
+                    label="this audit ledger"
+                    onPdf={async () => { await auditPdf(); }}
+                    onPrint={() => { void printWith(auditPdf); }}
+                  />
+                </div>
               )}
             </div>
           </DialogHeader>
@@ -1193,27 +1262,27 @@ export function Games() {
             <div className="space-y-6">
               {/* Summary KPIs */}
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Gross Sales</div>
                   <div className="text-sm sm:text-base font-bold font-mono">GH₵ {Number(auditReport.totals.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
-                <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Commission</div>
                   <div className="text-sm sm:text-base font-bold font-mono text-amber-600 dark:text-amber-400">GH₵ {Number(auditReport.totals.commissionAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
-                <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Net Gross</div>
                   <div className="text-sm sm:text-base font-bold font-mono text-teal-600 dark:text-teal-400">GH₵ {Number(auditReport.totals.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
-                <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Wins Paid</div>
                   <div className="text-sm sm:text-base font-bold font-mono text-rose-600 dark:text-rose-400">GH₵ {Number(auditReport.totals.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
-                <div className="rounded-xl border bg-muted/20 p-3 space-y-1">
+                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Reserve Fund</div>
                   <div className="text-sm sm:text-base font-bold font-mono text-indigo-600 dark:text-indigo-400">GH₵ {Number(auditReport.totals.reserveAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
-                <div className={`rounded-xl border p-3 space-y-1 ${Number(auditReport.totals.writerBalance) < 0 ? 'bg-rose-50/20 border-rose-100 dark:bg-rose-950/10' : 'bg-green-50/20 border-green-100 dark:bg-green-950/10'}`}>
+                <div className={`min-w-0 rounded-2xl border p-3.5 shadow-sm space-y-1 ${Number(auditReport.totals.writerBalance) < 0 ? 'bg-rose-50/20 border-rose-100 dark:bg-rose-950/10' : 'bg-green-50/20 border-green-100 dark:bg-green-950/10'}`}>
                   <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Net Balance</div>
                   <div className={`text-sm sm:text-base font-bold font-mono ${Number(auditReport.totals.writerBalance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
                     GH₵ {Number(auditReport.totals.writerBalance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1223,17 +1292,18 @@ export function Games() {
 
               {/* Tabs for agent/writer details */}
               <Tabs defaultValue="agents" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
-                  <TabsTrigger value="agents">Agent Contributions</TabsTrigger>
-                  <TabsTrigger value="writers">Writer Performance</TabsTrigger>
+                <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b border-border/60 bg-transparent p-0 flex-nowrap">
+                  <TabsTrigger value="agents" className={GAME_TAB}>Agent Contributions</TabsTrigger>
+                  <TabsTrigger value="writers" className={GAME_TAB}>Writer Performance</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="agents" className="space-y-3">
-                  <div className="border border-border/40 rounded-xl overflow-hidden bg-background/30">
+                  <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+                    <ScrollTable minWidth="52rem" maxHeight="24rem">
                     <Table>
-                      <TableHeader className="bg-muted/30">
+                      <TableHeader>
                         <TableRow>
-                          <TableHead className="font-semibold text-xs">Agent Code</TableHead>
+                          <TableHead className="pl-5">Agent Code</TableHead>
                           <TableHead className="font-semibold text-xs">Gross Sales</TableHead>
                           <TableHead className="font-semibold text-xs">Commission</TableHead>
                           <TableHead className="font-semibold text-xs">Net Gross</TableHead>
@@ -1244,9 +1314,9 @@ export function Games() {
                       </TableHeader>
                       <TableBody>
                         {auditReport.agents && auditReport.agents.length > 0 ? (
-                          auditReport.agents.map((a: any) => (
+                          auditAgents.rows.map((a: any) => (
                             <TableRow key={a.agent.id} className="hover:bg-muted/10 border-b border-border/20 last:border-0">
-                              <TableCell className="font-semibold text-xs">
+                              <TableCell className="pl-5 font-semibold text-xs">
                                 {a.agent.fullCode}
                                 <span className="text-muted-foreground block text-[10px] font-normal">{a.agent.agencyName || a.agent.ownerName}</span>
                               </TableCell>
@@ -1267,15 +1337,18 @@ export function Games() {
                         )}
                       </TableBody>
                     </Table>
+                    </ScrollTable>
+                    <Pager page={auditAgents.page} totalPages={auditAgents.totalPages} onPage={auditAgents.setPage} total={auditAgents.total} size={auditAgents.size} noun="agents" />
                   </div>
                 </TabsContent>
 
                 <TabsContent value="writers" className="space-y-3">
-                  <div className="border border-border/40 rounded-xl overflow-hidden bg-background/30">
+                  <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
+                    <ScrollTable minWidth="46rem" maxHeight="24rem">
                     <Table>
-                      <TableHeader className="bg-muted/30">
+                      <TableHeader>
                         <TableRow>
-                          <TableHead className="font-semibold text-xs">Writer Code & Name</TableHead>
+                          <TableHead className="pl-5">Writer Code &amp; Name</TableHead>
                           <TableHead className="font-semibold text-xs">Gross Sales</TableHead>
                           <TableHead className="font-semibold text-xs">Commission</TableHead>
                           <TableHead className="font-semibold text-xs">Net Gross</TableHead>
@@ -1285,9 +1358,9 @@ export function Games() {
                       </TableHeader>
                       <TableBody>
                         {auditReport.writers && auditReport.writers.length > 0 ? (
-                          auditReport.writers.map((w: any) => (
+                          auditWriters.rows.map((w: any) => (
                             <TableRow key={w.writer.id} className="hover:bg-muted/10 border-b border-border/20 last:border-0">
-                              <TableCell className="font-semibold text-xs">
+                              <TableCell className="pl-5 font-semibold text-xs">
                                 {w.writer.fullCode}
                                 <span className="text-muted-foreground block text-[10px] font-normal">{w.writer.fullName}</span>
                               </TableCell>
@@ -1307,6 +1380,8 @@ export function Games() {
                         )}
                       </TableBody>
                     </Table>
+                    </ScrollTable>
+                    <Pager page={auditWriters.page} totalPages={auditWriters.totalPages} onPage={auditWriters.setPage} total={auditWriters.total} size={auditWriters.size} noun="writers" />
                   </div>
                 </TabsContent>
               </Tabs>
@@ -1317,7 +1392,7 @@ export function Games() {
 
       {/* Folder Contents Dialog (for grid/icon views) */}
       <Dialog open={!!selectedFolderForView} onOpenChange={open => !open && setSelectedFolderForView(null)}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl w-[calc(100vw-2rem)]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <svg viewBox="0 0 100 80" className="w-6 h-5 shrink-0" xmlns="http://www.w3.org/2000/svg">
@@ -1332,57 +1407,8 @@ export function Games() {
             <p className="text-xs text-muted-foreground font-medium mt-0.5">{selectedFolderForView?.rangeLabel}</p>
           </DialogHeader>
 
-          <div className="mt-4 border border-border/40 rounded-xl overflow-hidden bg-background/30 max-h-[60vh] overflow-y-auto">
-            <Table>
-              <TableHeader className="bg-muted/30 sticky top-0 z-10">
-                <TableRow>
-                  <TableHead className="w-32 font-semibold text-xs bg-muted/80">Event Number</TableHead>
-                  <TableHead className="font-semibold text-xs bg-muted/80">Game Name</TableHead>
-                  <TableHead className="font-semibold text-xs bg-muted/80">Close Date</TableHead>
-                  <TableHead className="text-right font-semibold text-xs bg-muted/80">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {selectedFolderForView?.games.map((g: Game) => (
-                  <TableRow key={g.id} className="hover:bg-muted/15 border-b border-border/20 last:border-0">
-                    <TableCell className="font-mono font-bold text-xs">
-                      {isAdminOrDirector ? (
-                        <button
-                          onClick={() => {
-                            setSelectedFolderForView(null);
-                            handleOpenAudit(g);
-                          }}
-                          className="text-primary hover:underline hover:text-primary/95 text-left font-bold"
-                        >
-                          #{g.eventNumber}
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground font-semibold">#{g.eventNumber}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-semibold text-xs sm:text-sm">{g.name}</TableCell>
-                    <TableCell className="text-xs font-mono text-muted-foreground">{formatDateTime(g.closeAt)}</TableCell>
-                    <TableCell className="text-right">
-                      {isAdminOrDirector ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[11px] px-2.5 rounded-lg border-border/85"
-                          onClick={() => {
-                            setSelectedFolderForView(null);
-                            handleOpenAudit(g);
-                          }}
-                        >
-                          View Audit Ledger
-                        </Button>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground italic font-medium">Restricted</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="mt-4 min-w-0">
+            {selectedFolderForView && renderFolderTable(`dialog-${selectedFolderForView.monthKey}`, selectedFolderForView.games, (g) => { setSelectedFolderForView(null); handleOpenAudit(g); })}
           </div>
           <DialogFooter className="pt-2">
             <Button size="sm" onClick={() => setSelectedFolderForView(null)}>
