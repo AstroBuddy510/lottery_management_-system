@@ -25,8 +25,9 @@ import {
 import { toast } from "sonner";
 import {
   Printer, PiggyBank, LayoutDashboard, Scale, BookOpen, Wallet, TrendingUp, TrendingDown, AlertTriangle,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, CalendarRange, FileText,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, CalendarRange, FileText, ReceiptText,
 } from "lucide-react";
+import { ReserveReceipts } from "@/pages/reserve-receipts";
 import { generateAgentLedgerPDF, generateSmartDebtSimulationPDF, generateReserveAllocationsPDF } from "@/lib/pdf-generator";
 
 const GHS = (v: number | string) =>
@@ -310,8 +311,10 @@ function PagerButton({ label, disabled, onClick, children }: { label: string; di
   );
 }
 
+type ReserveTab = "overview" | "debt" | "receipts" | "ledger";
+
 export function Reserve() {
-  const [tab, setTab] = useState<"overview" | "debt" | "ledger">("overview");
+  const [tab, setTab] = useState<ReserveTab>("overview");
   const [strategy, setStrategy] = useState<Strategy>("fifo");
   const [maxAmount, setMaxAmount] = useState<string>("");
   const [simResult, setSimResult] = useState<null | { items: { agentId: string; amountApplied: string; outstanding: string }[]; totalAllocated: string; newBalance: string; allocatedCount: number }>(null);
@@ -431,8 +434,9 @@ export function Reserve() {
         {([
           { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
           { id: "debt", label: "Smart Debt Management", icon: <Scale className="w-3.5 h-3.5" /> },
+          { id: "receipts", label: "Reserve Receipts", icon: <ReceiptText className="w-3.5 h-3.5" /> },
           { id: "ledger", label: "Agent Ledger", icon: <BookOpen className="w-3.5 h-3.5" /> },
-        ] as { id: "overview" | "debt" | "ledger"; label: string; icon: React.ReactNode }[]).map((t) => (
+        ] as { id: ReserveTab; label: string; icon: React.ReactNode }[]).map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${tab === t.id ? "bg-background text-foreground shadow-sm border border-border/40" : "text-muted-foreground hover:text-foreground"}`}>
             {t.icon}{t.label}
@@ -791,6 +795,9 @@ export function Reserve() {
         )}
 
         {/* ── AGENT LEDGER TAB ─────────────────────────────────────── */}
+        {/* ── RESERVE RECEIPTS TAB (moved here from the main menu) ── */}
+        {tab === "receipts" && <ReserveReceipts embedded />}
+
         {tab === "ledger" && (
           <AgentLedgerTab
             dateFrom={ledgerDateFrom}

@@ -1,3 +1,4 @@
+import { useAuth } from "@/lib/auth";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -45,7 +46,17 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 
 type Agent = { id: string; fullCode: string; user?: { fullName?: string | null } | null };
 
-export function ReserveReceipts() {
+/**
+ * Recording what each agent paid into the reserve for a calculation day.
+ *
+ * Shown two ways: as its own page for cashiers (their menu item), and as the
+ * Reserve Receipts tab of the Reserve Fund page (`embedded`). Recording and
+ * removing a receipt is for cashiers and administrators - the API refuses
+ * anyone else - so a director reads the tab without those buttons.
+ */
+export function ReserveReceipts({ embedded = false }: { embedded?: boolean } = {}) {
+  const { user } = useAuth();
+  const canRecord = user?.role === "cashier" || user?.role === "administrator";
   const [date, setDate] = useState<string>(todayStr());
   const [agentFilter, setAgentFilter] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
@@ -110,7 +121,7 @@ export function ReserveReceipts() {
       setFormAmountDue("");
       setFormAmountPaid("");
       setFormNotes("");
-      await qc.invalidateQueries({ queryKey: getListReserveReceiptsQueryKey({ calcDate: date }) });
+      await qc.invalidateQueries({ queryKey: getListReserveReceiptsQueryKey() });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       if (msg.includes("unique") || msg.includes("duplicate") || msg.includes("already")) {
@@ -128,7 +139,7 @@ export function ReserveReceipts() {
     try {
       await deleteReceipt({ id });
       toast.success("Receipt removed.");
-      await qc.invalidateQueries({ queryKey: getListReserveReceiptsQueryKey({ calcDate: date }) });
+      await qc.invalidateQueries({ queryKey: getListReserveReceiptsQueryKey() });
     } catch {
       toast.error("Failed to remove receipt.");
     } finally {
@@ -153,14 +164,14 @@ export function ReserveReceipts() {
   const formAgent = agentList.find((a) => a.id === formAgentId);
 
   return (
-    <div className="p-6 space-y-6 relative min-h-screen">
+    <div className={embedded ? "space-y-6 relative" : "p-6 space-y-6 relative min-h-screen"}>
       {/* Background radial glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-64 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent blur-3xl pointer-events-none" />
+      {!embedded && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-64 bg-gradient-to-b from-indigo-500/5 via-transparent to-transparent blur-3xl pointer-events-none" />}
 
       {/* Breadcrumb Path & Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
         <div>
-          <div className="flex items-center gap-1.5 mb-1.5 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground/80">
+          <div className={`flex items-center gap-1.5 mb-1.5 text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground/80 ${embedded ? "hidden" : ""}`}>
             <span>Cashier</span>
             <span className="text-muted-foreground/45">/</span>
             <span className="text-indigo-600 dark:text-indigo-400">Reserve Receipts</span>
@@ -168,7 +179,7 @@ export function ReserveReceipts() {
           <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent dark:from-indigo-400 dark:to-violet-400">Agent Reserve Payments</h1>
           <p className="text-xs text-muted-foreground mt-0.5 font-medium">Mark agent reserve payments — amounts are calculated automatically from the system</p>
         </div>
-        <Button
+        {canRecord && <Button
           onClick={() => {
             setFormAgentId("");
             setFormAmountDue("");
@@ -180,7 +191,7 @@ export function ReserveReceipts() {
         >
           <Plus className="w-4 h-4" />
           Record Payment
-        </Button>
+        </Button>}
       </div>
 
       {/* Filters Box */}
@@ -352,7 +363,9 @@ export function ReserveReceipts() {
                           {receipt?.markedByName ?? (receipt ? receipt.markedBy.slice(0, 8) + "…" : <span className="text-muted-foreground/30">—</span>)}
                         </TableCell>
                         <TableCell className="pr-5 text-right py-3.5">
-                          {paid ? (
+                          {!canRecord ? (
+                            <span className={`text-[10px] font-bold ${paid ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>{paid ? "Paid" : "Not paid"}</span>
+                          ) : paid ? (
                             <Button
                               size="sm"
                               variant="ghost"

@@ -49,7 +49,8 @@ const NAV_ITEMS: NavEntry[] = [
     ],
   },
   { label: "Company Expenses", path: "/company-expenses", roles: ["cashier", "administrator", "director"] },
-  { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier", "administrator"] },
+  // Directors and administrators reach this as a tab of Reserve Fund.
+  { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier"] },
   { label: "Run Draws", path: "/calculations", roles: ["director", "administrator"] },
   { label: "Reports", path: "/reports", roles: ["director", "administrator", "cashier"] },
   { label: "Wins & Debt Overview", path: "/wins-debt", roles: ["director", "administrator"] },
