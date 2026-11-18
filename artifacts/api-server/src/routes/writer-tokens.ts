@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, writerTokenWalletsTable, writerTokenTransactionsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { adjustWallet } from "../lib/wallet";
@@ -39,6 +39,73 @@ router.get("/writer-tokens/transactions", requireAuth, requireRole("writer", "ad
   }
   const transactions = await query.orderBy(desc(writerTokenTransactionsTable.createdAt)).limit(100);
   res.json(transactions);
+});
+
+/**
+ * The writer's own wallet history for the Wallet page, split the way they
+ * read it: today first, earlier days folded away and paged.
+ *
+ *   ?scope=today  Every transaction on the current Accra day.
+ *   ?scope=past   Earlier days, newest first, a page of whole days at a time
+ *                 (?page=1&pageSize=7). Paging by day, not by row, keeps each
+ *                 day's entries and total together on one page. The plain
+ *                 list stopped at the latest hundred rows; this reaches back
+ *                 to the first.
+ */
+const ACCRA_DAY = sql`(${writerTokenTransactionsTable.createdAt} AT TIME ZONE 'Africa/Accra')::date`;
+const ACCRA_TODAY = sql`(now() AT TIME ZONE 'Africa/Accra')::date`;
+
+router.get("/writer-tokens/transactions/mine", requireAuth, requireRole("writer"), async (req, res) => {
+  const writerId = req.user!.userId;
+  const mine = eq(writerTokenTransactionsTable.writerId, writerId);
+
+  if (req.query["scope"] !== "past") {
+    const rows = await db
+      .select()
+      .from(writerTokenTransactionsTable)
+      .where(and(mine, sql`${ACCRA_DAY} = ${ACCRA_TODAY}`))
+      .orderBy(desc(writerTokenTransactionsTable.createdAt))
+      .limit(500);
+    res.json({ rows });
+    return;
+  }
+
+  const pageSize = Math.min(31, Math.max(1, Number.parseInt(String(req.query["pageSize"] ?? "7"), 10) || 7));
+  const page = Math.max(1, Number.parseInt(String(req.query["page"] ?? "1"), 10) || 1);
+  const earlier = and(mine, sql`${ACCRA_DAY} < ${ACCRA_TODAY}`);
+
+  const [{ totalDays, totalEntries }] = await db
+    .select({
+      totalDays: sql<number>`count(DISTINCT ${ACCRA_DAY})::int`,
+      totalEntries: sql<number>`count(*)::int`,
+    })
+    .from(writerTokenTransactionsTable)
+    .where(earlier);
+  const totalPages = Math.max(1, Math.ceil(totalDays / pageSize));
+  const current = Math.min(page, totalPages);
+
+  const days = await db
+    .select({
+      day: sql<string>`${ACCRA_DAY}::text`,
+      entries: sql<number>`count(*)::int`,
+      net: sql<string>`sum(${writerTokenTransactionsTable.amount})::text`,
+    })
+    .from(writerTokenTransactionsTable)
+    .where(earlier)
+    .groupBy(ACCRA_DAY)
+    .orderBy(sql`${ACCRA_DAY} DESC`)
+    .limit(pageSize)
+    .offset((current - 1) * pageSize);
+
+  const rows = days.length
+    ? await db
+        .select()
+        .from(writerTokenTransactionsTable)
+        .where(and(earlier, sql`${ACCRA_DAY} IN (${sql.join(days.map((d) => sql`${d.day}::date`), sql`, `)})`))
+        .orderBy(desc(writerTokenTransactionsTable.createdAt))
+    : [];
+
+  res.json({ days, rows, totalDays, totalEntries, page: current, pageSize, totalPages });
 });
 
 // Admin endpoint to adjust tokens manually

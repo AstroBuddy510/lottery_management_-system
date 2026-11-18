@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Pager, PastSection } from "@/components/writer-past-section";
 import { format } from "date-fns";
-import { Archive, ChevronDown, ChevronLeft, ChevronRight, Clock, Loader2, Ticket } from "lucide-react";
-import { cn, fmtGHS } from "@/lib/utils";
+import { Archive, ChevronRight, Clock, Loader2, Ticket } from "lucide-react";
+import { fmtGHS } from "@/lib/utils";
 import { TicketReceiptView, useTicketReceipt } from "@/components/ticket-receipt";
 
 interface TicketRow {
@@ -46,13 +46,6 @@ async function getJson<T>(path: string): Promise<T> {
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(body?.error ?? `Could not load your tickets (${res.status}).`);
   return body as T;
-}
-
-/** Smooth, unless the phone has asked for less motion. */
-function scrollToTop(el: HTMLElement | null) {
-  if (!el) return;
-  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -159,64 +152,10 @@ function TicketItem({ t, active, onOpen }: { t: TicketRow; active: boolean; onOp
   );
 }
 
-/** Page numbers that fit a phone: first, last, and the two either side. */
-function pageList(page: number, total: number): (number | "…")[] {
-  const out: (number | "…")[] = [];
-  for (let p = 1; p <= total; p++) {
-    if (p === 1 || p === total || Math.abs(p - page) <= 1) out.push(p);
-    else if (out[out.length - 1] !== "…") out.push("…");
-  }
-  return out;
-}
-
-function Pager({ page, totalPages, total, pageSize, busy, onPage }: {
-  page: number; totalPages: number; total: number; pageSize: number; busy: boolean; onPage: (p: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-  const from = (page - 1) * pageSize + 1;
-  const to = Math.min(total, page * pageSize);
-  return (
-    <nav aria-label="Past tickets pages" className="pt-3 border-t border-border/60 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <Button variant="outline" size="sm" className="h-9 rounded-lg px-2.5" disabled={page <= 1 || busy} onClick={() => onPage(page - 1)} aria-label="Previous page">
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex items-center gap-1">
-          {pageList(page, totalPages).map((p, i) =>
-            p === "…" ? (
-              <span key={`gap-${i}`} className="px-1 text-xs text-muted-foreground">…</span>
-            ) : (
-              <Button
-                key={p}
-                size="sm"
-                variant={p === page ? "default" : "ghost"}
-                className="h-9 min-w-9 rounded-lg px-2 text-xs tabular-nums"
-                aria-current={p === page ? "page" : undefined}
-                disabled={busy && p !== page}
-                onClick={() => p !== page && onPage(p)}
-              >
-                {p}
-              </Button>
-            ),
-          )}
-        </div>
-        <Button variant="outline" size="sm" className="h-9 rounded-lg px-2.5" disabled={page >= totalPages || busy} onClick={() => onPage(page + 1)} aria-label="Next page">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-      <p className="text-center text-[11px] text-muted-foreground tabular-nums">
-        {from}–{to} of {total} past tickets
-      </p>
-    </nav>
-  );
-}
-
 export function WriterTickets() {
   const [openTicket, setOpenTicket] = useState<string | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
   const [page, setPage] = useState(1);
-  const pastRef = useRef<HTMLDivElement>(null);
-  const turnedPage = useRef(false);
 
   // Keys start with "/api/tickets", so placing a bet (which invalidates that
   // key) refreshes both lists.
@@ -236,25 +175,6 @@ export function WriterTickets() {
 
   const activeRows = active.data?.rows ?? [];
   const pastData = past.data;
-
-  // After a page change, bring the top of the section back into view - the
-  // writer tapped at the bottom of a list that has just been replaced.
-  useEffect(() => {
-    if (!turnedPage.current || past.isPlaceholderData) return;
-    turnedPage.current = false;
-    scrollToTop(pastRef.current);
-  }, [page, past.isPlaceholderData]);
-
-  const goTo = (p: number) => {
-    turnedPage.current = true;
-    setPage(p);
-  };
-
-  const onPastOpenChange = (open: boolean) => {
-    setPastOpen(open);
-    // Let the section start opening, then glide to it.
-    if (open) window.setTimeout(() => scrollToTop(pastRef.current), 120);
-  };
 
   return (
     <div className="space-y-5">
@@ -295,70 +215,43 @@ export function WriterTickets() {
       </Card>
 
       {/* ── Past: settled, cancelled and void - folded away, a page at a time ── */}
-      <div ref={pastRef} className="scroll-mt-20">
-        <Collapsible open={pastOpen} onOpenChange={onPastOpenChange}>
-          <Card>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="w-full text-left rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={pastOpen ? "Hide past tickets" : "Show past tickets"}
-              >
-                <CardHeader className="py-4 flex-row items-center justify-between gap-3 space-y-0">
-                  <div className="min-w-0 space-y-1">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Archive className="h-4 w-4 text-muted-foreground" />
-                      Past Tickets
-                      {pastData && pastData.total > 0 && (
-                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold tabular-nums">{pastData.total}</Badge>
-                      )}
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      {pastData && pastData.won > 0
-                        ? `${pastData.won} won · ${fmtGHS(pastData.wonAmount)} in winnings`
-                        : "Drawn, cancelled and void tickets."}
-                    </CardDescription>
-                  </div>
-                  <ChevronDown
-                    className={cn(
-                      "h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300",
-                      pastOpen && "rotate-180",
-                    )}
-                  />
-                </CardHeader>
-              </button>
-            </CollapsibleTrigger>
-
-            <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-              <CardContent className="px-3 sm:px-6 pt-0">
-                {past.isLoading ? (
-                  <div className="py-10 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
-                ) : past.isError ? (
-                  <p className="py-8 text-center text-sm text-destructive">{(past.error as Error).message}</p>
-                ) : !pastData || pastData.total === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">No past tickets yet.</p>
-                ) : (
-                  <>
-                    <ul className={cn("divide-y divide-border/60 transition-opacity duration-200", past.isPlaceholderData && "opacity-50")}>
-                      {pastData.rows.map((t) => (
-                        <TicketItem key={t.id} t={t} active={false} onOpen={() => setOpenTicket(t.id)} />
-                      ))}
-                    </ul>
-                    <Pager
-                      page={pastData.page}
-                      totalPages={pastData.totalPages}
-                      total={pastData.total}
-                      pageSize={pastData.pageSize}
-                      busy={past.isFetching}
-                      onPage={goTo}
-                    />
-                  </>
-                )}
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      </div>
+      <PastSection
+        title="Past Tickets"
+        icon={Archive}
+        count={pastData?.total}
+        description={
+          pastData && pastData.won > 0
+            ? `${pastData.won} won · ${fmtGHS(pastData.wonAmount)} in winnings`
+            : "Drawn, cancelled and void tickets."
+        }
+        open={pastOpen}
+        onOpenChange={setPastOpen}
+        loading={past.isLoading}
+        error={past.error as Error | null}
+        empty={!pastData || pastData.total === 0}
+        emptyText="No past tickets yet."
+        refreshing={past.isPlaceholderData}
+        page={page}
+        onPage={setPage}
+        pager={(goTo) =>
+          pastData && (
+            <Pager
+              label="Past tickets pages"
+              page={pastData.page}
+              totalPages={pastData.totalPages}
+              busy={past.isFetching}
+              onPage={goTo}
+              summary={`${(pastData.page - 1) * pastData.pageSize + 1}–${Math.min(pastData.total, pastData.page * pastData.pageSize)} of ${pastData.total} past tickets`}
+            />
+          )
+        }
+      >
+        <ul className="divide-y divide-border/60">
+          {pastData?.rows.map((t) => (
+            <TicketItem key={t.id} t={t} active={false} onOpen={() => setOpenTicket(t.id)} />
+          ))}
+        </ul>
+      </PastSection>
 
       <TicketDetail ticketId={openTicket} onClose={() => setOpenTicket(null)} />
     </div>

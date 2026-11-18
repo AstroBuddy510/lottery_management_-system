@@ -23,6 +23,67 @@ router.get("/postpaid/ledger", requireAuth, requireRole("director", "administrat
 });
 
 /**
+ * The writer's own postpaid days for the Wallet page.
+ *
+ *   ?scope=open     Days not yet settled (open, calculated, overdue), newest
+ *                   first - what the writer still has to deal with.
+ *   ?scope=settled  Settled days, newest first, a page at a time
+ *                   (?page=1&pageSize=10). The plain list stopped at the
+ *                   latest hundred days.
+ */
+router.get("/postpaid/ledger/mine", requireAuth, requireRole("writer"), async (req, res) => {
+  const writerId = req.user!.userId;
+  const columns = {
+    id: postpaidDailyLedgerTable.id,
+    ledgerDate: postpaidDailyLedgerTable.ledgerDate,
+    totalStakes: postpaidDailyLedgerTable.totalStakes,
+    totalWinnings: postpaidDailyLedgerTable.totalWinnings,
+    netBalance: postpaidDailyLedgerTable.netBalance,
+    amountPayable: postpaidDailyLedgerTable.amountPayable,
+    amountPaid: postpaidDailyLedgerTable.amountPaid,
+    settlementStatus: postpaidDailyLedgerTable.settlementStatus,
+    settlementMethod: postpaidDailyLedgerTable.settlementMethod,
+    settledAt: postpaidDailyLedgerTable.settledAt,
+    gameName: gamesTable.name,
+  };
+  const mine = eq(postpaidDailyLedgerTable.writerId, writerId);
+
+  if (req.query["scope"] !== "settled") {
+    const rows = await db
+      .select(columns)
+      .from(postpaidDailyLedgerTable)
+      .leftJoin(gamesTable, eq(gamesTable.id, postpaidDailyLedgerTable.gameId))
+      .where(and(mine, sql`${postpaidDailyLedgerTable.settlementStatus} <> 'settled'`))
+      .orderBy(desc(postpaidDailyLedgerTable.ledgerDate))
+      .limit(500);
+    res.json({ rows });
+    return;
+  }
+
+  const pageSize = Math.min(50, Math.max(5, Number.parseInt(String(req.query["pageSize"] ?? "10"), 10) || 10));
+  const page = Math.max(1, Number.parseInt(String(req.query["page"] ?? "1"), 10) || 1);
+  const settled = and(mine, eq(postpaidDailyLedgerTable.settlementStatus, "settled"));
+  const [{ total, paid }] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      paid: sql<string>`coalesce(sum(${postpaidDailyLedgerTable.amountPaid}), 0)::text`,
+    })
+    .from(postpaidDailyLedgerTable)
+    .where(settled);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const current = Math.min(page, totalPages);
+  const rows = await db
+    .select(columns)
+    .from(postpaidDailyLedgerTable)
+    .leftJoin(gamesTable, eq(gamesTable.id, postpaidDailyLedgerTable.gameId))
+    .where(settled)
+    .orderBy(desc(postpaidDailyLedgerTable.ledgerDate), desc(postpaidDailyLedgerTable.id))
+    .limit(pageSize)
+    .offset((current - 1) * pageSize);
+  res.json({ rows, total, paid, page: current, pageSize, totalPages });
+});
+
+/**
  * Everything still owed, for the cashier's desk.
  *
  * Quotes anything newly due first, so a cashier opening this page right after

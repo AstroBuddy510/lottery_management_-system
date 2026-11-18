@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
-import { Banknote, ChevronRight, Info, Loader2, Plus, Smartphone } from "lucide-react";
+import { Archive, Banknote, CalendarClock, CalendarDays, Info, Loader2, Plus, Smartphone } from "lucide-react";
+import { Pager, PastSection } from "@/components/writer-past-section";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
 
@@ -246,37 +247,6 @@ function dayLabel(key: string): string {
   return format(d, d.getUTCFullYear() === thisYear ? "EEEE, d MMM" : "d MMM yyyy");
 }
 
-interface DayGroup {
-  key: string;
-  label: string;
-  rows: any[];
-  net: number;
-}
-
-function groupByDay(transactions: any[]): DayGroup[] {
-  const order: string[] = [];
-  const byKey = new Map<string, any[]>();
-  // The API already returns newest first; preserving that order means the
-  // groups come out newest first too, without a second sort.
-  for (const tx of transactions) {
-    const key = accraDayKey(tx.createdAt);
-    if (!byKey.has(key)) {
-      byKey.set(key, []);
-      order.push(key);
-    }
-    byKey.get(key)!.push(tx);
-  }
-  return order.map((key) => {
-    const rows = byKey.get(key)!;
-    return {
-      key,
-      label: dayLabel(key),
-      rows,
-      net: rows.reduce((sum, r) => sum + Number(r.amount ?? 0), 0),
-    };
-  });
-}
-
 function TransactionRow({ tx }: { tx: any }) {
   const positive = Number(tx.amount) > 0;
   return (
@@ -308,83 +278,107 @@ function TransactionRow({ tx }: { tx: any }) {
   );
 }
 
-function DaySection({ group, open, onToggle }: { group: DayGroup; open: boolean; onToggle: () => void }) {
-  const panelId = `wallet-day-${group.key}`;
+/** A day heading inside the earlier-transactions list. */
+function DayHeading({ day, entries, net }: { day: string; entries: number; net: number }) {
   return (
-    <div className="border-b border-border/60 last:border-b-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className="flex w-full items-center gap-2.5 py-3 text-left transition-colors hover:bg-muted/40"
+    <div className="flex items-center gap-2.5 pt-3 pb-1 border-t border-border/60 first:border-t-0 first:pt-1">
+      <span className="text-sm font-semibold">{dayLabel(day)}</span>
+      <span className="text-[11px] text-muted-foreground">
+        {entries} {entries === 1 ? "entry" : "entries"}
+      </span>
+      <span
+        className={`ml-auto text-xs font-bold tabular-nums ${
+          net > 0 ? "text-emerald-600" : net < 0 ? "text-destructive" : "text-muted-foreground"
+        }`}
       >
-        <ChevronRight
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? "rotate-90" : ""}`}
-        />
-        <span className="text-sm font-semibold">{group.label}</span>
-        <span className="text-[11px] text-muted-foreground">
-          {group.rows.length} {group.rows.length === 1 ? "entry" : "entries"}
-        </span>
-        <span
-          className={`ml-auto text-xs font-bold tabular-nums ${
-            group.net > 0 ? "text-emerald-600" : group.net < 0 ? "text-destructive" : "text-muted-foreground"
-          }`}
-        >
-          {group.net > 0 ? "+" : ""}
-          {fmtGHS(group.net)}
-        </span>
-      </button>
-
-      {open && (
-        <ul id={panelId} className="divide-y divide-border/40 pb-1 pl-6">
-          {group.rows.map((tx: any) => (
-            <TransactionRow key={tx.id} tx={tx} />
-          ))}
-        </ul>
-      )}
+        {net > 0 ? "+" : ""}
+        {fmtGHS(net)}
+      </span>
     </div>
   );
 }
 
-function TransactionAccordion({ transactions }: { transactions: any[] }) {
-  const groups = useMemo(() => groupByDay(transactions), [transactions]);
+interface LedgerRow {
+  id: string;
+  ledgerDate: string;
+  totalStakes: string;
+  totalWinnings: string;
+  netBalance: string;
+  amountPayable: string | null;
+  amountPaid: string | null;
+  settlementStatus: string;
+  settlementMethod: string | null;
+  settledAt: string | null;
+  gameName: string | null;
+}
 
-  /**
-   * Only the newest day opens. Tracking the OPEN set rather than the closed one
-   * means a day that arrives later - a sale made while the page is open - does
-   * not spring open on its own and push the rest down under the writer's thumb.
-   */
-  const [openKeys, setOpenKeys] = useState<Set<string>>(() =>
-    groups.length > 0 ? new Set([groups[0]!.key]) : new Set(),
-  );
-
-  // A writer who leaves the page open overnight should still find today open.
-  const firstKey = groups[0]?.key;
-  const seeded = useRef<string | undefined>(firstKey);
-  useEffect(() => {
-    if (firstKey && seeded.current === undefined) {
-      seeded.current = firstKey;
-      setOpenKeys(new Set([firstKey]));
-    }
-  }, [firstKey]);
-
-  const toggle = (key: string) =>
-    setOpenKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-
+function LedgerItem({ l }: { l: LedgerRow }) {
+  const settled = l.settlementStatus === "settled";
+  const tone = settled
+    ? "bg-emerald-500/10 text-emerald-700 border-emerald-300"
+    : l.settlementStatus === "overdue"
+      ? "bg-destructive/10 text-destructive border-destructive/30"
+      : "bg-amber-500/10 text-amber-700 border-amber-300";
   return (
-    <div>
-      {groups.map((g) => (
-        <DaySection key={g.key} group={g} open={openKeys.has(g.key)} onToggle={() => toggle(g.key)} />
-      ))}
-    </div>
+    <li className="py-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-xs font-semibold">
+          {format(new Date(l.ledgerDate), "d MMM yyyy")}
+          {l.gameName && <span className="font-normal text-muted-foreground"> · {l.gameName}</span>}
+        </span>
+        <Badge variant="outline" className={`shrink-0 text-[10px] font-bold px-1.5 py-0 h-5 ${tone}`}>
+          {String(l.settlementStatus).toUpperCase()}
+        </Badge>
+      </div>
+      <div className="grid grid-cols-3 gap-2 mt-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Stakes</div>
+          <div className="text-xs font-bold tabular-nums">{fmtGHS(l.totalStakes)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Winnings</div>
+          <div className="text-xs font-bold tabular-nums">{fmtGHS(l.totalWinnings)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+            {settled ? "Paid" : l.amountPayable != null ? "To pay" : "Net"}
+          </div>
+          <div className="text-xs font-bold tabular-nums text-primary">
+            {fmtGHS(settled ? (l.amountPaid ?? l.netBalance) : (l.amountPayable ?? l.netBalance))}
+          </div>
+        </div>
+      </div>
+      {settled && l.settledAt && (
+        <div className="mt-1 text-[10px] text-muted-foreground">
+          Settled {format(new Date(l.settledAt), "d MMM yyyy")}
+          {l.settlementMethod ? ` · ${String(l.settlementMethod).replace(/_/g, " ")}` : ""}
+        </div>
+      )}
+    </li>
   );
 }
+
+interface PastTransactions {
+  days: { day: string; entries: number; net: string }[];
+  rows: any[];
+  totalDays: number;
+  totalEntries: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+interface PastLedgers {
+  rows: LedgerRow[];
+  total: number;
+  paid: string;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+const DAYS_PER_PAGE = 7;
+const LEDGERS_PER_PAGE = 10;
 
 export function WriterWallet() {
   const { user } = useAuth();
@@ -401,17 +395,43 @@ export function WriterWallet() {
     enabled: view === "prepaid",
   });
 
-  const { data: transactions, isLoading: loadingTransactions } = useQuery<any[]>({
-    queryKey: ["/api/writer-tokens/transactions"],
-    queryFn: () => getJson("/api/writer-tokens/transactions"),
+  // Current first: today's transactions, or the postpaid days still to
+  // settle. Older records sit in a folded section below, paged on the
+  // server; its first page is fetched up front for the header's count.
+  const [pastOpen, setPastOpen] = useState(false);
+  const [txPage, setTxPage] = useState(1);
+  const [ledgerPage, setLedgerPage] = useState(1);
+
+  const today = useQuery<{ rows: any[] }>({
+    queryKey: ["/api/writer-tokens/transactions", "mine", "today"],
+    queryFn: () => getJson("/api/writer-tokens/transactions/mine?scope=today"),
     enabled: view === "prepaid",
   });
+  const earlier = useQuery<PastTransactions>({
+    queryKey: ["/api/writer-tokens/transactions", "mine", "past", txPage, DAYS_PER_PAGE],
+    queryFn: () => getJson(`/api/writer-tokens/transactions/mine?scope=past&page=${txPage}&pageSize=${DAYS_PER_PAGE}`),
+    enabled: view === "prepaid" && (pastOpen || txPage === 1),
+    placeholderData: keepPreviousData,
+  });
 
-  const { data: ledgers, isLoading: loadingLedgers } = useQuery<any[]>({
-    queryKey: ["/api/postpaid/ledger"],
-    queryFn: () => getJson("/api/postpaid/ledger"),
+  const outstanding = useQuery<{ rows: LedgerRow[] }>({
+    queryKey: ["/api/postpaid/ledger", "mine", "open"],
+    queryFn: () => getJson("/api/postpaid/ledger/mine?scope=open"),
     enabled: view === "postpaid",
   });
+  const settledDays = useQuery<PastLedgers>({
+    queryKey: ["/api/postpaid/ledger", "mine", "settled", ledgerPage, LEDGERS_PER_PAGE],
+    queryFn: () => getJson(`/api/postpaid/ledger/mine?scope=settled&page=${ledgerPage}&pageSize=${LEDGERS_PER_PAGE}`),
+    enabled: view === "postpaid" && (pastOpen || ledgerPage === 1),
+    placeholderData: keepPreviousData,
+  });
+
+  const todayRows = today.data?.rows ?? [];
+  const todayNet = todayRows.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
+  const past = earlier.data;
+  const openRows = outstanding.data?.rows ?? [];
+  const owed = openRows.reduce((sum, l) => sum + Number(l.amountPayable ?? l.netBalance ?? 0), 0);
+  const settledData = settledDays.data;
 
   /**
    * Switching to prepaid is immediate. Postpaid is a request: it means selling
@@ -543,73 +563,166 @@ export function WriterWallet() {
             </Card>
           </div>
 
+          {/* ── Today: open at the top ── */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Recent Transactions</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                Today
+                {todayRows.length > 0 && (
+                  <Badge className="h-5 px-1.5 text-[10px] font-bold tabular-nums">{todayRows.length}</Badge>
+                )}
+                {todayRows.length > 0 && (
+                  <span
+                    className={`ml-auto text-sm font-bold tabular-nums ${
+                      todayNet > 0 ? "text-emerald-600" : todayNet < 0 ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    {todayNet > 0 ? "+" : ""}
+                    {fmtGHS(todayNet)}
+                  </span>
+                )}
+              </CardTitle>
+              <CardDescription className="text-xs">Units bought and spent today.</CardDescription>
             </CardHeader>
             <CardContent className="px-3 sm:px-6">
-              {loadingTransactions ? (
+              {today.isLoading ? (
                 <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
-              ) : !transactions?.length ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">No transactions yet.</p>
+              ) : today.isError ? (
+                <p className="py-8 text-center text-sm text-destructive">{(today.error as Error).message}</p>
+              ) : todayRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">No transactions today.</p>
               ) : (
-                <TransactionAccordion transactions={transactions} />
+                <ul className="divide-y divide-border/40">
+                  {todayRows.map((tx) => (
+                    <TransactionRow key={tx.id} tx={tx} />
+                  ))}
+                </ul>
               )}
             </CardContent>
           </Card>
+
+          {/* ── Earlier days: folded away, a week of days per page ── */}
+          <PastSection
+            title="Earlier Transactions"
+            icon={Archive}
+            count={past?.totalEntries}
+            description={
+              past && past.totalDays > 0
+                ? `${past.totalDays} earlier ${past.totalDays === 1 ? "day" : "days"} of activity`
+                : "Everything before today."
+            }
+            open={pastOpen}
+            onOpenChange={setPastOpen}
+            loading={earlier.isLoading}
+            error={earlier.error as Error | null}
+            empty={!past || past.totalDays === 0}
+            emptyText="No earlier transactions."
+            refreshing={earlier.isPlaceholderData}
+            page={txPage}
+            onPage={setTxPage}
+            pager={(goTo) =>
+              past && (
+                <Pager
+                  label="Earlier transactions pages"
+                  page={past.page}
+                  totalPages={past.totalPages}
+                  busy={earlier.isFetching}
+                  onPage={goTo}
+                  summary={`Days ${(past.page - 1) * past.pageSize + 1}–${Math.min(past.totalDays, past.page * past.pageSize)} of ${past.totalDays}`}
+                />
+              )
+            }
+          >
+            {past?.days.map((d) => (
+              <div key={d.day}>
+                <DayHeading day={d.day} entries={d.entries} net={Number(d.net)} />
+                <ul className="divide-y divide-border/40 pl-1">
+                  {past.rows
+                    .filter((tx) => accraDayKey(tx.createdAt) === d.day)
+                    .map((tx) => (
+                      <TransactionRow key={tx.id} tx={tx} />
+                    ))}
+                </ul>
+              </div>
+            ))}
+          </PastSection>
         </>
       ) : (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Daily Postpaid Ledger</CardTitle>
-            <CardDescription className="text-xs">
-              Stakes you took, wins you paid, and what is left to settle.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-3 sm:px-6">
-            {loadingLedgers ? (
-              <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
-            ) : !ledgers?.length ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">No ledger entries yet.</p>
-            ) : (
-              <ul className="divide-y divide-border/60">
-                {ledgers.map((l: any) => (
-                  <li key={l.id} className="py-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold">
-                        {format(new Date(l.ledgerDate), "d MMM yyyy")}
-                      </span>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] font-bold px-1.5 py-0 h-5 ${
-                          l.settlementStatus === "settled"
-                            ? "bg-emerald-500/10 text-emerald-700 border-emerald-300"
-                            : "bg-amber-500/10 text-amber-700 border-amber-300"
-                        }`}
-                      >
-                        {String(l.settlementStatus).toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Stakes</div>
-                        <div className="text-xs font-bold tabular-nums">{fmtGHS(l.totalStakes)}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Winnings</div>
-                        <div className="text-xs font-bold tabular-nums">{fmtGHS(l.totalWinnings)}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Net</div>
-                        <div className="text-xs font-bold tabular-nums text-primary">{fmtGHS(l.netBalance)}</div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        <>
+          {/* ── Still to settle: open at the top ── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-primary" />
+                To Settle
+                {openRows.length > 0 && (
+                  <Badge className="h-5 px-1.5 text-[10px] font-bold tabular-nums">{openRows.length}</Badge>
+                )}
+                {openRows.length > 0 && (
+                  <span className="ml-auto text-sm font-bold tabular-nums text-primary">{fmtGHS(owed)}</span>
+                )}
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Stakes you took, wins you paid, and what is left to settle.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-3 sm:px-6">
+              {outstanding.isLoading ? (
+                <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
+              ) : outstanding.isError ? (
+                <p className="py-8 text-center text-sm text-destructive">{(outstanding.error as Error).message}</p>
+              ) : openRows.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">Nothing to settle - you are all paid up.</p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {openRows.map((l) => (
+                    <LedgerItem key={l.id} l={l} />
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Settled days: folded away, paged ── */}
+          <PastSection
+            title="Settled Days"
+            icon={Archive}
+            count={settledData?.total}
+            description={
+              settledData && settledData.total > 0
+                ? `${fmtGHS(settledData.paid)} settled in total`
+                : "Days you have already settled."
+            }
+            open={pastOpen}
+            onOpenChange={setPastOpen}
+            loading={settledDays.isLoading}
+            error={settledDays.error as Error | null}
+            empty={!settledData || settledData.total === 0}
+            emptyText="No settled days yet."
+            refreshing={settledDays.isPlaceholderData}
+            page={ledgerPage}
+            onPage={setLedgerPage}
+            pager={(goTo) =>
+              settledData && (
+                <Pager
+                  label="Settled days pages"
+                  page={settledData.page}
+                  totalPages={settledData.totalPages}
+                  busy={settledDays.isFetching}
+                  onPage={goTo}
+                  summary={`${(settledData.page - 1) * settledData.pageSize + 1}–${Math.min(settledData.total, settledData.page * settledData.pageSize)} of ${settledData.total} settled days`}
+                />
+              )
+            }
+          >
+            <ul className="divide-y divide-border/60">
+              {settledData?.rows.map((l) => (
+                <LedgerItem key={l.id} l={l} />
+              ))}
+            </ul>
+          </PastSection>
+        </>
       )}
 
       <BuyUnitDialog open={buyOpen} onClose={() => setBuyOpen(false)} />
