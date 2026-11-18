@@ -500,6 +500,80 @@ router.get(
 );
 
 /**
+ * The writer's own tickets for the My Tickets page, split the way a writer
+ * thinks about them.
+ *
+ *   ?scope=active  Every ticket still waiting for its draw, nearest draw
+ *                  first. Not paged: these are what the writer is working
+ *                  with today, and there are only ever a day or two's worth.
+ *   ?scope=past    Settled, cancelled and void tickets, newest first, a page
+ *                  at a time (?page=1&pageSize=10). Paged on the server, so
+ *                  a writer's oldest ticket is as reachable as yesterday's -
+ *                  the plain list stops at the latest hundred.
+ *
+ * Scoped to the signed-in writer from the token, never from the request.
+ */
+router.get("/tickets/mine", requireAuth, requireRole("writer"), async (req, res) => {
+  const writerId = req.user!.userId;
+  const scope = req.query["scope"] === "past" ? "past" : "active";
+  const columns = {
+    id: ticketsTable.id,
+    ticketNumber: ticketsTable.ticketNumber,
+    createdAt: ticketsTable.createdAt,
+    numbers: ticketsTable.numbers,
+    stakeAmount: ticketsTable.stakeAmount,
+    winAmount: ticketsTable.winAmount,
+    potentialPayout: ticketsTable.potentialPayout,
+    isWinner: ticketsTable.isWinner,
+    status: ticketsTable.status,
+    gameName: gamesTable.name,
+    eventNumber: gamesTable.eventNumber,
+    drawAt: gamesTable.closeAt,
+    betTypeName: betTypesTable.name,
+  };
+
+  if (scope === "active") {
+    const rows = await db
+      .select(columns)
+      .from(ticketsTable)
+      .innerJoin(gamesTable, eq(gamesTable.id, ticketsTable.gameId))
+      .innerJoin(betTypesTable, eq(betTypesTable.id, ticketsTable.betTypeId))
+      .where(and(eq(ticketsTable.writerId, writerId), eq(ticketsTable.status, "active")))
+      .orderBy(gamesTable.closeAt, desc(ticketsTable.createdAt))
+      .limit(500);
+    res.json({ rows });
+    return;
+  }
+
+  const pageSize = Math.min(50, Math.max(5, Number.parseInt(String(req.query["pageSize"] ?? "10"), 10) || 10));
+  const page = Math.max(1, Number.parseInt(String(req.query["page"] ?? "1"), 10) || 1);
+  const past = and(eq(ticketsTable.writerId, writerId), sql`${ticketsTable.status} <> 'active'`);
+
+  const [{ total, won, wonAmount }] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      won: sql<number>`count(*) FILTER (WHERE ${ticketsTable.isWinner})::int`,
+      wonAmount: sql<string>`coalesce(sum(${ticketsTable.winAmount}) FILTER (WHERE ${ticketsTable.isWinner}), 0)::text`,
+    })
+    .from(ticketsTable)
+    .where(past);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const current = Math.min(page, totalPages);
+
+  const rows = await db
+    .select(columns)
+    .from(ticketsTable)
+    .innerJoin(gamesTable, eq(gamesTable.id, ticketsTable.gameId))
+    .innerJoin(betTypesTable, eq(betTypesTable.id, ticketsTable.betTypeId))
+    .where(past)
+    .orderBy(desc(ticketsTable.createdAt), desc(ticketsTable.id))
+    .limit(pageSize)
+    .offset((current - 1) * pageSize);
+
+  res.json({ rows, total, page: current, pageSize, totalPages, won, wonAmount });
+});
+
+/**
  * Price a selection without placing it.
  *
  * The writer portal shows lines, cost and best case as the numbers go in. It
