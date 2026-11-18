@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Writer Portal's galaxy: the splash (drawable-*/splash.png, the
+         same background as the web login) sits on this colour, and the status
+         and navigation bars match it, so launch -> splash -> login is one
+         continuous dark-blue screen instead of a flat panel and a flash. -->
+    <color name="colorPrimary">#0B1120</color>
+    <color name="navigationColor">#0B1120</color>
+    <color name="backgroundColor">#0B1120</color>
+</resources>

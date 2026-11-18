@@ -13,8 +13,18 @@ android {
         versionName project.hasProperty('buildVersionName') ? buildVersionName : '1.0'
     }
 
-    // One codebase, two apps. The only differences are the name, the icon
-    // tint and which page the app opens on, so flavours beat two modules.
+    // One codebase, two separate apps. Each flavour is its own package
+    // (installed side by side, updated independently) with its own
+    // resources under src/<flavour>/res:
+    //
+    //   writers - VS2000 Writers. Opens /writer/login?app=writers, which
+    //             pins the tab to the writer portal: sign-out returns to the
+    //             writer login, never the office role picker. Galaxy splash
+    //             and dark-blue system bars to match that login.
+    //   agents  - VS2000 Agents. Opens the office login at /.
+    //
+    // Nothing writer-specific is in src/main, and nothing office-specific
+    // is in src/writers.
     flavorDimensions += 'portal'
     productFlavors {
         writers {

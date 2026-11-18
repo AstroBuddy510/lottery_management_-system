@@ -4,7 +4,7 @@ Two Android apps built from one source tree:
 
 | App | Package | Opens on |
 |---|---|---|
-| **VS2000 Writers** | `com.vision2000.writers` | `/writer/login` |
+| **VS2000 Writers** | `com.vision2000.writers` | `/writer/login?app=writers` |
 | **VS2000 Agents**  | `com.vision2000.agents`  | `/` (main login) |
 
 ## What these actually are
@@ -18,6 +18,27 @@ A plain WebView wrapper was the alternative and was rejected on purpose: the Web
 Share API does not exist in Android WebView, so a writer sharing a ticket image
 to WhatsApp would have been broken by the app itself. A TWA is real Chrome, so
 downloads, printing, the QR camera and sharing behave exactly as they do today.
+
+## The Writers app stays on the writer portal
+
+`?app=writers` on the launch URL (and, for older installs, the
+`android-app://com.vision2000.writers` referrer Android gives the app) marks the
+tab as the Writers app. From then on the site sends every route to a login -
+signing out, an expired session, `/`, `/login` - to `/writer/login`. The office
+login, whose role list has no Writer, cannot be reached from the app. Signing
+out revokes the session on the server (with the refresh token too, if the
+access token has lapsed), clears both tokens and every cached response, and
+replaces the history entry so Back cannot return into the signed-out app.
+
+All of that is in the web app, so it reaches installed phones on the next
+deploy. The APK itself adds the launch marker and the galaxy splash
+(`app/src/writers/res`).
+
+One thing a flavour cannot separate: a Trusted Web Activity uses the phone's
+Chrome, so both apps and Chrome share the site's storage. If an office user is
+signed in in Chrome or the Agents app, the Writers app does not show their
+pages - it sends them to the writer login, and a writer signing in there
+replaces that session.
 
 ## The one thing that must be true
 
@@ -47,9 +68,11 @@ In the repo: **Settings → Secrets and variables → Actions → New repository
 
 ## Building
 
-**Actions → Build writer & agent APKs → Run workflow.** Give it a version name
-such as `1.0`. About four minutes later both APKs are under **Artifacts** on the
-run page, as `vs2000-apks.zip`.
+A push to `main` that changes anything under `android/` builds both APKs
+automatically. You can also use **Actions → Build writer & agent APKs → Run
+workflow**. About four minutes later the signed APKs are on the
+**Releases → "Android apps - latest"** page (tag `android-latest`), which always
+holds the newest build. They are also under **Artifacts** on the run page.
 
 Tagging a release does the same and attaches the APKs to it:
 

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth-provider";
+import { isWritersApp, loginPathFor, WRITER_LOGIN } from "@/lib/portal-mode";
 import { useAuth } from "@/lib/auth";
 
 // Pages
@@ -94,11 +95,23 @@ function ProtectedRoute({ component: Component, roles, bare }: { component: Reac
   }
 
   if (!user) {
-    return <Redirect to="/login" />;
+    return <Redirect to={loginPathFor(null, roles)} replace />;
+  }
+
+  // The Writers app shows writer pages only. Anyone else signed in on this
+  // phone's browser (Chrome shares sign-ins with the app) is sent to the
+  // writer login, never into the office.
+  if (isWritersApp() && user.role !== "writer") {
+    return <Redirect to={WRITER_LOGIN} replace />;
+  }
+
+  // A writer never sees office pages; office staff never see writer pages.
+  if (user.role === "writer" && !bare) {
+    return <Redirect to="/writer/dashboard" replace />;
   }
 
   if (roles && !roles.includes(user.role)) {
-    return <Redirect to="/dashboard" />;
+    return <Redirect to={user.role === "writer" ? "/writer/dashboard" : "/dashboard"} replace />;
   }
 
   // Writer routes supply their own chrome (WriterLayout). Wrapping them in the
@@ -131,10 +144,14 @@ function ChangeRequestsRoute() {
 function Router() {
   return (
     <Switch>
-      <Route path="/login" component={Login} />
-      
+      {/* In the Writers app the office login (no Writer role) and the office
+          home do not exist: both lead to the writer portal. */}
+      <Route path="/login">
+        {() => (isWritersApp() ? <Redirect to={WRITER_LOGIN} replace /> : <Login />)}
+      </Route>
+
       <Route path="/">
-        <Redirect to="/dashboard" />
+        {() => <Redirect to={isWritersApp() ? "/writer/dashboard" : "/dashboard"} replace />}
       </Route>
 
       <Route path="/dashboard">

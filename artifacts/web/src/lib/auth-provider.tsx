@@ -2,12 +2,14 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   setAuthTokenGetter, setUnauthorizedHandler,
-  useGetMe, useLogin, useLogout, getGetMeQueryKey,
+  useGetMe, useLogin, getGetMeQueryKey,
 } from "@workspace/api-client-react";
 import { AuthContext } from "./auth-context";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { syncServerTime, getServerNow } from "./time-sync";
+import { useQueryClient } from "@tanstack/react-query";
+import { loginPathFor } from "./portal-mode";
 
 const INACTIVITY_MS   = 15 * 60 * 1000; // 15 minutes of no activity
 const WARN_SECONDS    = 59;              // countdown before auto-logout
@@ -40,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loginMutation  = useLogin();
-  const logoutMutation = useLogout();
+  const queryClient    = useQueryClient();
 
   const hasToken = !!localStorage.getItem("accessToken");
   const { data: me, isLoading: isLoadingMe, isError, error } = useGetMe({
@@ -49,6 +51,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setLocationRef   = useRef(setLocation);
   setLocationRef.current = setLocation;
+  // Who is signed in, readable from callbacks created before they were.
+  const userRef = useRef<typeof user>(null);
+  userRef.current = user;
+  const loggingOutRef = useRef(false);
 
   const refreshTimerRef   = useRef<ReturnType<typeof setTimeout>  | null>(null);
   const countdownTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -114,18 +120,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /* ── logout ────────────────────────────────────────────────────────────── */
 
+  /**
+   * Sign out completely, then go to the right login - never a different one.
+   *
+   * 1. Revoke the session on the server. Sent with plain fetch, carrying the
+   *    refresh token as well as the access token, so it still works when the
+   *    access token has lapsed, and so a 401 here can never re-enter this
+   *    function through the unauthorized handler.
+   * 2. Remove both tokens and every cached response, so nothing of the last
+   *    user is left on the phone for the next one.
+   * 3. Replace (not push) the history entry with the login: Back cannot
+   *    return into a signed-out page. In the Writers app that login is
+   *    always /writer/login; the office login has no Writer role.
+   */
   const performLogout = useCallback(async () => {
+    if (loggingOutRef.current) return;
+    loggingOutRef.current = true;
+    const role = userRef.current?.role ?? null;
+    const target = loginPathFor(role);
     isLoggedInRef.current  = false;
     warningActiveRef.current = false;
     clearRefreshTimer();
     clearCountdownTimer();
     setShowWarning(false);
-    try { await logoutMutation.mutateAsync(); } catch { /* ignore */ }
+
+    const accessToken  = localStorage.getItem("accessToken");
+    const refreshToken = localStorage.getItem("refreshToken");
+    // Credentials leave the device first: if the network call hangs, the
+    // phone is already signed out.
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     setUser(null);
-    setLocationRef.current("/login");
-  }, [logoutMutation]); // eslint-disable-line react-hooks/exhaustive-deps
+    queryClient.cancelQueries();
+    queryClient.clear();
+    try {
+      if (accessToken || refreshToken) {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+          keepalive: true,
+        });
+      }
+    } catch { /* offline: tokens are already gone from this device */ }
+    setLocationRef.current(target, { replace: true });
+    loggingOutRef.current = false;
+  }, [queryClient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── inactivity / countdown ────────────────────────────────────────────── */
 

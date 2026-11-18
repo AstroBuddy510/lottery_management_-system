@@ -174,20 +174,41 @@ router.post("/auth/refresh", async (req, res) => {
  * request, which this deployment cannot afford; the short expiry is what
  * bounds it.
  */
-router.post("/auth/logout", requireAuth, async (req, res) => {
-  const now = new Date();
-  if (req.user!.role === "writer") {
+router.post("/auth/logout", async (req, res) => {
+  // Either token identifies the session. The access token is the usual one;
+  // the refresh token covers a phone that slept past the access token's
+  // fifteen minutes - signing out then must still revoke the session, not
+  // quietly fail and leave the refresh token able to roll it forward.
+  const header = req.headers.authorization;
+  const bearer = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  const bodyRefresh = typeof req.body?.refreshToken === "string" ? req.body.refreshToken : null;
+  const claims =
+    (bearer ? verifyToken(bearer, "access") : null) ??
+    (bodyRefresh ? verifyToken(bodyRefresh, "refresh") : null);
+
+  // Nothing valid presented: there is no live session to end. Still a
+  // success, so a client clearing up after itself never meets a 401 here.
+  if (!claims) {
+    res.json({ success: true, revoked: false });
+    return;
+  }
+
+  // Tokens carry their issue time in whole seconds. Revoking from the start
+  // of the next second covers a token issued in this same second - a sign-out
+  // straight after signing in would otherwise leave that session alive.
+  const now = new Date(Math.ceil(Date.now() / 1000) * 1000);
+  if (claims.role === "writer") {
     await db
       .update(writersTable)
       .set({ sessionsValidFrom: now })
-      .where(eq(writersTable.id, req.user!.userId));
+      .where(eq(writersTable.id, claims.userId));
   } else {
     await db
       .update(usersTable)
       .set({ sessionsValidFrom: now })
-      .where(eq(usersTable.id, req.user!.userId));
+      .where(eq(usersTable.id, claims.userId));
   }
-  res.json({ success: true });
+  res.json({ success: true, revoked: true });
 });
 
 router.get("/auth/time", (req, res) => {
