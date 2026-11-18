@@ -51,6 +51,7 @@ const EVENT_STYLE: Record<string, { label: string; icon: LucideIcon; tone: strin
   paid: { label: "Paid", icon: Banknote, tone: "text-emerald-600 dark:text-emerald-400" },
   voided: { label: "Voided", icon: Ban, tone: "text-red-600 dark:text-red-400" },
   cancelled: { label: "Cancelled", icon: Ban, tone: "text-red-600 dark:text-red-400" },
+  settlement_reversed: { label: "Draw corrected — settlement reversed", icon: ScanLine, tone: "text-amber-600 dark:text-amber-400" },
 };
 
 export const SEVERITY_CHIP: Record<AnomalySeverity, string> = {

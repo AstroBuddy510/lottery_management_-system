@@ -14,6 +14,11 @@ import {
 } from "@workspace/db";
 import { eq, and, gte, lte, desc, inArray, sql } from "drizzle-orm";
 import { reserveLedgerTotals, recomputeReserveFund } from "../lib/finance/reserve";
+import { drawCompleted, approvedCorrection, normaliseNumbers } from "./draws";
+import { audit } from "../lib/finance/books";
+import { drawCorrectionsTable } from "@workspace/db";
+
+class DrawAlreadyRun extends Error {}
 import { RunCalculationsBody } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calculateWriter } from "../lib/calculator";
@@ -43,6 +48,7 @@ router.post(
     const winningNumbers = parse.data.winningNumbers;
     const machineNumbers = parse.data.machineNumbers;
     let settlement: Awaited<ReturnType<typeof settleGameTickets>> | null = null;
+    let correction: Awaited<ReturnType<typeof approvedCorrection>> | null = null;
     // Writers who had not handed in their postpaid money when this ran. Their
     // wins are still calculated, but stamped for a reviewer to decide.
     let unsettledWriters: UnsettledWriter[] = [];
@@ -64,12 +70,37 @@ router.post(
         return;
       }
 
+      // A draw runs once. Running it again is allowed only to apply a
+      // correction the director approved, and only with the numbers approved.
+      const done = await drawCompleted(db, gameId);
+      correction = await approvedCorrection(db, gameId);
+      if (done.completed && !correction) {
+        res.status(409).json({
+          error: "Draw already run. To change its numbers, propose a correction in Draw Histories; the director approves it and the draw is unlocked for one re-run.",
+          code: "draw_already_run",
+        });
+        return;
+      }
+      if (correction && (normaliseNumbers(winningNumbers) !== correction.newWinning || normaliseNumbers(machineNumbers) !== correction.newMachine)) {
+        res.status(409).json({
+          error: `This re-run is approved for winning ${correction.newWinning} and machine ${correction.newMachine} only.`,
+          code: "correction_numbers_mismatch",
+        });
+        return;
+      }
+
       // Closing the game and settling its tickets are one act. Done
       // separately, a settlement failure leaves the game marked closed with
       // its numbers posted and no wins behind it - which reads as a finished
       // draw and is the hardest state to notice or unpick.
       try {
         settlement = await db.transaction(async (tx) => {
+          // Two runs of the same draw at once: the second waits here, then
+          // finds the first one's result and stops.
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`draw:${gameId}`}))`);
+          const again = await drawCompleted(tx, gameId);
+          if (again.settled) throw new DrawAlreadyRun();
+
           await tx
             .update(gamesTable)
             .set({
@@ -100,6 +131,10 @@ router.post(
           return result;
         });
       } catch (err) {
+        if (err instanceof DrawAlreadyRun) {
+          res.status(409).json({ error: "Draw already run - another run of this draw finished first.", code: "draw_already_run" });
+          return;
+        }
         // Say what actually broke. A bare 500 here cost an evening once.
         logger.error({ err, gameId, calcDate }, "Settlement failed");
         res.status(500).json({
@@ -323,6 +358,15 @@ router.post(
     });
 
     const { results, allocations, debtReductionSummary } = booked;
+
+    // The approved correction has now been carried out.
+    if (correction) {
+      await db.update(drawCorrectionsTable)
+        .set({ status: "applied", appliedBy: req.user!.userId, appliedAt: new Date() })
+        .where(eq(drawCorrectionsTable.id, correction.id));
+      await audit(db, { actorUserId: req.user!.userId, actorRole: req.user!.role, action: "draw.correction_applied", entity: "draw_correction", entityId: correction.id,
+        detail: { winning: correction.newWinning, machine: correction.newMachine, writers: results.length } });
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Dispatch deficit alerts to affected agents

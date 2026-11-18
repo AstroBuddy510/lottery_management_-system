@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { AlertTriangle, Bell, BellOff, ChevronRight, HandCoins, Radio, ShieldAlert, Wallet } from "lucide-react";
+import { AlertTriangle, Bell, BellOff, Calculator, ChevronRight, HandCoins, Radio, ShieldAlert, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAlerts, markGameSeen, type AlertItem } from "@/lib/use-alerts";
@@ -11,9 +11,10 @@ const AREA: Record<AlertItem["area"], { label: string; icon: LucideIcon }> = {
   "live-ticker": { label: "Live Ticker", icon: Radio },
   finance: { label: "Finance & Statements", icon: HandCoins },
   payments: { label: "Payments", icon: Wallet },
+  draws: { label: "Run Draws", icon: Calculator },
   notifications: { label: "Notifications", icon: Bell },
 };
-const ORDER: AlertItem["area"][] = ["risk", "live-ticker", "payments", "finance", "notifications"];
+const ORDER: AlertItem["area"][] = ["risk", "draws", "live-ticker", "payments", "finance", "notifications"];
 const TONE = {
   urgent: "border-rose-500/30 bg-rose-500/5 text-rose-700 dark:text-rose-400",
   warn: "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400",

@@ -23,7 +23,8 @@ export type TicketEventType =
   | "claim_submitted"
   | "claim_resolved"
   | "claim_withheld"
-  | "transfer_failed";
+  | "transfer_failed"
+  | "settlement_reversed";
 
 export interface RecordEventInput {
   ticketId: string;

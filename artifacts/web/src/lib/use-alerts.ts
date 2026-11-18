@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth";
 
 export type AlertItem = {
   key: string;
-  area: "notifications" | "live-ticker" | "risk" | "finance" | "payments";
+  area: "notifications" | "live-ticker" | "risk" | "finance" | "payments" | "draws";
   tone: "info" | "warn" | "urgent";
   title: string;
   detail: string;
@@ -65,6 +65,7 @@ export function useAlerts() {
     newGame,
     newestGame: data?.newestGame ?? null,
     riskAttention: (data?.riskTotal ?? 0) > 0,
+    drawAttention: alerts.some((a) => a.area === "draws"),
     alerts,
     total: alerts.length,
     isLoading: q.isLoading,

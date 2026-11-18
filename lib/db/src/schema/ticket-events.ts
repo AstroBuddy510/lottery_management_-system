@@ -30,6 +30,7 @@ export const ticketEventTypeEnum = pgEnum("ticket_event_type", [
   "claim_resolved",  // an administrator cleared a rejection and re-queued it
   "claim_withheld",  // an administrator dropped it; the payout is cancelled
   "transfer_failed", // Paystack refused or reversed the disbursement
+  "settlement_reversed", // an approved draw correction put the ticket back to active
 ]);
 
 export const ticketEventsTable = pgTable(

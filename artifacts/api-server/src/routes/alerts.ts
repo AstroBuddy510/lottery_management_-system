@@ -19,7 +19,7 @@ const router = Router();
 type Alert = {
   key: string;
   /** Which menu item it belongs to. */
-  area: "notifications" | "live-ticker" | "risk" | "finance" | "payments";
+  area: "notifications" | "live-ticker" | "risk" | "finance" | "payments" | "draws";
   tone: "info" | "warn" | "urgent";
   title: string;
   detail: string;
@@ -115,6 +115,20 @@ router.get("/alerts", requireAuth, requireRole("director", "administrator", "cas
     if (flaggedClaims) alerts.push({ key: "risk:claims", area: "risk", tone: "urgent", count: flaggedClaims, title: `${flaggedClaims} flagged win claim${flaggedClaims === 1 ? "" : "s"}`, detail: "Sent back for review - resolve or withhold", href: "/risk-management" });
     if (hedge.count) alerts.push({ key: "risk:hedge", area: "risk", tone: "urgent", count: hedge.count, title: `${hedge.count} combination${hedge.count === 1 ? "" : "s"} must be hedged`, detail: `${ghs(hedge.liability)} exposed on ${hedge.games.join(", ")}`, href: "/risk-management" });
     riskTotal = openFlags + flaggedClaims + hedge.count;
+  }
+
+  // ── Draw corrections: the director decides, the administrator re-runs ──
+  try {
+    if (role === "director") {
+      const toDecide = await one(sql`SELECT count(*) AS v FROM draw_corrections WHERE status = 'pending' AND requested_by <> ${userId}`);
+      if (toDecide) alerts.push({ key: "draw:decide", area: "draws", tone: "urgent", count: toDecide, title: `${toDecide} draw correction${toDecide === 1 ? "" : "s"} to approve`, detail: "Run Draws › Draw Histories", href: "/calculations?tab=draws" });
+    }
+    if (role === "administrator") {
+      const rerun = await one(sql`SELECT count(*) AS v FROM draw_corrections WHERE status = 'approved'`);
+      if (rerun) alerts.push({ key: "draw:rerun", area: "draws", tone: "urgent", count: rerun, title: `${rerun} approved draw correction${rerun === 1 ? "" : "s"} to re-run`, detail: "Tickets are unsettled until the draw is re-run - Run Draws", href: "/calculations?tab=run" });
+    }
+  } catch (err) {
+    logger.warn({ err }, "alerts: draw corrections");
   }
 
   // ── Finance: decisions waiting on this role ──

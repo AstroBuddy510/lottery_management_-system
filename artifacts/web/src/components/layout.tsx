@@ -152,7 +152,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const unreadCount = unread?.count ?? 0;
   // Badges for the menu: a new game for the Live Ticker, something needing
   // attention now for Risk Management.
-  const { newGame, newestGame, riskAttention } = useAlerts();
+  const { newGame, newestGame, riskAttention, drawAttention } = useAlerts();
 
   const canSee = (item: NavItem) => !!user?.role && item.roles.includes(user.role);
   // A group shows only the pages this role may open, and disappears if none.
@@ -194,7 +194,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   ? <GlowBadge tone="emerald" label={`New game: ${newestGame?.name ?? ""}`} />
                   : item.path === "/risk-management" && riskAttention
                     ? <GlowBadge label="Something needs attention now" />
-                    : null;
+                    : item.path === "/calculations" && drawAttention
+                      ? <GlowBadge label="A draw correction needs action" />
+                      : null;
             if (badge) {
               return (
                 <div key={item.path} className="relative">

@@ -1,11 +1,11 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import {
   useListCalculations, useRunCalculations, useListGames,
   getListCalculationsQueryKey, getListGamesQueryKey,
 } from "@workspace/api-client-react";
 import type { Game } from "@workspace/api-client-react";
 import { useWriterLookup } from "@/lib/use-writer-lookup";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,10 +17,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   Calculator, History, Play, AlertCircle, TrendingUp, Trophy, Percent, Wallet, Shield, Coins, Search, Filter, X, RefreshCw,
-  ArrowUpDown
+  ArrowUpDown, Lock, ListOrdered, ShieldCheck
 } from "lucide-react";
+import { DrawHistories, DRAWS_KEY, fetchDraws, splitNumbers, NumberBalls } from "@/components/draw-histories";
 import { PayoutApprovals } from "@/pages/payout-approvals";
 import { useAuth } from "@/lib/auth";
+import { useSearch } from "wouter";
+import { ALERTS_KEY } from "@/lib/use-alerts";
 
 function fmtGHS(v: number, bold = true) {
   return (
@@ -65,7 +68,28 @@ export function Calculations() {
   const [filterAgentId, setFilterAgentId] = useState("");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
 
+  // ?tab=draws opens a sub-tab directly (alerts link here).
+  const search = useSearch();
+  const [tab, setTab] = useState(() => new URLSearchParams(search).get("tab") ?? "run");
+  useEffect(() => {
+    const t = new URLSearchParams(search).get("tab");
+    if (t && ["run", "payouts", "draws", "history"].includes(t)) setTab(t);
+  }, [search]);
   const runMutation = useRunCalculations();
+  // What has already been run, so the same draw is never run twice. A draw
+  // reopens only through an approved correction (Draw Histories tab).
+  const drawsQ = useQuery({ queryKey: DRAWS_KEY, queryFn: fetchDraws, refetchInterval: 30_000 });
+  const ranGames = useMemo(() => {
+    const m = new Map<string, NonNullable<typeof drawsQ.data>["draws"][number]>();
+    for (const d of drawsQ.data?.draws ?? []) if (d.result_id || d.calc_rows > 0) m.set(d.id, d);
+    return m;
+  }, [drawsQ.data]);
+  const approvedByGame = useMemo(() => {
+    const m = new Map<string, NonNullable<typeof drawsQ.data>["corrections"][number]>();
+    for (const c of drawsQ.data?.corrections ?? []) if (c.status === "approved") m.set(c.game_id, c);
+    return m;
+  }, [drawsQ.data]);
+  const pendingByGame = useMemo(() => new Set((drawsQ.data?.corrections ?? []).filter((c) => c.status === "pending").map((c) => c.game_id)), [drawsQ.data]);
   const { data: gamesRaw } = useListGames();
   const { data: calculations, isLoading } = useListCalculations(
     {},
@@ -140,13 +164,20 @@ export function Calculations() {
       toast({ title: "Please select a game event to run draws", variant: "destructive" });
       return;
     }
+    if (ranGames.has(game.id) && !approvedByGame.has(game.id)) {
+      toast({ title: "Draw already run", description: "To change its numbers, propose a correction in Draw Histories.", variant: "destructive" });
+      return;
+    }
     if (!isDrawNumbersValid) {
       toast({ title: "Please enter 5 winning and 5 machine numbers between 1 and 90", variant: "destructive" });
       return;
     }
 
     const label = `${game.eventNumber} — ${game.name} (${runDate})`;
-    if (!confirm(`Run draws for ${label}?\n\nThis will lock all gross and wins entries for ${runDate}.`)) return;
+    const rerun = approvedByGame.has(game.id);
+    if (!confirm(rerun
+      ? `Re-run ${label} with the director-approved numbers?\n\nIts tickets are settled again against the corrected numbers and payouts and SMS re-open.`
+      : `Run draws for ${label}?\n\nThis will lock all gross and wins entries for ${runDate}.`)) return;
     try {
       const result = await runMutation.mutateAsync({
         data: {
@@ -160,17 +191,22 @@ export function Calculations() {
       toast({ title: `Draws complete — ${count} writer${count !== 1 ? "s" : ""} processed` });
       qc.invalidateQueries({ queryKey: getListCalculationsQueryKey({}) });
       qc.invalidateQueries({ queryKey: getListGamesQueryKey() });
+      qc.invalidateQueries({ queryKey: DRAWS_KEY });
+      qc.invalidateQueries({ queryKey: ALERTS_KEY });
       setWinningNumbers(["", "", "", "", ""]);
       setMachineNumbers(["", "", "", "", ""]);
       setSelectedRunGameId("_none");
     } catch (err) {
       // The server says why; repeating "failed" hides it and leaves the
       // operator with nothing to act on.
+      const body = (err as { data?: { error?: string; code?: string } })?.data;
       const detail =
+        body?.error ??
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
         (err as Error)?.message;
+      if (body?.code === "draw_already_run") qc.invalidateQueries({ queryKey: DRAWS_KEY });
       toast({
-        title: "Failed to run draws",
+        title: body?.code === "draw_already_run" ? "Draw already run" : "Failed to run draws",
         description: detail,
         variant: "destructive",
       });
@@ -194,6 +230,20 @@ export function Calculations() {
   }, [gameList, calculatedDates]);
 
   const selectedRunGame = selectedRunGameId !== "_none" ? gameList.find(g => g.id === selectedRunGameId) : null;
+  const ranDraw = selectedRunGame ? ranGames.get(selectedRunGame.id) ?? null : null;
+  const approvedFix = selectedRunGame ? approvedByGame.get(selectedRunGame.id) ?? null : null;
+  // open: never run · locked: already run, nothing approved · rerun: one
+  // re-run unlocked by the director, with exactly the approved numbers.
+  const runLock: "open" | "locked" | "rerun" = approvedFix ? "rerun" : ranDraw ? "locked" : "open";
+  const lockedWinning = approvedFix?.new_winning ?? ranDraw?.winning_numbers ?? null;
+  const lockedMachine = approvedFix?.new_machine ?? ranDraw?.machine_numbers ?? null;
+  useEffect(() => {
+    if (runLock === "open") return;
+    const fill = (v: string | null) => { const l = splitNumbers(v); return Array.from({ length: 5 }, (_, i) => l[i] ?? ""); };
+    setWinningNumbers(fill(lockedWinning));
+    setMachineNumbers(fill(lockedMachine));
+  }, [selectedRunGameId, runLock, lockedWinning, lockedMachine]);
+
   const selectedHistoryGame = historyGameId !== "_all" ? gameList.find(g => g.id === historyGameId) : null;
 
   const historyCalcs = useMemo(() => {
@@ -266,8 +316,8 @@ export function Calculations() {
         </div>
       )}
 
-      <Tabs defaultValue="run" className="space-y-6">
-        <TabsList className="grid w-full max-w-[620px] grid-cols-3 bg-muted/40 p-1 rounded-xl">
+      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+        <TabsList className="grid h-auto w-full max-w-[820px] grid-cols-2 sm:grid-cols-4 bg-muted/40 p-1 rounded-xl">
           <TabsTrigger value="run" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Calculator className="w-4 h-4" />
             Run Draws
@@ -275,6 +325,11 @@ export function Calculations() {
           <TabsTrigger value="payouts" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Trophy className="w-4 h-4" />
             Process Payouts &amp; SMS
+          </TabsTrigger>
+          <TabsTrigger value="draws" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <ListOrdered className="w-4 h-4" />
+            Draw Histories
+            {pendingByGame.size > 0 && <span className="ml-0.5 rounded-full bg-amber-500 px-1.5 text-[10px] font-black text-white">{pendingByGame.size}</span>}
           </TabsTrigger>
           <TabsTrigger value="history" className="flex items-center gap-2 rounded-lg text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <History className="w-4 h-4" />
@@ -311,6 +366,9 @@ export function Calculations() {
                             </span>
                             {g.name}
                             <span className="ml-2 text-[10px] text-muted-foreground font-mono">({gameCloseDate(g)})</span>
+                            {approvedByGame.has(g.id)
+                              ? <span className="ml-2 rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-sky-700 dark:text-sky-400">Re-run approved</span>
+                              : ranGames.has(g.id) && <span className="ml-2 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400">Draw already run</span>}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -343,6 +401,38 @@ export function Calculations() {
                       </p>
                     </div>
 
+                    {runLock === "locked" && ranDraw && (
+                      <div role="status" className="flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+                        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" />
+                        <div className="space-y-1 text-xs">
+                          <div className="font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">Draw already run</div>
+                          <p className="text-muted-foreground">
+                            Run {ranDraw.processed_at ? `on ${new Date(ranDraw.processed_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Accra" })}` : "already"}
+                            {ranDraw.processed_by_name ? ` by ${ranDraw.processed_by_name}` : ""} · {ranDraw.total_winners ?? 0} winner(s){ranDraw.sms_notifications_sent ? " · SMS sent" : ""}.
+                            The numbers below are what it was settled on and cannot be run again.
+                            {pendingByGame.has(ranDraw.id)
+                              ? " A correction is waiting for the director."
+                              : " If they are wrong, an administrator proposes a correction in Draw Histories and the director approves it."}
+                          </p>
+                          <button type="button" onClick={() => setTab("draws")} className="font-semibold text-primary hover:underline">Open Draw Histories</button>
+                        </div>
+                      </div>
+                    )}
+                    {runLock === "rerun" && approvedFix && (
+                      <div role="status" className="flex items-start gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3">
+                        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-400" />
+                        <div className="space-y-1.5 text-xs">
+                          <div className="font-black uppercase tracking-wider text-sky-800 dark:text-sky-300">Correction approved — re-run due</div>
+                          <p className="text-muted-foreground">
+                            Approved by {approvedFix.decided_by_name ?? "the director"}. Its tickets are back to unsettled; run it once with the approved numbers to settle them again and re-open payouts and SMS.
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                            <span className="flex items-center gap-1.5 text-muted-foreground">Was <NumberBalls numbers={approvedFix.old_winning} kind="winning" /> <NumberBalls numbers={approvedFix.old_machine} kind="machine" /></span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2.5">
                         <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
@@ -360,6 +450,8 @@ export function Calculations() {
                               placeholder={`#${idx + 1}`}
                               value={num}
                               onChange={e => handleNumberChange("winning", idx, e.target.value)}
+                              disabled={runLock !== "open" || !canRunDraws}
+                              readOnly={runLock !== "open"}
                               className="h-10 w-12 text-center font-bold text-sm bg-background border-border/50 focus:ring-2 focus:ring-primary/20 focus:border-primary rounded-xl"
                             />
                           ))}
@@ -382,6 +474,8 @@ export function Calculations() {
                               placeholder={`#${idx + 1}`}
                               value={num}
                               onChange={e => handleNumberChange("machine", idx, e.target.value)}
+                              disabled={runLock !== "open" || !canRunDraws}
+                              readOnly={runLock !== "open"}
                               className="h-10 w-12 text-center font-bold text-sm bg-background border-border/50 focus:ring-2 focus:ring-primary/20 focus:border-primary rounded-xl"
                             />
                           ))}
@@ -394,8 +488,8 @@ export function Calculations() {
                 <div className="flex items-center gap-4 pt-3 border-t border-border/40">
                   <Button
                     onClick={handleRun}
-                    disabled={!canRunDraws || runMutation.isPending || selectedRunGameId === "_none" || !runDate || !isDrawNumbersValid}
-                    title={canRunDraws ? undefined : "Only an administrator runs draws"}
+                    disabled={!canRunDraws || runLock === "locked" || runMutation.isPending || drawsQ.isLoading || selectedRunGameId === "_none" || !runDate || !isDrawNumbersValid}
+                    title={!canRunDraws ? "Only an administrator runs draws" : runLock === "locked" ? "Draw already run" : undefined}
                     className="h-10 rounded-xl px-5 font-semibold text-sm bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-600/90 hover:to-violet-600/90 text-white shadow-md shadow-indigo-200 dark:shadow-none hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none"
                   >
                     {runMutation.isPending ? (
@@ -405,8 +499,8 @@ export function Calculations() {
                       </span>
                     ) : (
                       <span className="flex items-center gap-1.5">
-                        <Play className="w-4.5 h-4.5 fill-current" />
-                        Run Draws
+                        {runLock === "locked" ? <Lock className="w-4 h-4" /> : <Play className="w-4.5 h-4.5 fill-current" />}
+                        {runLock === "locked" ? "Draw already run" : runLock === "rerun" ? "Re-run Draw" : "Run Draws"}
                       </span>
                     )}
                   </Button>
@@ -457,6 +551,14 @@ export function Calculations() {
                         <span className="text-muted-foreground font-medium">Status:</span>
                         <StatusBadge status={selectedRunGame.status} />
                       </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground font-medium">Draw:</span>
+                        {runLock === "locked"
+                          ? <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] px-1.5 py-0">Draw already run</Badge>
+                          : runLock === "rerun"
+                            ? <Badge className="bg-sky-100 text-sky-800 border-sky-200 text-[10px] px-1.5 py-0">Re-run approved</Badge>
+                            : <Badge variant="outline" className="text-[10px] px-1.5 py-0">Not yet run</Badge>}
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -486,6 +588,11 @@ export function Calculations() {
         {/* ── PROCESS PAYOUTS & SMS ── */}
         <TabsContent value="payouts" className="mt-4">
           <PayoutApprovals />
+        </TabsContent>
+
+        {/* ── DRAW HISTORIES TAB ── */}
+        <TabsContent value="draws" className="mt-4">
+          <DrawHistories />
         </TabsContent>
 
         <TabsContent value="history" className="mt-4 space-y-6">
