@@ -104,7 +104,7 @@ export function ModelRequestsPanel({ showAgent = false }: { showAgent?: boolean 
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <CreditCard className="h-4 w-4 text-amber-500" />
-              Credit (postpaid) requests
+              Postpaid request approval
               {pending.length > 0 && (
                 <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
                   {pending.length}

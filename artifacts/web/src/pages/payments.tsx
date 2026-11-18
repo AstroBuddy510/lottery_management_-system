@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ModelRequestsPanel } from "@/components/model-requests-panel";
 import { TokenSalesPanel } from "@/pages/token-sales";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
@@ -136,6 +137,21 @@ export function Payments() {
   const { toast } = useToast();
   const { user } = useAuth();
   const canVoid = user?.role === "director" || user?.role === "administrator";
+
+  // Writers asking to sell on credit (postpaid). Same query as the panel in
+  // the tab, so the badge and the list share one fetch.
+  const { data: modelRequests } = useQuery<Array<{ status: string }>>({
+    queryKey: ["/api/writer-model-requests", "pending"],
+    queryFn: async () => {
+      const res = await fetch("/api/writer-model-requests?status=pending", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.ok) throw new Error("Could not load requests");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+  });
+  const postpaidRequests = (Array.isArray(modelRequests) ? modelRequests : []).filter((r) => r.status === "pending").length;
 
   /* ── data ── */
   const [boardDate, setBoardDate] = useState(today());
@@ -569,6 +585,14 @@ export function Payments() {
           <TabsTrigger value="settlement" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent">
             Settlement Board
           </TabsTrigger>
+          <TabsTrigger value="postpaid-requests" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
+            Postpaid Request Approval
+            {postpaidRequests > 0 && (
+              <span className="ml-2 bg-amber-500 text-white rounded-full px-1.5 py-0.5 text-[8.5px] font-extrabold shadow-xs">
+                {postpaidRequests}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="postpaid" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-primary dark:data-[state=active]:border-primary dark:data-[state=active]:text-primary px-3 py-3 text-xs font-bold transition-all hover:text-foreground/80 data-[state=active]:bg-transparent shadow-none bg-transparent relative">
             Postpaid Settlement
             {postpaidDeclared > 0 && (
@@ -744,6 +768,11 @@ export function Payments() {
               </Table>
             </ScrollTable>
           </Panel>
+        </TabsContent>
+
+        {/* ── Postpaid Request Approval: writers asking to sell on credit ── */}
+        <TabsContent value="postpaid-requests" className="outline-none">
+          <ModelRequestsPanel showAgent />
         </TabsContent>
 
         {/* ── Postpaid Settlement ── */}
