@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearch } from "wouter";
 import { BadgePercent, BookOpen, Building2, CalendarCheck, FileStack, History, Landmark, Lock, Package, Percent, Scale, ShieldCheck, Store, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -53,7 +54,13 @@ export default function FinancePage() {
   const { user } = useAuth();
   const role = user?.role;
   const tabs = TABS.filter((t) => role && t.roles.includes(role));
-  const [tab, setTab] = useState(tabs[0]?.value ?? "cash-book");
+  // A link can open a particular tab: /finance?tab=agencies (the alerts bell does).
+  const asked = new URLSearchParams(useSearch()).get("tab");
+  const [tab, setTab] = useState(tabs.some((t) => t.value === asked) ? asked! : tabs[0]?.value ?? "cash-book");
+  useEffect(() => {
+    if (asked && tabs.some((t) => t.value === asked)) setTab(asked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked]);
 
   return (
     <div className="p-4 sm:p-6 space-y-6 min-w-0">

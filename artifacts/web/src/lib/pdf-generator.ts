@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { reportText } from "@/lib/report-text";
 
 /**
  * Save or print: every generator ends in finishDoc, so any report can be
@@ -2461,15 +2462,25 @@ export async function generatePaymentsHistoryPDF(
 // ─── GENERIC TABLE REPORT ───
 /**
  * Any on-screen section as a PDF: the same letterhead as every other report,
- * then one table per section. The Payments screens use this for their
- * Export PDF buttons, and lib/table-report.ts prints the same spec, so the
+ * then one table per section. Every Export PDF button outside the dedicated
+ * statements uses this, and lib/table-report.ts prints the same spec, so the
  * paper and the PDF of a section always carry the same rows.
  */
 export type TableReportColumn = { header: string; align?: "left" | "right" | "center" };
+/**
+ * How a row is set, for statements:
+ *   heading   a group title ("Assets", "Operating"), across the page
+ *   indent    a line inside a group, set in from the left
+ *   subtotal  a figure that closes a group, in bold with a rule above
+ *   total     the bottom line, in bold on a tint
+ */
+export type TableReportRowKind = "heading" | "indent" | "subtotal" | "total" | null | undefined;
 export type TableReportSection = {
   heading?: string;
   columns: TableReportColumn[];
   rows: string[][];
+  /** One per row, same order as rows. Optional. */
+  rowKinds?: TableReportRowKind[];
   /** A bold closing row, e.g. totals. Same length as columns. */
   totals?: string[];
   empty?: string;
@@ -2484,56 +2495,178 @@ export type TableReport = {
   orientation?: "portrait" | "landscape";
 };
 
+const BRAND: [number, number, number] = [0, 78, 152];
+const MARGIN = 14;
+
+/**
+ * Letterhead for a table report. Unlike the fixed-width header the older
+ * reports share, every line wraps inside its own column - a long summary line
+ * no longer runs under the details on the right - and the rule below sits
+ * under whichever column is longer.
+ */
+function drawReportHeader(doc: any, report: TableReport, logoImg: HTMLImageElement | null): number {
+  const pageWidth = doc.internal.pageSize.width;
+  if (logoImg) {
+    try { doc.addImage(logoImg, "PNG", (pageWidth - 22) / 2, 8, 22, 22); } catch { /* the letterhead reads without it */ }
+  }
+  doc.setTextColor(...BRAND);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.text("VISION 2000 LOTTO.COM LTD", pageWidth / 2, 36, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(110, 110, 110);
+  doc.text("HQ Location: Afienya Mataheko  |  Postal: PO Box SQ 168  |  info@vs2000smartportal.com  |  0302 021 000 / 0244614981", pageWidth / 2, 41, { align: "center" });
+  doc.setDrawColor(215, 215, 215);
+  doc.setLineWidth(0.4);
+  doc.line(MARGIN, 45, pageWidth - MARGIN, 45);
+
+  const metaWidth = 78;
+  const leftWidth = pageWidth - MARGIN * 2 - metaWidth - 8;
+  doc.setTextColor(...BRAND);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  const titleLines = doc.splitTextToSize(reportText(report.title).toUpperCase(), leftWidth);
+  doc.text(titleLines, MARGIN, 53);
+  let leftY = 53 + titleLines.length * 5.5 + 1;
+
+  if (report.summary.length) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(70, 70, 70);
+    doc.text("SUMMARY", MARGIN, leftY);
+    leftY += 4.2;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(60, 60, 60);
+    for (const line of report.summary) {
+      const wrapped = doc.splitTextToSize(reportText(line), leftWidth);
+      doc.text(wrapped, MARGIN, leftY);
+      leftY += wrapped.length * 4;
+    }
+  }
+
+  const meta = [
+    { label: "Report ID", value: `RPT-${Date.now().toString().slice(-6)}` },
+    { label: "Generated", value: new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Accra" }) },
+    ...(report.meta ?? []),
+  ];
+  const labelX = pageWidth - MARGIN - metaWidth;
+  const valueX = labelX + 26;
+  let rightY = 53;
+  for (const m of meta) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 120, 120);
+    doc.text(`${reportText(m.label).toUpperCase()}`, labelX, rightY);
+    doc.setFontSize(7.5);
+    doc.setTextColor(40, 40, 40);
+    const v = doc.splitTextToSize(reportText(m.value), metaWidth - 26);
+    doc.text(v, valueX, rightY);
+    rightY += Math.max(1, v.length) * 3.6 + 0.8;
+  }
+
+  const bottom = Math.max(leftY, rightY) + 1;
+  doc.setDrawColor(225, 225, 225);
+  doc.line(MARGIN, bottom, pageWidth - MARGIN, bottom);
+  return bottom + 6;
+}
+
+/** "Page 2 of 5" and the report's name at the foot of every page. */
+function drawPageFooters(doc: any, title: string) {
+  const pages = doc.internal.getNumberOfPages();
+  const w = doc.internal.pageSize.width;
+  const h = doc.internal.pageSize.height;
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 140);
+    doc.text(reportText(`Vision 2000 Lotto - ${title}`), MARGIN, h - 8);
+    doc.text(`Page ${i} of ${pages}`, w - MARGIN, h - 8, { align: "right" });
+  }
+}
+
 export async function generateTableReportPDF(report: TableReport) {
   const logoImg = await getLogoImage();
   const doc = new jsPDF({ orientation: report.orientation ?? "portrait" }) as any;
-  let y = drawBrandHeader(
-    doc,
-    report.title,
-    [
-      { label: "Report ID", value: `RPT-${Date.now().toString().slice(-6)}` },
-      { label: "Date Generated", value: new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) },
-      ...(report.meta ?? []),
-    ],
-    "Summary",
-    report.summary,
-    logoImg,
-  );
+  const pageHeight = doc.internal.pageSize.height;
+  const usable = doc.internal.pageSize.width - MARGIN * 2;
+  let y = drawReportHeader(doc, report, logoImg);
 
   for (const section of report.sections) {
+    const cols = section.columns.length;
+    const kinds = section.rowKinds ?? [];
+    // Smaller type once a table gets wide, so it fits without squeezing cells.
+    const fontSize = cols >= 9 ? 6.8 : cols >= 7 ? 7.4 : 8;
+    const aligns = section.columns.map((c) => c.align ?? "left");
+    const rows = section.rows.map((r) => r.map(reportText));
+    const totals = section.totals?.map(reportText);
+
     if (section.heading) {
-      if (y > doc.internal.pageSize.height - 40) { doc.addPage(); y = 20; }
+      if (y > pageHeight - 40) { doc.addPage(); y = 18; }
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
-      doc.setTextColor(0, 78, 152);
-      doc.text(section.heading, 15, y);
-      y += 3;
+      doc.setTextColor(...BRAND);
+      doc.text(reportText(section.heading), MARGIN, y);
+      y += 2.5;
     }
-    const aligns = section.columns.map((c) => c.align ?? "left");
-    const body: any[] = section.rows.length
-      ? section.rows.map((r) => [...r])
-      : [[{ content: section.empty ?? "Nothing to show.", colSpan: section.columns.length, styles: { halign: "center", textColor: [140, 140, 140] } }]];
-    if (section.totals && section.rows.length) {
-      body.push(section.totals.map((t) => ({ content: t, styles: { fontStyle: "bold", fillColor: [236, 242, 250] } })));
+
+    // Money and other right-aligned figures never break across lines: each
+    // such column is at least as wide as its widest figure.
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(fontSize);
+    const columnStyles: Record<number, any> = {};
+    aligns.forEach((a, i) => {
+      if (a !== "right") { columnStyles[i] = { halign: a }; return; }
+      const texts = [...rows.map((r) => r[i] ?? ""), totals?.[i] ?? "", reportText(section.columns[i]!.header)];
+      const widest = Math.max(...texts.map((t) => doc.getTextWidth(t)));
+      columnStyles[i] = { halign: "right", minCellWidth: Math.min(widest + 4.5, usable / 2.2) };
+    });
+
+    const body: any[] = rows.length
+      ? rows.map((r, ri) => {
+          const kind = kinds[ri];
+          if (kind === "heading") {
+            // A group title: one cell across the table.
+            const text = r.filter(Boolean).join("  ");
+            return [{ content: text, colSpan: cols, styles: { fontStyle: "bold", textColor: BRAND, fillColor: [241, 245, 251], halign: "left" } }];
+          }
+          return r.map((c, ci) => {
+            const styles: any = {};
+            if (kind === "indent" && ci === 0) styles.cellPadding = { top: 1.6, bottom: 1.6, left: 7, right: 2 };
+            if (kind === "subtotal") { styles.fontStyle = "bold"; styles.lineWidth = { top: 0.25 }; styles.lineColor = [170, 170, 170]; }
+            if (kind === "total") { styles.fontStyle = "bold"; styles.fillColor = [226, 235, 247]; }
+            return Object.keys(styles).length ? { content: c, styles } : c;
+          });
+        })
+      : [[{ content: reportText(section.empty ?? "Nothing to show."), colSpan: cols, styles: { halign: "center", textColor: [140, 140, 140] } }]];
+    if (totals && rows.length) {
+      body.push(totals.map((t) => ({ content: t, styles: { fontStyle: "bold", fillColor: [226, 235, 247], lineWidth: { top: 0.4 }, lineColor: BRAND } })));
     }
+
     autoTable(doc, {
-      head: [section.columns.map((c) => c.header)],
+      head: [section.columns.map((c) => reportText(c.header))],
       body,
       startY: y,
       theme: "striped",
-      headStyles: { ...tableTheme.headStyles, halign: "left" },
-      bodyStyles: { ...tableTheme.bodyStyles },
-      alternateRowStyles: tableTheme.alternateRowStyles,
-      columnStyles: Object.fromEntries(aligns.map((a, i) => [i, { halign: a }])),
+      showHead: "everyPage",
+      rowPageBreak: "avoid",
+      styles: { font: "helvetica", fontSize, cellPadding: { top: 1.6, bottom: 1.6, left: 2, right: 2 }, overflow: "linebreak", valign: "middle", textColor: [50, 50, 50] },
+      headStyles: { fillColor: BRAND, textColor: [255, 255, 255], fontStyle: "bold", fontSize: fontSize - 0.4, valign: "middle" },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles,
       didParseCell: (data: any) => {
         if (data.section === "head") data.cell.styles.halign = aligns[data.column.index] ?? "left";
       },
-      margin: tableTheme.margin,
+      margin: { left: MARGIN, right: MARGIN, bottom: 16, top: 16 },
+      tableWidth: "auto",
     });
-    y = doc.lastAutoTable.finalY + 10;
+    y = doc.lastAutoTable.finalY + 9;
   }
 
-  if (y > doc.internal.pageSize.height - 45) doc.addPage();
-  drawSignatureBlock(doc, "Prepared By (Cashier)", "Approved By");
+  if (y > pageHeight - 48) doc.addPage();
+  drawSignatureBlock(doc, "Prepared By", "Approved By");
+  drawPageFooters(doc, report.title);
   finishDoc(doc, report.fileName.endsWith(".pdf") ? report.fileName : `${report.fileName}.pdf`);
 }

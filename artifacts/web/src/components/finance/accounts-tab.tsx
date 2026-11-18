@@ -31,7 +31,7 @@ function checksReport(rows: Check[]): TableReport {
 export function AccountsTab({ role }: { role?: string }) {
   const isDirector = role === "director";
   const accounts = useQuery({ queryKey: [...FIN_KEY, "accounts"], queryFn: finGet<MoneyAccount[]>("/accounts") });
-  const checks = useQuery({ queryKey: [...FIN_KEY, "checks"], queryFn: finGet<Check[]>("/balance-checks") });
+  const checks = useQuery({ queryKey: [...FIN_KEY, "balance-checks"], queryFn: finGet<Check[]>("/balance-checks") });
   const [addOpen, setAddOpen] = useState(false);
   const [checkOpen, setCheckOpen] = useState(false);
   const paged = usePaged(checks.data, 15);

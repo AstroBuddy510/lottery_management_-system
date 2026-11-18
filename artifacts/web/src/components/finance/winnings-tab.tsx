@@ -74,13 +74,20 @@ function reserveReport(d: ReserveData): TableReport {
   return {
     title: "Reserve Fund Ledger",
     fileName: `reserve-ledger-${todayAccra()}`,
+    orientation: "landscape",
     summary: [`Set aside by draws: ${ghs(d.totals.contributed)}`, `Drawn to cover deficits: ${ghs(d.totals.drawn)}`, `Balance: ${ghsSigned(d.totals.balance)}`, `Superseded duplicate draws (not counted): ${ghs(d.totals.superseded)}`],
     sections: [
       { heading: "By month", columns: [{ header: "Month" }, { header: "Set aside", align: "right" }, { header: "Drawn", align: "right" }, { header: "Net", align: "right" }],
         rows: d.months.map((m) => [new Date(`${m.period_date}T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric" }), ghs(m.total_contributed), ghs(m.total_allocated), ghsSigned(m.balance)]),
         totals: ["Total", ghs(d.totals.contributed), ghs(d.totals.drawn), ghsSigned(d.totals.balance)] },
-      { heading: "Draws", columns: [{ header: "Day" }, { header: "Writer" }, { header: "Draw" }, { header: "Kind" }, { header: "Standing" }, { header: "Amount", align: "right" }],
-        rows: d.draws.map((r) => [fmtDate(r.allocation_date), `${r.writer_code} · ${r.writer_name}`, r.game_name ?? "—", r.source === "auto" ? "Automatic" : "Applied by hand", r.superseded_at ? `Superseded: ${r.superseded_reason ?? ""}` : "Counts", ghs(r.amount_drawn)]) },
+      { heading: "Draws on the reserve", columns: [{ header: "Day" }, { header: "Writer" }, { header: "Draw" }, { header: "Kind" }, { header: "Standing" }, { header: "Amount", align: "right" }],
+        rows: d.draws.map((r) => [fmtDate(r.allocation_date), `${r.writer_code} · ${r.writer_name}`, r.game_name ?? "—", r.source === "auto" ? "Automatic" : "Applied by hand", r.superseded_at ? "Superseded - not counted" : "Counts", ghs(r.amount_drawn)]),
+        totals: ["Standing draws", "", "", "", "", ghs(d.totals.drawn)] },
+      ...(d.draws.some((r) => r.superseded_at) ? [{
+        heading: "Superseded draws and why",
+        columns: [{ header: "Day" }, { header: "Writer" }, { header: "Reason" }, { header: "Amount", align: "right" as const }],
+        rows: d.draws.filter((r) => r.superseded_at).map((r) => [fmtDate(r.allocation_date), r.writer_code, r.superseded_reason ?? "", ghs(r.amount_drawn)]),
+      }] : []),
     ],
   };
 }

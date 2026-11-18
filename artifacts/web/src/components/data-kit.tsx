@@ -95,7 +95,10 @@ export const PAGE_SIZE = 20;
  * a new filter or date - and never leaves the page past the end when the list
  * shrinks under it.
  */
-export function usePaged<T>(rows: T[] | undefined, size = PAGE_SIZE, resetKey = "") {
+export function usePaged<T>(input: T[] | undefined, size = PAGE_SIZE, resetKey = "") {
+  // Anything that is not a list (an error body, a response still loading in
+  // another shape) pages as empty rather than taking the screen down.
+  const rows = Array.isArray(input) ? input : undefined;
   const [page, setPage] = useState(1);
   const first = useRef(true);
   useEffect(() => {

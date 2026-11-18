@@ -45,7 +45,7 @@ function agenciesReport(rows: Agency[]): TableReport {
       `Owed by the company: ${ghs(rows.filter((r) => r.stored > 0).reduce((s, r) => s + r.stored, 0))}`,
     ],
     sections: [{
-      columns: [{ header: "Agency" }, { header: "Opening balance" }, { header: "Balance" }, { header: "Commission available", align: "right" }],
+      columns: [{ header: "Agency" }, { header: "Opening balance" }, { header: "Balance", align: "right" }, { header: "Commission available", align: "right" }],
       rows: rows.map((r) => [
         `${r.code} · ${r.agencyName ?? r.agentName}`,
         r.approvedOpening ? `${r.approvedOpening.direction === "agency_owes" ? "Agency owed" : "Company owed"} ${ghs(r.approvedOpening.amount)} at ${fmtDate(r.approvedOpening.as_of)}` : "UNCONFIRMED",
@@ -68,7 +68,7 @@ function statementReport(a: Agency, s: Statement): TableReport {
     ],
     meta: [{ label: "Period", value: `${fmtDate(s.from)} – ${fmtDate(s.to)}` }],
     sections: [{
-      columns: [{ header: "Date" }, { header: "Item" }, { header: "Gross", align: "right" }, { header: "Commission", align: "right" }, { header: "Wins", align: "right" }, { header: "Reserve", align: "right" }, { header: "Effect", align: "right" }, { header: "Balance" }],
+      columns: [{ header: "Date" }, { header: "Item" }, { header: "Gross", align: "right" }, { header: "Commission", align: "right" }, { header: "Wins", align: "right" }, { header: "Reserve", align: "right" }, { header: "Effect", align: "right" }, { header: "Balance", align: "right" }],
       rows: [
         [fmtDate(s.from), "Balance brought forward", "", "", "", "", "", owing(s.broughtForward)],
         ...s.lines.map((l) => [fmtDate(l.day), l.kind === "draw" ? `Draw ${l.label}${l.ref ? ` #${l.ref}` : ""}` : `${l.label}${l.ref ? ` ${l.ref}` : ""}`,

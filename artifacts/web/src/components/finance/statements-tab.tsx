@@ -4,7 +4,7 @@ import { FileStack, FileText, Landmark, TrendingUp, Waves } from "lucide-react";
 import { Panel, ReportActions } from "@/components/data-kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { exportReportPdf, printReport, type TableReport, type TableReportSection } from "@/lib/table-report";
+import { exportReportPdf, printReport, type TableReport, type TableReportSection, type TableReportRowKind } from "@/lib/table-report";
 import { FIN_KEY, finGet, ghsSigned, fmtDate, fmtDateTime, todayAccra, monthStartAccra, categoryLabel } from "@/lib/finance-api";
 import { Field, Note } from "./shared";
 import type { Check } from "./reconciliation-tab";
@@ -18,34 +18,52 @@ type Statements = {
   position: { asAt: string; assets: Line[]; totalAssets: number; liabilities: Line[]; totalLiabilities: number; equity: number; funds: Line[]; caveats: string[] };
 };
 
-const AMT = { header: "GH₵", align: "right" as const };
-const money = (v: number) => ghsSigned(v).replace("GH₵ ", "");
+const AMT = { header: "Amount (GHS)", align: "right" as const };
+/** Statement figures: no currency on every line (it is in the header), negatives in brackets. */
+const money = (v: number) => {
+  const s = Math.abs(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return v < -0.004 ? `(${s})` : s;
+};
+type Row = { cells: string[]; kind?: TableReportRowKind };
+const section = (heading: string, rows: Row[], totals?: string[]): TableReportSection => ({
+  heading,
+  columns: [{ header: "" }, AMT, { header: "Note" }],
+  rows: rows.map((r) => r.cells),
+  rowKinds: rows.map((r) => r.kind),
+  totals,
+});
+const line = (l: Line): Row => ({ cells: [l.label, money(l.amount), l.note ?? ""], kind: l.strong ? "subtotal" : l.indent ? "indent" : undefined });
 
 export function incomeSection(s: Statements): TableReportSection {
-  return { heading: `Income statement, ${fmtDate(s.income.from)} – ${fmtDate(s.income.to)}`, columns: [{ header: "" }, AMT, { header: "Note" }],
-    rows: s.income.lines.map((l) => [`${l.indent ? "    " : ""}${l.label}`, money(l.amount), l.note ?? ""]),
-    totals: ["Net profit / (loss)", money(s.income.net), ""] };
+  return section(`Income statement, ${fmtDate(s.income.from)} – ${fmtDate(s.income.to)}`,
+    [...s.income.lines.slice(0, -1).map(line), ...s.income.memo.map((m) => ({ cells: [m.label, money(m.amount), "Memorandum"], kind: "indent" as const }))],
+    ["Net profit / (loss) for the period", money(s.income.net), ""]);
 }
 export function cashSection(s: Statements): TableReportSection {
-  const flows = (title: string, f: Flow[]) => f.map((x) => [`    ${categoryLabel(x.category)}`, money(x.net), `in ${money(x.in)} · out ${money(x.out)}`]).concat(f.length ? [] : [[`    No ${title.toLowerCase()} movements`, "", ""]]);
-  return { heading: `Cash flow, ${fmtDate(s.cash.from)} – ${fmtDate(s.cash.to)}`, columns: [{ header: "" }, AMT, { header: "" }],
-    rows: [
-      ["Cash, bank and Paystack at the start", money(s.cash.opening), ""],
-      ["Operating", "", ""], ...flows("Operating", s.cash.operating), ["Net from operating", money(s.cash.operatingNet), ""],
-      ["Financing", "", ""], ...flows("Financing", s.cash.financing), ["Net from financing", money(s.cash.financingNet), ""],
-      ...(s.cash.other.length ? [["Other", "", ""], ...flows("Other", s.cash.other)] : []),
-      ["Net change", money(s.cash.netChange), ""],
-    ],
-    totals: ["Cash, bank and Paystack at the end", money(s.cash.closing), ""] };
+  const flows = (f: Flow[]): Row[] => f.length
+    ? f.map((x) => ({ cells: [categoryLabel(x.category), money(x.net), `in ${money(x.in)} · out ${money(x.out)}`], kind: "indent" as const }))
+    : [{ cells: ["No movements", "", ""], kind: "indent" as const }];
+  return section(`Cash flow, ${fmtDate(s.cash.from)} – ${fmtDate(s.cash.to)}`, [
+    { cells: ["Cash, bank and Paystack at the start", money(s.cash.opening), ""], kind: "subtotal" },
+    { cells: ["Operating activities", "", ""], kind: "heading" }, ...flows(s.cash.operating),
+    { cells: ["Net cash from operating activities", money(s.cash.operatingNet), ""], kind: "subtotal" },
+    { cells: ["Financing activities", "", ""], kind: "heading" }, ...flows(s.cash.financing),
+    { cells: ["Net cash from financing activities", money(s.cash.financingNet), ""], kind: "subtotal" },
+    ...(s.cash.other.length ? [{ cells: ["Other", "", ""], kind: "heading" as const }, ...flows(s.cash.other)] : []),
+    { cells: ["Net change in cash", money(s.cash.netChange), ""], kind: "subtotal" },
+  ], ["Cash, bank and Paystack at the end", money(s.cash.closing), ""]);
 }
 export function positionSection(s: Statements): TableReportSection {
-  return { heading: `Financial position at ${fmtDateTime(s.position.asAt)}`, columns: [{ header: "" }, AMT, { header: "Note" }],
-    rows: [
-      ["Assets", "", ""], ...s.position.assets.map((l) => [`    ${l.label}`, money(l.amount), l.note ?? ""]), ["Total assets", money(s.position.totalAssets), ""],
-      ["Liabilities", "", ""], ...s.position.liabilities.map((l) => [`    ${l.label}`, money(l.amount), l.note ?? ""]), ["Total liabilities", money(s.position.totalLiabilities), ""],
-      ["Of the money held, set aside in funds:", "", ""], ...s.position.funds.map((l) => [`    ${l.label}`, money(l.amount), "part of the money above, not extra"]),
-    ],
-    totals: ["Net assets (equity)", money(s.position.equity), ""] };
+  return section(`Financial position at ${fmtDateTime(s.position.asAt)}`, [
+    { cells: ["Assets", "", ""], kind: "heading" },
+    ...s.position.assets.map((l) => line({ ...l, indent: !l.strong })),
+    { cells: ["Total assets", money(s.position.totalAssets), ""], kind: "subtotal" },
+    { cells: ["Liabilities", "", ""], kind: "heading" },
+    ...s.position.liabilities.map((l) => line({ ...l, indent: true })),
+    { cells: ["Total liabilities", money(s.position.totalLiabilities), ""], kind: "subtotal" },
+    { cells: ["Of the money held, set aside in funds (part of it, not extra)", "", ""], kind: "heading" },
+    ...s.position.funds.map((l) => ({ cells: [l.label, money(l.amount), ""], kind: "indent" as const })),
+  ], ["Net assets (equity)", money(s.position.equity), ""]);
 }
 
 function report(title: string, file: string, s: Statements, sections: TableReportSection[], extra: string[] = []): TableReport {

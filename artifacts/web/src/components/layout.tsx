@@ -5,11 +5,13 @@ import {
   ReceiptText, Package, FileBarChart, Settings, Calculator, Building2, Scale, Users, ScanSearch, Receipt,
   Wallet, PiggyBank, ShieldAlert, Gamepad2, Contact, Landmark, Radio, HandCoins, type LucideIcon,
 } from "lucide-react";
+import { GlowBadge } from "@/components/glow-badge";
+import { AlertsBell } from "@/components/alerts-bell";
+import { useAlerts, useMarkGameSeenOn } from "@/lib/use-alerts";
 import { useAuth } from "@/lib/auth";
 import { useGetUnreadCount, getGetUnreadCountQueryKey } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { AgentLayout } from "@/components/agent-layout";
 
 interface NavItem {
@@ -46,15 +48,14 @@ const NAV_ITEMS: NavEntry[] = [
   { label: "Gross Entries", path: "/entries/gross", roles: ["gross_entry", "agent"], icon: TrendingUp },
   { label: "Wins Entries", path: "/entries/wins", roles: ["wins_entry", "agent"], icon: Trophy },
   { label: "Payments", path: "/payments", roles: ["cashier", ...OFFICE], icon: CreditCard },
-  { label: "Finance & Statements", path: "/finance", roles: [...OFFICE, "cashier"], icon: HandCoins },
   { label: "POS Wins Payment", path: "/pos-wins-payment", roles: ["cashier"], icon: BadgeCheck },
   // Directors and administrators reach this as a tab of Reserve Fund.
   { label: "Reserve Receipts", path: "/reserve-receipts", roles: ["cashier"], icon: ReceiptText },
   { label: "Inventory", path: "/inventory", roles: ["cashier", ...OFFICE], icon: Package },
   { label: "Reports", path: "/reports", roles: [...OFFICE, "cashier"], icon: FileBarChart },
   { label: "Notifications", path: "/notifications", roles: ALL, icon: Bell },
-  { label: "System Settings", path: "/settings", roles: OFFICE, icon: Settings },
   { label: "Run Draws", path: "/calculations", roles: OFFICE, icon: Calculator },
+  { label: "System Settings", path: "/settings", roles: OFFICE, icon: Settings },
   { label: "Agency Overview", path: "/agencies", roles: OFFICE, icon: Building2 },
   { label: "Gross & Wins", path: "/gross-wins", roles: OFFICE, icon: Scale },
   { label: "Users & Agents", path: "/users", roles: [...OFFICE, "cashier"], icon: Users },
@@ -63,6 +64,7 @@ const NAV_ITEMS: NavEntry[] = [
   { label: "Master Wallet", path: "/master-wallet", roles: OFFICE, icon: Wallet },
   { label: "Reserve Fund", path: "/reserve", roles: OFFICE, icon: PiggyBank },
   { label: "Risk Management", path: "/risk-management", roles: OFFICE, icon: ShieldAlert },
+  { label: "Finance & Statements", path: "/finance", roles: [...OFFICE, "cashier"], icon: HandCoins },
   { label: "Games Management", path: "/games", roles: OFFICE, icon: Gamepad2 },
   {
     label: "Personnel Management",
@@ -148,6 +150,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     query: { queryKey: getGetUnreadCountQueryKey(), refetchInterval: 30000 }
   });
   const unreadCount = unread?.count ?? 0;
+  // Badges for the menu: a new game for the Live Ticker, something needing
+  // attention now for Risk Management.
+  const { newGame, newestGame, riskAttention } = useAlerts();
 
   const canSee = (item: NavItem) => !!user?.role && item.roles.includes(user.role);
   // A group shows only the pages this role may open, and disappears if none.
@@ -161,6 +166,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   // Following a link closes the drawer.
   useEffect(() => { setMenuOpen(false); }, [location]);
+  // Opening the Live Ticker is what "seeing" the new game means.
+  useMarkGameSeenOn("/live-ticker", location, newestGame?.id);
 
   // After every hook, so the hook order is the same for every role.
   if (user?.role === "agent") return <AgentLayout>{children}</AgentLayout>;
@@ -180,15 +187,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
           {visibleItems.map(item => {
             if (isGroup(item)) return <NavGroupLink key={item.label} group={item} />;
-            if (item.path === "/notifications") {
+            const badge =
+              item.path === "/notifications" && unreadCount > 0
+                ? <GlowBadge count={unreadCount} label={`${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`} />
+                : item.path === "/live-ticker" && newGame
+                  ? <GlowBadge tone="emerald" label={`New game: ${newestGame?.name ?? ""}`} />
+                  : item.path === "/risk-management" && riskAttention
+                    ? <GlowBadge label="Something needs attention now" />
+                    : null;
+            if (badge) {
               return (
                 <div key={item.path} className="relative">
                   <NavLink item={item} />
-                  {unreadCount > 0 && (
-                    <Badge className="absolute top-1/2 -translate-y-1/2 right-2 h-5 min-w-5 flex items-center justify-center text-[10px] px-1.5 pointer-events-none" variant="destructive">
-                      {unreadCount > 99 ? "99+" : unreadCount}
-                    </Badge>
-                  )}
+                  <span className="absolute top-1/2 -translate-y-1/2 right-3 flex">{badge}</span>
                 </div>
               );
             }
@@ -244,14 +255,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <img src="/company-logo-v3.png" alt="" className="w-full h-full object-contain" />
           </div>
           <div className="text-sm font-bold text-sidebar-primary tracking-tight">VS2000</div>
-          <Link href="/notifications" className="ml-auto relative h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-sidebar-accent" aria-label="Notifications">
-            <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold inline-flex items-center justify-center">
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
-            )}
-          </Link>
+          {["director", "administrator", "cashier"].includes(user?.role ?? "") ? (
+            <AlertsBell variant="sidebar" className="ml-auto" />
+          ) : (
+            <Link href="/notifications" className="ml-auto relative h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-sidebar-accent" aria-label="Notifications">
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold inline-flex items-center justify-center">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Link>
+          )}
         </header>
 
         <main className="flex-1 overflow-y-auto">

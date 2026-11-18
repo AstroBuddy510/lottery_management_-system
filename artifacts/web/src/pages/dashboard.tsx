@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { getServerNow } from "../lib/time-sync";
 import { LiveSalesSection } from "@/components/live-sales";
+import { AlertsBell } from "@/components/alerts-bell";
 import { businessDate, businessWeekday, useBusinessNow, drawState, pickCurrentGame, isOnBusinessDay, DRAW_STATE_LABEL, type DrawState } from "@/lib/business-day";
 import { useAuth } from "@/lib/auth";
 import { AgentDashboard } from "@/pages/agent-dashboard";
@@ -1619,7 +1620,11 @@ export function Dashboard() {
           <h1 className="text-2xl font-black tracking-tight mt-0.5">{greeting(now)}{firstName ? `, ${firstName}` : ""}</h1>
           <p className="text-xs text-muted-foreground font-medium mt-1">Here is how today's draw is going.</p>
         </div>
-        <span className="self-start sm:self-auto text-[11px] font-bold px-3 py-1 rounded-full border bg-card shadow-sm">{ROLE_LABELS[role] ?? role}</span>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Every alert in one place, each a link to the page that deals with it. */}
+          {(role === "director" || role === "administrator" || role === "cashier") && <AlertsBell />}
+          <span className="text-[11px] font-bold px-3 py-1 rounded-full border bg-card shadow-sm">{ROLE_LABELS[role] ?? role}</span>
+        </div>
       </div>
 
       {(role === "director" || role === "administrator") && <DirectorDashboard />}
