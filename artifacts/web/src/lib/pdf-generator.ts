@@ -2375,7 +2375,7 @@ export async function generateCompanyExpensesPDF(
 export async function generatePaymentsHistoryPDF(
   payments: any[],
   agentMap: Record<string, { name?: string; code?: string } | undefined>,
-  filters: { agentName?: string; from?: string; to?: string },
+  filters: { agentName?: string; gameName?: string; from?: string; to?: string },
 ) {
   const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
@@ -2406,6 +2406,7 @@ export async function generatePaymentsHistoryPDF(
       { label: "Date Generated", value: new Date().toLocaleDateString("en-GB") },
       { label: "Filter Range", value: range },
       { label: "Agent", value: filters.agentName || "All agents" },
+      { label: "Game", value: filters.gameName || "All games" },
     ],
     "Financial Summary",
     [

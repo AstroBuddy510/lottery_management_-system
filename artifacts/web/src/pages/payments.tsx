@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import {
   useListPayments, useCreatePayment, useVoidPayment,
   useListAgents, useListRecurringExpenses, useListCalculations,
-  useListTimeWindows, useApprovePayment, useRejectPayment,
+  useListTimeWindows, useApprovePayment, useRejectPayment, useListGames,
   getListPaymentsQueryKey, getListCalculationsQueryKey,
   getListTimeWindowsQueryKey,
 } from "@workspace/api-client-react";
@@ -41,6 +41,11 @@ type CreatedPayment = {
 const today = () => new Date().toISOString().split("T")[0];
 
 /** "16 Nov 2026" from a YYYY-MM-DD day. */
+/** The Accra calendar day of a timestamp, as yyyy-mm-dd. */
+function accraDay(iso: string | Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+}
+
 function fmtDay(d?: string | null) {
   if (!d) return "—";
   const t = new Date(`${d.slice(0, 10)}T12:00:00Z`);
@@ -177,10 +182,38 @@ export function Payments() {
     return "";
   });
 
+  const [filterGameId, setFilterGameId] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("gameId") || "";
+    }
+    return "";
+  });
+
+  /**
+   * A desk payment is not tied to a game row: it settles an agency's balance
+   * for a business day, and the Settlement Board pairs it with that day's
+   * draw by date. So "this game's payments" are the payments dated on the
+   * game's draw day (Accra), narrowed further by any From/To dates chosen -
+   * a game whose draw day falls outside them leaves nothing to show.
+   */
+  const { data: gamesRaw } = useListGames();
+  const gameOptions = useMemo(() => {
+    const list = Array.isArray(gamesRaw) ? gamesRaw : [];
+    return [...list]
+      .filter((g) => new Date(g.closeAt).getTime() <= Date.now() + 86_400_000)
+      .sort((a, b) => new Date(b.closeAt).getTime() - new Date(a.closeAt).getTime());
+  }, [gamesRaw]);
+  const selectedGame = filterGameId ? gameOptions.find((g) => g.id === filterGameId) ?? null : null;
+  const gameDay = selectedGame ? accraDay(selectedGame.closeAt) : null;
+  const effFrom = gameDay ? (filterFrom && filterFrom > gameDay ? filterFrom : gameDay) : filterFrom;
+  const effTo = gameDay ? (filterTo && filterTo < gameDay ? filterTo : gameDay) : filterTo;
+  const gameOutsideRange = !!gameDay && !!effFrom && !!effTo && effFrom > effTo;
+
   const { data: rawPayments, isLoading: loadingPayments } = useListPayments({
     agentId: filterAgentId || undefined,
-    dateFrom: filterFrom || undefined,
-    dateTo:   filterTo   || undefined,
+    dateFrom: effFrom || undefined,
+    dateTo:   effTo   || undefined,
   });
   const { data: pendingPayments, isLoading: loadingPending } = useListPayments({
     status: "pending",
@@ -230,7 +263,11 @@ export function Payments() {
   const expenseList = useMemo(() => Array.isArray(expenseCategories) ? expenseCategories.filter(e => e.isActive) : [], [expenseCategories]);
   const calcList    = useMemo(() => Array.isArray(allCalcs) ? allCalcs : [], [allCalcs]);
   const pendingList = useMemo(() => Array.isArray(pendingPayments) ? pendingPayments : [], [pendingPayments]);
-  const paymentList = useMemo(() => Array.isArray(rawPayments) ? rawPayments : [], [rawPayments]);
+  const paymentList = useMemo(
+    () => (gameOutsideRange || !Array.isArray(rawPayments) ? [] : rawPayments),
+    [rawPayments, gameOutsideRange],
+  );
+  const gameLabel = selectedGame ? `${selectedGame.name} (#${selectedGame.eventNumber}, drawn ${fmtDay(gameDay)})` : undefined;
 
   /**
    * Transaction History as a PDF, on the company letterhead.
@@ -248,8 +285,9 @@ export function Payments() {
       const { generatePaymentsHistoryPDF } = await import("@/lib/pdf-generator");
       await generatePaymentsHistoryPDF(paymentList, agentMap, {
         agentName: filterAgentId ? agentMap[filterAgentId]?.name : undefined,
-        from: filterFrom || undefined,
-        to: filterTo || undefined,
+        gameName: gameLabel,
+        from: effFrom || undefined,
+        to: effTo || undefined,
       });
     } catch (err) {
       toast({
@@ -313,7 +351,7 @@ export function Payments() {
   /* ── Paging, and the same rows as paper ── */
   const pBoard   = usePaged(settlements, PAGE_SIZE, boardDate);
   const pPending = usePaged(pendingList, 12);
-  const pHistory = usePaged(paymentList, PAGE_SIZE, `${filterAgentId}|${filterFrom}|${filterTo}`);
+  const pHistory = usePaged(paymentList, PAGE_SIZE, `${filterAgentId}|${filterGameId}|${filterFrom}|${filterTo}`);
   const historyIn  = paymentList.filter(p => !p.isVoided && p.transactionType === "pay_in").reduce((s, p) => s + Number(p.amount), 0);
   const historyOut = paymentList.filter(p => !p.isVoided && p.transactionType === "pay_out").reduce((s, p) => s + Number(p.amount), 0);
 
@@ -354,7 +392,8 @@ export function Payments() {
     orientation: "landscape",
     meta: [
       { label: "Agent", value: filterAgentId ? (agentMap[filterAgentId]?.name ?? "—") : "All agents" },
-      { label: "Period", value: filterFrom || filterTo ? `${filterFrom ? fmtDay(filterFrom) : "start"} – ${filterTo ? fmtDay(filterTo) : "today"}` : "All dates" },
+      { label: "Game", value: gameLabel ?? "All games" },
+      { label: "Period", value: effFrom || effTo ? `${effFrom ? fmtDay(effFrom) : "start"} – ${effTo ? fmtDay(effTo) : "today"}` : "All dates" },
     ],
     summary: [
       `${paymentList.length} transaction(s) · Pay-In ${money(historyIn)} · Pay-Out ${money(historyOut)}`,
@@ -897,7 +936,7 @@ export function Payments() {
             }
           >
             {/* Filters, one row above the table */}
-            <div className="grid grid-cols-1 gap-3 border-b bg-muted/20 px-5 py-4 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_auto] lg:items-end">
+            <div className="grid grid-cols-1 gap-3 border-b bg-muted/20 px-5 py-4 sm:grid-cols-2 lg:grid-cols-[1.3fr_1.3fr_1fr_1fr_auto] lg:items-end">
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Filter className="h-3 w-3" /> Agent</Label>
                 <Select value={filterAgentId || "_all"} onValueChange={v => setFilterAgentId(v === "_all" ? "" : v)}>
@@ -909,6 +948,20 @@ export function Payments() {
                 </Select>
               </div>
               <div className="space-y-1.5">
+                <Label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground"><Filter className="h-3 w-3" /> Game</Label>
+                <Select value={filterGameId || "_all"} onValueChange={v => setFilterGameId(v === "_all" ? "" : v)}>
+                  <SelectTrigger className="h-9 rounded-lg text-xs [&>span]:truncate"><SelectValue /></SelectTrigger>
+                  <SelectContent className="max-h-80">
+                    <SelectItem value="_all">All games</SelectItem>
+                    {gameOptions.map(g => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name} · #{g.eventNumber} · {fmtDay(accraDay(g.closeAt))}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">From</Label>
                 <Input type="date" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} className="h-9 rounded-lg text-xs" />
               </div>
@@ -916,12 +969,19 @@ export function Payments() {
                 <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">To</Label>
                 <Input type="date" value={filterTo} onChange={e => setFilterTo(e.target.value)} className="h-9 rounded-lg text-xs" />
               </div>
-              {(filterAgentId || filterFrom || filterTo) ? (
-                <Button size="sm" variant="ghost" className="h-9 rounded-lg text-xs font-bold" onClick={() => { setFilterAgentId(""); setFilterFrom(""); setFilterTo(""); }}>
+              {(filterAgentId || filterGameId || filterFrom || filterTo) ? (
+                <Button size="sm" variant="ghost" className="h-9 rounded-lg text-xs font-bold" onClick={() => { setFilterAgentId(""); setFilterGameId(""); setFilterFrom(""); setFilterTo(""); }}>
                   Clear filters
                 </Button>
               ) : <span className="hidden lg:block" />}
             </div>
+            {selectedGame && (
+              <div className={`border-b px-5 py-2 text-[11px] ${gameOutsideRange ? "bg-amber-500/10 text-amber-800 dark:text-amber-300" : "bg-muted/10 text-muted-foreground"}`}>
+                {gameOutsideRange
+                  ? <>{selectedGame.name} was drawn on {fmtDay(gameDay)}, outside the From/To dates chosen - widen the dates or clear them to see its payments.</>
+                  : <>Showing payments recorded for <b className="text-foreground">{selectedGame.name}</b>'s draw day, {fmtDay(gameDay)}{filterAgentId ? <>, for <b className="text-foreground">{agentMap[filterAgentId]?.name ?? "the selected agent"}</b></> : null}.</>}
+              </div>
+            )}
 
             <ScrollTable minWidth="64rem">
               <Table>
@@ -946,7 +1006,9 @@ export function Payments() {
                     </TableRow>
                   ) : paymentList.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={canVoid ? 8 : 7} className="py-12 text-center text-xs font-medium text-muted-foreground">No transactions found.</TableCell>
+                      <TableCell colSpan={canVoid ? 8 : 7} className="py-12 text-center text-xs font-medium text-muted-foreground">
+                        {filterAgentId || filterGameId || filterFrom || filterTo ? "No transactions match these filters." : "No transactions found."}
+                      </TableCell>
                     </TableRow>
                   ) : pHistory.rows.map(p => {
                     const dir = p.transactionType === "pay_out" ? "out" : "in";
