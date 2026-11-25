@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { WaterfallHeads, WaterfallRowCells } from "@/components/waterfall-cells";
+import { waterfallAny } from "@/lib/waterfall";
 import { getServerNow } from "../lib/time-sync";
 import {
   useListGames,
@@ -1260,35 +1262,30 @@ export function Games() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Summary KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
-                  <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Gross Sales</div>
-                  <div className="text-sm sm:text-base font-bold font-mono">GH₵ {Number(auditReport.totals.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                </div>
-                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
-                  <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Commission</div>
-                  <div className="text-sm sm:text-base font-bold font-mono text-amber-600 dark:text-amber-400">GH₵ {Number(auditReport.totals.commissionAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                </div>
-                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
-                  <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Net Gross</div>
-                  <div className="text-sm sm:text-base font-bold font-mono text-teal-600 dark:text-teal-400">GH₵ {Number(auditReport.totals.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                </div>
-                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
-                  <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Wins Paid</div>
-                  <div className="text-sm sm:text-base font-bold font-mono text-rose-600 dark:text-rose-400">GH₵ {Number(auditReport.totals.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                </div>
-                <div className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
-                  <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Reserve Fund</div>
-                  <div className="text-sm sm:text-base font-bold font-mono text-indigo-600 dark:text-indigo-400">GH₵ {Number(auditReport.totals.reserveAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                </div>
-                <div className={`min-w-0 rounded-2xl border p-3.5 shadow-sm space-y-1 ${Number(auditReport.totals.writerBalance) < 0 ? 'bg-rose-50/20 border-rose-100 dark:bg-rose-950/10' : 'bg-green-50/20 border-green-100 dark:bg-green-950/10'}`}>
-                  <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Net Balance</div>
-                  <div className={`text-sm sm:text-base font-bold font-mono ${Number(auditReport.totals.writerBalance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
-                    GH₵ {Number(auditReport.totals.writerBalance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {/* Summary KPIs, in waterfall order */}
+              {(() => {
+                const w = waterfallAny(auditReport.totals);
+                const g = (n: number) => `${n < 0 ? "(" : ""}GH₵ ${Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${n < 0 ? ")" : ""}`;
+                const tiles: Array<[string, number, string]> = [
+                  ["Gross Sales", w.gross, ""],
+                  ["Commission", w.commission, "text-amber-600 dark:text-amber-400"],
+                  ["Net After Commission", w.netAfterCommission, "text-teal-600 dark:text-teal-400"],
+                  ["Reserve", w.reserve, "text-indigo-600 dark:text-indigo-400"],
+                  ["Net After Reserve", w.netAfterReserve, ""],
+                  ["Wins Deduct", w.wins, "text-rose-600 dark:text-rose-400"],
+                  ["Profit / (Deficit)", w.profitOrDeficit, w.profitOrDeficit < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400"],
+                ];
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
+                    {tiles.map(([label, value, cls]) => (
+                      <div key={label} className="min-w-0 rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm space-y-1">
+                        <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{label}</div>
+                        <div className={`text-sm sm:text-base font-bold font-mono ${cls}`}>{g(value)}</div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Tabs for agent/writer details */}
               <Tabs defaultValue="agents" className="space-y-4">
@@ -1299,17 +1296,12 @@ export function Games() {
 
                 <TabsContent value="agents" className="space-y-3">
                   <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
-                    <ScrollTable minWidth="52rem" maxHeight="24rem">
+                    <ScrollTable minWidth="70rem" maxHeight="24rem">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead className="pl-5">Agent Code</TableHead>
-                          <TableHead className="font-semibold text-xs">Gross Sales</TableHead>
-                          <TableHead className="font-semibold text-xs">Commission</TableHead>
-                          <TableHead className="font-semibold text-xs">Net Gross</TableHead>
-                          <TableHead className="font-semibold text-xs">Wins Paid</TableHead>
-                          <TableHead className="font-semibold text-xs">Reserve Fund</TableHead>
-                          <TableHead className="font-semibold text-xs text-right">Net Balance</TableHead>
+                          <WaterfallHeads />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1320,19 +1312,12 @@ export function Games() {
                                 {a.agent.fullCode}
                                 <span className="text-muted-foreground block text-[10px] font-normal">{a.agent.agencyName || a.agent.ownerName}</span>
                               </TableCell>
-                              <TableCell className="font-mono text-xs">GH₵ {Number(a.totals.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="font-mono text-xs text-amber-600 dark:text-amber-400">GH₵ {Number(a.totals.commissionAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="font-mono text-xs text-teal-600 dark:text-teal-400">GH₵ {Number(a.totals.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="font-mono text-xs text-rose-600 dark:text-rose-400">GH₵ {Number(a.totals.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="font-mono text-xs text-indigo-600 dark:text-indigo-400">GH₵ {Number(a.totals.reserveAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className={`font-mono text-xs text-right font-bold ${Number(a.totals.writerBalance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
-                                GH₵ {Number(a.totals.writerBalance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </TableCell>
+                              <WaterfallRowCells row={a.totals} />
                             </TableRow>
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={7} className="text-center py-6 text-xs text-muted-foreground italic">No agent calculation data found.</TableCell>
+                            <TableCell colSpan={8} className="text-center py-6 text-xs text-muted-foreground italic">No agent calculation data found.</TableCell>
                           </TableRow>
                         )}
                       </TableBody>
@@ -1344,16 +1329,12 @@ export function Games() {
 
                 <TabsContent value="writers" className="space-y-3">
                   <div className="overflow-hidden rounded-xl border border-border/80 bg-card">
-                    <ScrollTable minWidth="46rem" maxHeight="24rem">
+                    <ScrollTable minWidth="70rem" maxHeight="24rem">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead className="pl-5">Writer Code &amp; Name</TableHead>
-                          <TableHead className="font-semibold text-xs">Gross Sales</TableHead>
-                          <TableHead className="font-semibold text-xs">Commission</TableHead>
-                          <TableHead className="font-semibold text-xs">Net Gross</TableHead>
-                          <TableHead className="font-semibold text-xs">Wins Paid</TableHead>
-                          <TableHead className="font-semibold text-xs text-right">Net Balance</TableHead>
+                          <WaterfallHeads />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1364,18 +1345,12 @@ export function Games() {
                                 {w.writer.fullCode}
                                 <span className="text-muted-foreground block text-[10px] font-normal">{w.writer.fullName}</span>
                               </TableCell>
-                              <TableCell className="font-mono text-xs">GH₵ {Number(w.totals.grossSales).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="font-mono text-xs text-amber-600 dark:text-amber-400">GH₵ {Number(w.totals.commissionAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="font-mono text-xs text-teal-600 dark:text-teal-400">GH₵ {Number(w.totals.netGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className="font-mono text-xs text-rose-600 dark:text-rose-400">GH₵ {Number(w.totals.winsAmount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                              <TableCell className={`font-mono text-xs text-right font-bold ${Number(w.totals.writerBalance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-green-600 dark:text-green-400'}`}>
-                                GH₵ {Number(w.totals.writerBalance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </TableCell>
+                              <WaterfallRowCells row={w.totals} />
                             </TableRow>
                           ))
                         ) : (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center py-6 text-xs text-muted-foreground italic">No writer calculation data found.</TableCell>
+                            <TableCell colSpan={8} className="text-center py-6 text-xs text-muted-foreground italic">No writer calculation data found.</TableCell>
                           </TableRow>
                         )}
                       </TableBody>

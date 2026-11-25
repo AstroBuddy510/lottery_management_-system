@@ -134,14 +134,18 @@ router.get(
 
     const result = calcs
       .map((c) => {
-        const currentBalance = Math.abs(parseFloat(c.writerBalance));
+        // The writer's balance is the full formula deficit (the Reserve no
+        // longer shrinks it). What the Reserve has put towards it - the
+        // automatic draws of earlier runs and any manual ones - is counted
+        // against it here, so nothing is funded twice.
+        const deficit = Math.abs(parseFloat(c.writerBalance));
         const key = `${c.writerId}:${c.calcDate}`;
         const autoDraw = autoCovered.get(key) ?? 0;
         const manual = manualCovered.get(key) ?? 0;
 
-        const originalDeficit = currentBalance + autoDraw;
+        const originalDeficit = deficit;
         const amountCovered = autoDraw + manual;
-        const outstanding = Math.max(0, currentBalance - manual);
+        const outstanding = Math.max(0, deficit - amountCovered);
 
         return {
           ...c,
@@ -368,8 +372,8 @@ router.post(
       .map((c) => {
         const deficit = Math.abs(parseFloat(c.writerBalance));
         const key = `${c.writerId}:${c.calcDate}`;
-        const manual = manualCovered.get(key) ?? 0;
-        const outstanding = Math.max(0, deficit - manual);
+        const covered = (autoCovered.get(key) ?? 0) + (manualCovered.get(key) ?? 0);
+        const outstanding = Math.max(0, deficit - covered);
         return { ...c, outstanding, agentTotalGrossVal: agentTotalGross.get(c.agentId) ?? 0 };
       })
       .filter((d) => d.outstanding > 0.005);

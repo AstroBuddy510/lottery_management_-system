@@ -543,7 +543,7 @@ function EntriesTab({ kind }: { kind: Kind }) {
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 
-type SummaryRow = { writerId: string; gross: number; wins: number; commission: number; netGross: number; reserve: number; balance: number };
+type SummaryRow = { writerId: string; gross: number; wins: number; commission: number; netGross: number; reserve: number; netAfterReserve: number; balance: number };
 type SummaryKey = "writer" | keyof Omit<SummaryRow, "writerId">;
 
 function SummaryTab() {
@@ -561,7 +561,11 @@ function SummaryTab() {
     query: { queryKey: getListWinsEntriesQueryKey(params) },
   });
 
-  const writerCommissionPct = Number(settings?.writerCommissionPct ?? 0);
+  // The draw commission rate - the same one the calculation run uses. This
+  // used to read the postpaid writer-commission setting, a different rate;
+  // whenever the two differed, Commission and Net here disagreed with every
+  // statement (and with the two rates 70/30 apart, looked swapped).
+  const writerCommissionPct = Number(settings?.commissionPct ?? 0);
   const reservePct = Number(settings?.reservePct ?? 0);
   const agentOf = useMemo(() => Object.fromEntries(allWriters.map(w => [w.id, w.agentId])), [allWriters]);
   const agencyCode = useMemo(() => Object.fromEntries(agentList.map(a => [a.id, a.fullCode])), [agentList]);
@@ -575,10 +579,12 @@ function SummaryTab() {
     return ids.map(writerId => {
       const gross = grossMap[writerId] ?? 0;
       const wins = winsMap[writerId] ?? 0;
-      const commission = gross * writerCommissionPct;
-      const netGross = gross - commission;
-      const reserve = netGross * reservePct;
-      return { writerId, gross, wins, commission, netGross, reserve, balance: netGross - wins - reserve };
+      // The platform waterfall, in whole pesewas (see lib/waterfall).
+      const g = Math.round(gross * 100), wn = Math.round(wins * 100);
+      const c = Math.round(g * writerCommissionPct);
+      const n = g - c;
+      const rs = Math.round(n * reservePct);
+      return { writerId, gross: g / 100, wins: wn / 100, commission: c / 100, netGross: n / 100, reserve: rs / 100, netAfterReserve: (n - rs) / 100, balance: (n - rs - wn) / 100 };
     });
   }, [grossEntries, winsEntries, writerCommissionPct, reservePct]);
 
@@ -606,8 +612,8 @@ function SummaryTab() {
   }, [scoped, standing, sort, writerMap]);
 
   const totals = rows.reduce(
-    (acc, r) => ({ gross: acc.gross + r.gross, wins: acc.wins + r.wins, commission: acc.commission + r.commission, netGross: acc.netGross + r.netGross, reserve: acc.reserve + r.reserve, balance: acc.balance + r.balance }),
-    { gross: 0, wins: 0, commission: 0, netGross: 0, reserve: 0, balance: 0 },
+    (acc, r) => ({ gross: acc.gross + r.gross, wins: acc.wins + r.wins, commission: acc.commission + r.commission, netGross: acc.netGross + r.netGross, reserve: acc.reserve + r.reserve, netAfterReserve: acc.netAfterReserve + r.netAfterReserve, balance: acc.balance + r.balance }),
+    { gross: 0, wins: 0, commission: 0, netGross: 0, reserve: 0, netAfterReserve: 0, balance: 0 },
   );
   const deficits = scoped.filter(r => r.balance < 0).length;
   const paging = usePaging(rows, JSON.stringify([filters, standing, sort]));
@@ -643,19 +649,20 @@ function SummaryTab() {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <SortHead label="Writer" k="writer" sort={sort} onSort={onSort} />
-              <SortHead label="Gross" k="gross" sort={sort} onSort={onSort} right />
-              <SortHead label="Wins" k="wins" sort={sort} onSort={onSort} right />
+              <SortHead label="Gross Sales" k="gross" sort={sort} onSort={onSort} right />
               <SortHead label="Commission" k="commission" sort={sort} onSort={onSort} right />
-              <SortHead label="Net gross" k="netGross" sort={sort} onSort={onSort} right />
+              <SortHead label="Net After Commission" k="netGross" sort={sort} onSort={onSort} right />
               <SortHead label="Reserve" k="reserve" sort={sort} onSort={onSort} right />
-              <SortHead label="Balance" k="balance" sort={sort} onSort={onSort} right />
+              <SortHead label="Net After Reserve" k="netAfterReserve" sort={sort} onSort={onSort} right />
+              <SortHead label="Wins Deduct" k="wins" sort={sort} onSort={onSort} right />
+              <SortHead label="Profit / (Deficit)" k="balance" sort={sort} onSort={onSort} right />
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              [1, 2, 3, 4, 5].map(i => <TableRow key={i}><TableCell colSpan={7}><div className="h-6 rounded bg-muted animate-pulse" /></TableCell></TableRow>)
+              [1, 2, 3, 4, 5].map(i => <TableRow key={i}><TableCell colSpan={8}><div className="h-6 rounded bg-muted animate-pulse" /></TableCell></TableRow>)
             ) : paging.shown.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-16">
+              <TableRow><TableCell colSpan={8} className="text-center py-16">
                 <p className="text-sm font-semibold">Nothing to summarise</p>
                 <p className="text-xs text-muted-foreground mt-1">No gross or wins entries match these filters.</p>
               </TableCell></TableRow>
@@ -672,10 +679,11 @@ function SummaryTab() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm whitespace-nowrap">{ghs(r.gross)}</TableCell>
-                  <TableCell className="text-right font-mono text-sm whitespace-nowrap text-violet-600 dark:text-violet-400">{ghs(r.wins)}</TableCell>
                   <TableCell className="text-right font-mono text-sm whitespace-nowrap text-muted-foreground">{ghs(r.commission)}</TableCell>
                   <TableCell className="text-right font-mono text-sm whitespace-nowrap">{ghs(r.netGross)}</TableCell>
                   <TableCell className="text-right font-mono text-sm whitespace-nowrap text-amber-600 dark:text-amber-400">{ghs(r.reserve)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm whitespace-nowrap">{ghs(r.netAfterReserve)}</TableCell>
+                  <TableCell className="text-right font-mono text-sm whitespace-nowrap text-violet-600 dark:text-violet-400">{ghs(r.wins)}</TableCell>
                   <TableCell className={cn("text-right font-mono text-sm font-bold whitespace-nowrap", r.balance < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>{signedGhs(r.balance)}</TableCell>
                 </TableRow>
               );
@@ -686,10 +694,11 @@ function SummaryTab() {
               <tr className="border-t-2">
                 <td className="px-4 py-2.5 text-xs font-black uppercase tracking-wider text-muted-foreground">Total · {rows.length} writers</td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(totals.gross)}</td>
-                <td className="px-4 py-2.5 text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(totals.wins)}</td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(totals.commission)}</td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(totals.netGross)}</td>
                 <td className="px-4 py-2.5 text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(totals.reserve)}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(totals.netAfterReserve)}</td>
+                <td className="px-4 py-2.5 text-right font-mono text-sm font-bold whitespace-nowrap">{ghs(totals.wins)}</td>
                 <td className={cn("px-4 py-2.5 text-right font-mono text-sm font-black whitespace-nowrap", totals.balance < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>{signedGhs(totals.balance)}</td>
               </tr>
             </tfoot>

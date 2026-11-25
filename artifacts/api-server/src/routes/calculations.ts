@@ -13,7 +13,7 @@ import {
   gamesTable,
 } from "@workspace/db";
 import { eq, and, gte, lte, desc, inArray, sql } from "drizzle-orm";
-import { reserveLedgerTotals, recomputeReserveFund } from "../lib/finance/reserve";
+import { recomputeReserveFund } from "../lib/finance/reserve";
 import { drawCompleted, approvedCorrection, normaliseNumbers } from "./draws";
 import { audit } from "../lib/finance/books";
 import { drawCorrectionsTable } from "@workspace/db";
@@ -224,12 +224,11 @@ router.post(
         );
       }
 
-      // The reserve available to cover deficits, from the ledger itself:
-      // everything ever set aside by calculations, less the draws still
-      // standing. Worked in pesewas so no float residue reaches the books.
-      const reserveNow = await reserveLedgerTotals(tx);
-      let reserveCents = Math.max(0, Math.round(reserveNow.balance * 100));
-
+      // Each writer's result is the platform formula, untouched: a deficit
+      // stays a deficit the company owes the agency. The Reserve Fund is no
+      // longer drawn automatically to shrink it - that hid what the agency
+      // was owed and made statements disagree with the formula. Funding a
+      // payout from the reserve is a separate, deliberate Reserve action.
       const results: (typeof dailyCalculationsTable.$inferSelect)[] = [];
       const allocations: Array<{ writerId: string; amountDrawn: string; reserveBalanceAfter: string }> = [];
 
@@ -237,18 +236,6 @@ router.post(
         const gross = grossMap.get(writerId) ?? 0;
         const wins = winsMap.get(writerId) ?? 0;
         const calc = calculateWriter(gross, wins, commissionPct, reservePct);
-
-        let balanceCents = Math.round(calc.writerBalance * 100);
-        if (balanceCents < 0 && reserveCents > 0) {
-          const drawCents = Math.min(-balanceCents, reserveCents);
-          reserveCents -= drawCents;
-          balanceCents += drawCents;
-          allocations.push({
-            writerId,
-            amountDrawn: (drawCents / 100).toFixed(2),
-            reserveBalanceAfter: (reserveCents / 100).toFixed(2),
-          });
-        }
 
         const [saved] = await tx
           .insert(dailyCalculationsTable)
@@ -263,7 +250,7 @@ router.post(
             winsAmount: calc.winsAmount.toFixed(2),
             reservePct: String(calc.reservePct),
             reserveAmount: calc.reserveAmount.toFixed(2),
-            writerBalance: (balanceCents / 100).toFixed(2),
+            writerBalance: calc.profitOrDeficit.toFixed(2),
           })
           .returning();
         results.push(saved!);

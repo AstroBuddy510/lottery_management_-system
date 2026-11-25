@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, Fragment } from "react";
+import { WaterfallHeads, WaterfallRowCells } from "@/components/waterfall-cells";
 import {
   useListCalculations, useRunCalculations, useListGames,
   getListCalculationsQueryKey, getListGamesQueryKey,
@@ -696,15 +697,16 @@ export function Calculations() {
 
           {/* Summary cards for the selected game */}
           {selectedHistoryGame && filteredCalcs.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               {(
                 [
                   ["Gross Sales", totals.gross, <TrendingUp className="w-3.5 h-3.5" />, "text-blue-600 dark:text-blue-400", "bg-blue-50/20 dark:bg-blue-950/10 border-blue-100/50 dark:border-blue-900/30", "Gross sales revenue"],
                   ["Commission", totals.commission, <Percent className="w-3.5 h-3.5" />, "text-amber-600 dark:text-amber-400", "bg-amber-50/20 dark:bg-amber-950/10 border-amber-100/50 dark:border-amber-900/30", "Less commission paid (-)"],
-                  ["Net Gross", totals.net, <Wallet className="w-3.5 h-3.5" />, "text-indigo-600 dark:text-indigo-400", "bg-indigo-50/20 dark:bg-indigo-950/10 border-indigo-100/50 dark:border-indigo-900/30", "Net before reserves (=)"],
-                  ["Reserve Fund", totals.reserve, <Shield className="w-3.5 h-3.5" />, "text-purple-600 dark:text-purple-400", "bg-purple-50/20 dark:bg-purple-950/10 border-purple-100/50 dark:border-purple-900/30", "Less reserve allocation (-)"],
-                  ["Claims Wins", totals.wins, <Trophy className="w-3.5 h-3.5" />, "text-rose-600 dark:text-rose-400", "bg-rose-50/20 dark:bg-rose-950/10 border-rose-100/50 dark:border-rose-900/30", "Less claimed wins (-)"],
-                  ["Net Profit", totals.balance, <Coins className="w-3.5 h-3.5" />, totals.balance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400", totals.balance >= 0 ? "bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-100/50 dark:border-emerald-900/30" : "bg-rose-50/20 dark:bg-rose-950/10 border-rose-100/50 dark:border-rose-900/30", totals.balance >= 0 ? "Settlement surplus (=)" : "Settlement deficit (=)"],
+                  ["Net After Commission", totals.net, <Wallet className="w-3.5 h-3.5" />, "text-indigo-600 dark:text-indigo-400", "bg-indigo-50/20 dark:bg-indigo-950/10 border-indigo-100/50 dark:border-indigo-900/30", "Gross less commission (=)"],
+                  ["Reserve", totals.reserve, <Shield className="w-3.5 h-3.5" />, "text-purple-600 dark:text-purple-400", "bg-purple-50/20 dark:bg-purple-950/10 border-purple-100/50 dark:border-purple-900/30", "On net after commission (-)"],
+                  ["Net After Reserve", Math.round((totals.net - totals.reserve) * 100) / 100, <Wallet className="w-3.5 h-3.5" />, "text-slate-700 dark:text-slate-300", "bg-slate-50/20 dark:bg-slate-950/10 border-slate-100/50 dark:border-slate-800/30", "Net less reserve (=)"],
+                  ["Wins Deduct", totals.wins, <Trophy className="w-3.5 h-3.5" />, "text-rose-600 dark:text-rose-400", "bg-rose-50/20 dark:bg-rose-950/10 border-rose-100/50 dark:border-rose-900/30", "Less claimed wins (-)"],
+                  ["Profit / (Deficit)", totals.balance, <Coins className="w-3.5 h-3.5" />, totals.balance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400", totals.balance >= 0 ? "bg-emerald-50/20 dark:bg-emerald-950/10 border-emerald-100/50 dark:border-emerald-900/30" : "bg-rose-50/20 dark:bg-rose-950/10 border-rose-100/50 dark:border-rose-900/30", totals.balance >= 0 ? "Settlement surplus (=)" : "Settlement deficit (=)"],
                 ] as [string, number, React.ReactNode, string, string, string][]
               ).map(([label, val, icon, color, bg, math]) => (
                 <Card key={label} className={`border ${bg} shadow-sm overflow-hidden relative group hover:shadow transition-shadow rounded-xl`}>
@@ -728,25 +730,20 @@ export function Calculations() {
                   <TableRow>
                     <TableHead className="text-xs font-semibold">Date</TableHead>
                     <TableHead className="text-xs font-semibold">Writer</TableHead>
-                    <TableHead className="text-right text-xs font-semibold">Gross</TableHead>
-                    <TableHead className="text-right text-xs font-semibold">Commission</TableHead>
-                    <TableHead className="text-right text-xs font-semibold">Net Gross</TableHead>
-                    <TableHead className="text-right text-xs font-semibold">Wins</TableHead>
-                    <TableHead className="text-right text-xs font-semibold">Reserve</TableHead>
-                    <TableHead className="text-right text-xs font-semibold">Balance</TableHead>
+                    <WaterfallHeads />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
+                      <TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-sm">
                         <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-muted-foreground/50" />
                         Loading ledger history...
                       </TableCell>
                     </TableRow>
                   ) : filteredCalcs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12 text-muted-foreground text-sm">
+                      <TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-sm">
                         {selectedHistoryGame
                           ? `No draws found for ${selectedHistoryGame.name} (${gameLiveDate(selectedHistoryGame)} – ${gameCloseDate(selectedHistoryGame)}).`
                           : "No draws found."}
@@ -775,11 +772,11 @@ export function Calculations() {
                                 <>
                                   {idx > 0 && (
                                     <TableRow className="h-6 border-none hover:bg-transparent pointer-events-none">
-                                      <TableCell colSpan={8} className="p-0 border-none bg-transparent" />
+                                      <TableCell colSpan={9} className="p-0 border-none bg-transparent" />
                                     </TableRow>
                                   )}
                                   <TableRow className="bg-indigo-50/30 dark:bg-indigo-950/15 hover:bg-indigo-50/40 border-y border-indigo-100/50 dark:border-indigo-900/30 border-l-4 border-l-indigo-600 dark:border-l-indigo-500">
-                                    <TableCell colSpan={8} className="py-2.5 px-4 font-bold text-xs text-indigo-900 dark:text-indigo-300">
+                                    <TableCell colSpan={9} className="py-2.5 px-4 font-bold text-xs text-indigo-900 dark:text-indigo-300">
                                       <div className="flex items-center gap-2">
                                         <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                                         <span>Draw for {dateFormatted}</span>
@@ -796,16 +793,7 @@ export function Calculations() {
                                   </span>
                                   {writer && <span className="text-muted-foreground/80 ml-1.5 text-xs font-medium">{writer.fullName}</span>}
                                 </TableCell>
-                                <TableCell className="text-sm text-right font-mono">{fmtGHS(Number(c.grossSales), false)}</TableCell>
-                                <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(Number(c.commissionAmount), false)}</TableCell>
-                                <TableCell className="text-sm text-right font-mono">{fmtGHS(Number(c.netGross), false)}</TableCell>
-                                <TableCell className="text-sm text-right font-mono text-destructive">{fmtGHS(Number(c.winsAmount), false)}</TableCell>
-                                <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(Number(c.reserveAmount), false)}</TableCell>
-                                <TableCell className="text-sm text-right font-mono">
-                                  <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ${Number(c.writerBalance) < 0 ? "bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border border-rose-100/50" : "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100/50"}`}>
-                                    {fmtGHS(Number(c.writerBalance), true)}
-                                  </span>
-                                </TableCell>
+                                <WaterfallRowCells row={c} size="sm" />
                               </TableRow>
                             </Fragment>
                           );
@@ -817,16 +805,7 @@ export function Calculations() {
                             Totals — {filteredCalcs.length} rows
                             {selectedHistoryGame && ` · ${selectedHistoryGame.eventNumber}`}
                           </TableCell>
-                          <TableCell className="text-right font-mono text-sm">{fmtGHS(totals.gross, true)}</TableCell>
-                          <TableCell className="text-right font-mono text-sm text-muted-foreground">{fmtGHS(totals.commission, false)}</TableCell>
-                          <TableCell className="text-right font-mono text-sm">{fmtGHS(totals.net, true)}</TableCell>
-                          <TableCell className="text-right font-mono text-sm text-destructive">{fmtGHS(totals.wins, true)}</TableCell>
-                          <TableCell className="text-right font-mono text-sm text-muted-foreground">{fmtGHS(totals.reserve, false)}</TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            <span className={`px-2 py-1 rounded-lg text-xs font-bold ${totals.balance < 0 ? "bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400" : "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"}`}>
-                              {fmtGHS(totals.balance, true)}
-                            </span>
-                          </TableCell>
+                          <WaterfallRowCells row={{ grossSales: totals.gross, commissionAmount: totals.commission, netGross: totals.net, reserveAmount: totals.reserve, winsAmount: totals.wins }} size="sm" />
                         </TableRow>
                       )}
                     </>

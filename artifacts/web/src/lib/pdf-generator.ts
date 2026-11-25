@@ -1,3 +1,4 @@
+import { waterfall, waterfallAny, WATERFALL_COLUMNS } from "./waterfall";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { reportText } from "@/lib/report-text";
@@ -211,6 +212,74 @@ const tableTheme: any = {
   margin: { left: 15, right: 15 },
 };
 
+// ─── Waterfall tables (one column order for every statement) ───
+/**
+ * Gross Sales | Commission | Net After Commission | Reserve | Net After
+ * Reserve | Wins Deduct | Profit / (Deficit). Built from the stored
+ * components by lib/waterfall, so a statement cannot swap or misalign a
+ * column; negatives print in brackets.
+ */
+function waterfallColumns(first: { header: string; dataKey: string }) {
+  return [first, ...WATERFALL_COLUMNS.map((c) => ({ header: c.label, dataKey: c.key as string }))];
+}
+function waterfallCells(t: any): Record<string, string> {
+  const w = waterfallAny(t);
+  return {
+    gross: fmt(w.gross),
+    commission: fmt(w.commission),
+    netAfterCommission: fmt(w.netAfterCommission),
+    reserve: fmt(w.reserve),
+    netAfterReserve: fmt(w.netAfterReserve),
+    wins: fmt(w.wins),
+    profitOrDeficit: fmt(w.profitOrDeficit),
+  };
+}
+/** Smaller type so eight columns fit an A4 portrait page. */
+const waterfallTableStyles = {
+  headStyles: { ...tableTheme.headStyles, halign: "right", fontSize: 6.6, cellPadding: 1.3 },
+  bodyStyles: { ...tableTheme.bodyStyles, halign: "right", fontSize: 6.6, cellPadding: 1.3, overflow: "visible" as const },
+};
+function boldProfitColumn(data: any) {
+  if (data.column.dataKey === "profitOrDeficit" && data.section === "body") {
+    data.cell.styles.fontStyle = "bold";
+    if (String(data.cell.raw ?? "").startsWith("(")) data.cell.styles.textColor = [200, 30, 30];
+  }
+}
+
+/**
+ * The totals box at the foot of a statement: label/value lines, the last
+ * one emphasised (red when negative). Grows to fit however many lines.
+ */
+function drawTotalsPanel(doc: any, y: number, lines: Array<{ label: string; value: number; note?: string }>) {
+  const pageWidth = doc.internal.pageSize.width;
+  const lineH = 6.4;
+  const height = 8 + lines.length * lineH + (lines[lines.length - 1]?.note ? 5 : 0);
+  if (y + height > doc.internal.pageSize.height - 40) { doc.addPage(); y = 20; }
+  doc.setFillColor(241, 245, 249);
+  doc.rect(pageWidth - 105, y, 90, height, "F");
+  lines.forEach((l, i) => {
+    const last = i === lines.length - 1;
+    const ly = y + 7 + i * lineH + (last ? 1.5 : 0);
+    if (last) { doc.setDrawColor(203, 213, 225); doc.line(pageWidth - 100, ly - 4.5, pageWidth - 20, ly - 4.5); }
+    doc.setFont("helvetica", last ? "bold" : "normal");
+    doc.setFontSize(last ? 9 : 8);
+    doc.setTextColor(last ? 40 : 100, last ? 40 : 100, last ? 40 : 100);
+    doc.text(`${l.label}:`, pageWidth - 100, ly);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(last ? 10 : 8);
+    if (last) doc.setTextColor(l.value < 0 ? 220 : 16, l.value < 0 ? 38 : 124, l.value < 0 ? 38 : 65);
+    else doc.setTextColor(40, 40, 40);
+    doc.text(fmt(l.value), pageWidth - 20, ly, { align: "right" });
+    if (last && l.note) {
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7);
+      doc.setTextColor(110, 110, 110);
+      doc.text(l.note, pageWidth - 20, ly + 4.5, { align: "right" });
+    }
+  });
+  return y + height;
+}
+
 // ─── 1. WRITER REPORT PDF ───
 export async function generateWriterReportPDF(
   writerName: string,
@@ -236,69 +305,30 @@ export async function generateWriterReportPDF(
     logoImg
   );
 
-  const columns = [
-    { header: "Date", dataKey: "calcDate" },
-    { header: "Gross Sales", dataKey: "grossSales" },
-    { header: "Commission", dataKey: "commissionAmount" },
-    { header: "Net Gross", dataKey: "netGross" },
-    { header: "Wins Paid", dataKey: "winsAmount" },
-    { header: "Reserve", dataKey: "reserveAmount" },
-    { header: "Writer Balance", dataKey: "writerBalance" },
-  ];
-
-  const tableData = rows.map((r) => ({
-    calcDate: fmtDate(r.calcDate),
-    grossSales: fmt(r.grossSales),
-    commissionAmount: fmt(r.commissionAmount),
-    netGross: fmt(r.netGross),
-    winsAmount: fmt(r.winsAmount),
-    reserveAmount: fmt(r.reserveAmount),
-    writerBalance: fmt(r.writerBalance),
-  }));
-
   autoTable(doc, {
-    columns,
-    body: tableData,
+    columns: waterfallColumns({ header: "Date", dataKey: "calcDate" }),
+    body: [
+      ...rows.map((r) => ({ calcDate: fmtDate(r.calcDate), ...waterfallCells(r) })),
+      { calcDate: "TOTAL", ...waterfallCells(totals) },
+    ],
     startY,
     theme: "striped",
-    headStyles: { ...tableTheme.headStyles, halign: "right" },
-    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
-    columnStyles: {
-      calcDate: { halign: "left" },
-    },
+    ...waterfallTableStyles,
+    columnStyles: { calcDate: { halign: "left" } },
     didParseCell: (data: any) => {
-      // Bold the last column
-      if (data.column.key === "writerBalance" && data.section === "body") {
-        data.cell.styles.fontStyle = "bold";
-      }
+      boldProfitColumn(data);
+      if (data.section === "body" && data.row.index === rows.length) { data.cell.styles.fontStyle = "bold"; data.cell.styles.fillColor = [226, 232, 240]; }
     },
     margin: tableTheme.margin,
   });
 
-  const finalY = doc.lastAutoTable.finalY + 8;
-  const pageWidth = doc.internal.pageSize.width;
-
-  // Add Totals Panel block
-  doc.setFillColor(241, 245, 249);
-  doc.rect(pageWidth - 95, finalY, 80, 32, "F");
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text("Total Gross Sales:", pageWidth - 90, finalY + 7);
-  doc.text("Total Wins Deduct:", pageWidth - 90, finalY + 14);
-  doc.text("Total Net Balance:", pageWidth - 90, finalY + 24);
-
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-  doc.text(fmt(totals.grossSales), pageWidth - 20, finalY + 7, { align: "right" });
-  doc.text(fmt(totals.winsAmount), pageWidth - 20, finalY + 14, { align: "right" });
-
-  const bal = Number(totals.writerBalance);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(bal < 0 ? 220 : 16, bal < 0 ? 38 : 124, bal < 0 ? 38 : 65); // Red or green
-  doc.text(fmt(totals.writerBalance), pageWidth - 20, finalY + 25, { align: "right" });
+  const t = waterfall(totals ?? {});
+  drawTotalsPanel(doc, doc.lastAutoTable.finalY + 8, [
+    { label: "Total Gross Sales", value: t.gross },
+    { label: "Total Net After Reserve", value: t.netAfterReserve },
+    { label: "Total Wins Deduct", value: t.wins },
+    { label: "Profit / (Deficit)", value: t.profitOrDeficit, note: t.profitOrDeficit < 0 ? "Deficit: the company owes" : "Profit: owed to the company" },
+  ]);
 
   drawSignatureBlock(doc, "Cashier/Auditor", "Writer Signature");
   finishDoc(doc, `statement_writer_${writerCode}.pdf`);
@@ -313,7 +343,7 @@ export async function generateAgentReportPDF(
   totals: any,
   writersBreakdown: any[],
   payments: any[],
-  totalPaid: string
+  money: { totalPayIn: string | number; totalPayOut: string | number; netPayments: string | number; netBalanceDue: string | number }
 ) {
   const logoImg = await getLogoImage();
   const doc = new jsPDF() as any;
@@ -337,35 +367,20 @@ export async function generateAgentReportPDF(
   doc.setTextColor(0, 78, 152);
   doc.text("WRITER PERFORMANCE BREAKDOWN", 15, startY);
 
-  const columns = [
-    { header: "Writer Code & Name", dataKey: "writer" },
-    { header: "Gross Sales", dataKey: "grossSales" },
-    { header: "Commission", dataKey: "commissionAmount" },
-    { header: "Net Gross", dataKey: "netGross" },
-    { header: "Wins Deduct", dataKey: "winsAmount" },
-    { header: "Reserve", dataKey: "reserveAmount" },
-    { header: "Net Balance", dataKey: "writerBalance" },
-  ];
-
-  const tableData = writersBreakdown.filter(w => w.writer).map((w) => ({
-    writer: `${w.writer.fullCode} (${w.writer.fullName})`,
-    grossSales: fmt(w.totals.grossSales),
-    commissionAmount: fmt(w.totals.commissionAmount),
-    netGross: fmt(w.totals.netGross),
-    winsAmount: fmt(w.totals.winsAmount),
-    reserveAmount: fmt(w.totals.reserveAmount),
-    writerBalance: fmt(w.totals.writerBalance),
-  }));
-
+  const writerRows = writersBreakdown.filter((w) => w.writer);
   autoTable(doc, {
-    columns,
-    body: tableData,
+    columns: waterfallColumns({ header: "Writer Code & Name", dataKey: "writer" }),
+    body: [
+      ...writerRows.map((w) => ({ writer: `${w.writer.fullCode} (${w.writer.fullName})`, ...waterfallCells(w.totals) })),
+      { writer: "TOTAL", ...waterfallCells(totals) },
+    ],
     startY: startY + 4,
     theme: "striped",
-    headStyles: { ...tableTheme.headStyles, halign: "right" },
-    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
-    columnStyles: {
-      writer: { halign: "left" },
+    ...waterfallTableStyles,
+    columnStyles: { writer: { halign: "left", cellWidth: 30, overflow: "linebreak" } },
+    didParseCell: (data: any) => {
+      boldProfitColumn(data);
+      if (data.section === "body" && data.row.index === writerRows.length) { data.cell.styles.fontStyle = "bold"; data.cell.styles.fillColor = [226, 232, 240]; }
     },
     margin: tableTheme.margin,
   });
@@ -389,7 +404,7 @@ export async function generateAgentReportPDF(
       { header: "Receipt No", dataKey: "receiptNumber" },
       { header: "Payment Date", dataKey: "paymentDate" },
       { header: "Transaction Type", dataKey: "transactionType" },
-      { header: "Amount Received", dataKey: "amount" },
+      { header: "Amount", dataKey: "amount" },
       { header: "Notes", dataKey: "notes" },
     ];
 
@@ -397,7 +412,7 @@ export async function generateAgentReportPDF(
       receiptNumber: p.receiptNumber || "—",
       paymentDate: fmtDate(p.paymentDate),
       transactionType: p.transactionType.replace("_", " ").toUpperCase(),
-      amount: fmt(p.amount),
+      amount: `${p.transactionType === "pay_out" ? "- " : "+ "}${fmt(p.amount)}`,
       notes: p.notes || "—",
     }));
 
@@ -416,35 +431,18 @@ export async function generateAgentReportPDF(
     nextY = doc.lastAutoTable.finalY + 10;
   }
 
-  // Final totals panel
-  if (nextY > 230) {
-    doc.addPage();
-    nextY = 20;
-  }
-
-  const pageWidth = doc.internal.pageSize.width;
-  doc.setFillColor(241, 245, 249);
-  doc.rect(pageWidth - 95, nextY, 80, 36, "F");
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text("Total Gross Sales:", pageWidth - 90, nextY + 7);
-  doc.text("Total Wins Paid:", pageWidth - 90, nextY + 14);
-  doc.text("Total Payments Paid:", pageWidth - 90, nextY + 21);
-  doc.text("Net Balance Due:", pageWidth - 90, nextY + 30);
-
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-  doc.text(fmt(totals.grossSales), pageWidth - 20, nextY + 7, { align: "right" });
-  doc.text(fmt(totals.winsAmount), pageWidth - 20, nextY + 14, { align: "right" });
-  doc.text(fmt(totalPaid), pageWidth - 20, nextY + 21, { align: "right" });
-
-  const finalBal = Number(totals.writerBalance);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(finalBal < 0 ? 220 : 16, finalBal < 0 ? 38 : 124, finalBal < 0 ? 38 : 65); // Red/green
-  doc.text(fmt(totals.writerBalance), pageWidth - 20, nextY + 31, { align: "right" });
+  // Reconciliation: what the draws left owing, less the net cash moved.
+  const t = waterfall(totals ?? {});
+  const due = Number(money.netBalanceDue);
+  drawTotalsPanel(doc, nextY, [
+    { label: "Total Gross Sales", value: t.gross },
+    { label: "Total Wins Deduct", value: t.wins },
+    { label: "Total Profit / (Deficit)", value: t.profitOrDeficit },
+    { label: "Total Pay In", value: Number(money.totalPayIn) },
+    { label: "Total Pay Out", value: Number(money.totalPayOut) },
+    { label: "Net Payments Collected", value: Number(money.netPayments) },
+    { label: "Net Balance Due", value: due, note: due < 0 ? "Company owes the agent" : due > 0 ? "Agent owes the company" : "Settled" },
+  ]);
 
   drawSignatureBlock(doc, "Billed By (Administrator)", "Acknowledged By (Agent)");
   finishDoc(doc, `invoice_agent_${agentCode}.pdf`);
@@ -473,69 +471,31 @@ export async function generateOrgReportPDF(
     logoImg
   );
 
-  const columns = [
-    { header: "Agent Code & Owner", dataKey: "agent" },
-    { header: "Gross Sales", dataKey: "grossSales" },
-    { header: "Commission Paid", dataKey: "commissionAmount" },
-    { header: "Net Gross", dataKey: "netGross" },
-    { header: "Wins Paid", dataKey: "winsAmount" },
-    { header: "Reserve Fund", dataKey: "reserveAmount" },
-    { header: "Consolidated Bal", dataKey: "writerBalance" },
-  ];
-
-  const tableData = agentsBreakdown.map((a) => ({
-    agent: `${a.agent.fullCode} — ${a.agent.user?.fullName ?? "—"}`,
-    grossSales: fmt(a.totals.grossSales),
-    commissionAmount: fmt(a.totals.commissionAmount),
-    netGross: fmt(a.totals.netGross),
-    winsAmount: fmt(a.totals.winsAmount),
-    reserveAmount: fmt(a.totals.reserveAmount),
-    writerBalance: fmt(a.totals.writerBalance),
-  }));
-
   autoTable(doc, {
-    columns,
-    body: tableData,
+    columns: waterfallColumns({ header: "Agent Code & Owner", dataKey: "agent" }),
+    body: [
+      ...agentsBreakdown.map((a) => ({ agent: `${a.agent.fullCode} — ${a.agent.user?.fullName ?? "—"}`, ...waterfallCells(a.totals) })),
+      { agent: "TOTAL", ...waterfallCells(totals) },
+    ],
     startY,
     theme: "striped",
-    headStyles: { ...tableTheme.headStyles, halign: "right" },
-    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
-    columnStyles: {
-      agent: { halign: "left" },
+    ...waterfallTableStyles,
+    columnStyles: { agent: { halign: "left", cellWidth: 30, overflow: "linebreak" } },
+    didParseCell: (data: any) => {
+      boldProfitColumn(data);
+      if (data.section === "body" && data.row.index === agentsBreakdown.length) { data.cell.styles.fontStyle = "bold"; data.cell.styles.fillColor = [226, 232, 240]; }
     },
     margin: tableTheme.margin,
   });
 
-  let nextY = doc.lastAutoTable.finalY + 10;
-  if (nextY > 230) {
-    doc.addPage();
-    nextY = 20;
-  }
-
-  // Totals box
-  const pageWidth = doc.internal.pageSize.width;
-  doc.setFillColor(241, 245, 249);
-  doc.rect(pageWidth - 95, nextY, 80, 36, "F");
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text("Total Gross Sales:", pageWidth - 90, nextY + 7);
-  doc.text("Total Commissions:", pageWidth - 90, nextY + 14);
-  doc.text("Total Wins Paid:", pageWidth - 90, nextY + 21);
-  doc.text("Net Profit / Bal:", pageWidth - 90, nextY + 30);
-
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-  doc.text(fmt(totals.grossSales), pageWidth - 20, nextY + 7, { align: "right" });
-  doc.text(fmt(totals.commissionAmount), pageWidth - 20, nextY + 14, { align: "right" });
-  doc.text(fmt(totals.winsAmount), pageWidth - 20, nextY + 21, { align: "right" });
-
-  const profit = Number(totals.writerBalance);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(profit < 0 ? 220 : 16, profit < 0 ? 38 : 124, profit < 0 ? 38 : 65);
-  doc.text(fmt(totals.writerBalance), pageWidth - 20, nextY + 31, { align: "right" });
+  const t = waterfall(totals ?? {});
+  drawTotalsPanel(doc, doc.lastAutoTable.finalY + 10, [
+    { label: "Total Gross Sales", value: t.gross },
+    { label: "Total Commission", value: t.commission },
+    { label: "Total Reserve", value: t.reserve },
+    { label: "Total Wins Deduct", value: t.wins },
+    { label: "Profit / (Deficit)", value: t.profitOrDeficit },
+  ]);
 
   drawSignatureBlock(doc, "Director Signatory", "External Auditor Signatory");
   finishDoc(doc, `org_performance_statement.pdf`);
@@ -1297,28 +1257,18 @@ export async function generateGameSalesByAgencyPDF(
     columns: [
       { header: "Agency", dataKey: "agency" },
       { header: "Share", dataKey: "pct" },
-      { header: "Gross Sales", dataKey: "gross" },
-      { header: "Commission", dataKey: "commission" },
-      { header: "Net Gross", dataKey: "netGross" },
-      { header: "Wins", dataKey: "wins" },
-      { header: "Reserve", dataKey: "reserve" },
-      { header: "Balance", dataKey: "balance" },
+      ...waterfallColumns({ header: "", dataKey: "_" }).slice(1),
     ],
     body: byAgent.map((a) => ({
       agency: `${a.agent.fullCode} — ${a.agent.agencyName ?? a.agent.agentName ?? "—"}`,
       pct: `${a.pct.toFixed(1)}%`,
-      gross: fmt(a.gross),
-      commission: fmt(a.commission),
-      netGross: fmt(a.netGross),
-      wins: fmt(a.wins),
-      reserve: fmt(a.reserve),
-      balance: fmt(a.balance),
+      ...waterfallCells(a),
     })),
     startY,
     theme: "striped",
-    headStyles: { ...tableTheme.headStyles, halign: "right" },
-    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
-    columnStyles: { agency: { halign: "left" } },
+    ...waterfallTableStyles,
+    columnStyles: { agency: { halign: "left", cellWidth: 30 } },
+    didParseCell: boldProfitColumn,
     margin: tableTheme.margin,
   });
 
@@ -1332,59 +1282,29 @@ export async function generateGameSalesByAgencyPDF(
     doc.setTextColor(40, 40, 40);
     doc.text(`Writers — ${byAgent[0].agent.fullCode}`, 14, nextY);
     autoTable(doc, {
-      columns: [
-        { header: "Writer", dataKey: "writer" },
-        { header: "Gross Sales", dataKey: "gross" },
-        { header: "Commission", dataKey: "commission" },
-        { header: "Net Gross", dataKey: "netGross" },
-        { header: "Wins", dataKey: "wins" },
-        { header: "Reserve", dataKey: "reserve" },
-        { header: "Balance", dataKey: "balance" },
-      ],
+      columns: waterfallColumns({ header: "Writer", dataKey: "writer" }),
       body: byAgent[0].writers.map((w) => ({
         writer: `${w.writer.fullCode} — ${w.writer.fullName}`,
-        gross: fmt(w.gross),
-        commission: fmt(w.commission),
-        netGross: fmt(w.netGross),
-        wins: fmt(w.wins),
-        reserve: fmt(w.reserve),
-        balance: fmt(w.balance),
+        ...waterfallCells(w),
       })),
       startY: nextY + 4,
       theme: "striped",
-      headStyles: { ...tableTheme.headStyles, halign: "right" },
-      bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
-      columnStyles: { writer: { halign: "left" } },
+      ...waterfallTableStyles,
+      columnStyles: { writer: { halign: "left", cellWidth: 30, overflow: "linebreak" } },
+      didParseCell: boldProfitColumn,
       margin: tableTheme.margin,
     });
     nextY = doc.lastAutoTable.finalY + 10;
   }
 
-  if (nextY > 230) { doc.addPage(); nextY = 20; }
-
-  const pageWidth = doc.internal.pageSize.width;
-  doc.setFillColor(241, 245, 249);
-  doc.rect(pageWidth - 95, nextY, 80, 44, "F");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(100, 100, 100);
-  doc.text("Total Gross Sales:", pageWidth - 90, nextY + 7);
-  doc.text("Total Commission:", pageWidth - 90, nextY + 14);
-  doc.text("Total Wins Paid:", pageWidth - 90, nextY + 21);
-  doc.text("Total Reserve:", pageWidth - 90, nextY + 28);
-  doc.text("Net Balance:", pageWidth - 90, nextY + 38);
-
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(40, 40, 40);
-  doc.text(fmt(summary.gross), pageWidth - 20, nextY + 7, { align: "right" });
-  doc.text(fmt(summary.commission), pageWidth - 20, nextY + 14, { align: "right" });
-  doc.text(fmt(summary.wins), pageWidth - 20, nextY + 21, { align: "right" });
-  doc.text(fmt(summary.reserve), pageWidth - 20, nextY + 28, { align: "right" });
-
-  const bal = Number(summary.balance);
-  doc.setFontSize(10);
-  doc.setTextColor(bal < 0 ? 220 : 16, bal < 0 ? 38 : 124, bal < 0 ? 38 : 65);
-  doc.text(fmt(summary.balance), pageWidth - 20, nextY + 39, { align: "right" });
+  const t = waterfallAny(summary);
+  drawTotalsPanel(doc, nextY, [
+    { label: "Total Gross Sales", value: t.gross },
+    { label: "Total Commission", value: t.commission },
+    { label: "Total Reserve", value: t.reserve },
+    { label: "Total Wins Deduct", value: t.wins },
+    { label: "Profit / (Deficit)", value: t.profitOrDeficit },
+  ]);
 
   drawSignatureBlock(doc, "Prepared By", "Director Signatory");
   finishDoc(doc, `game_sales_${gameName.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}.pdf`);
@@ -1485,8 +1405,8 @@ export async function generateGameSalesReportPDF(
       body: writerData,
       startY: nextY + 4,
       theme: "striped",
-      headStyles: { ...tableTheme.headStyles, halign: "right" },
-      bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+      ...waterfallTableStyles,
+        didParseCell: boldProfitColumn,
       columnStyles: {
         name: { halign: "left" },
         code: { halign: "left" },
@@ -1519,24 +1439,11 @@ export async function generateGameSalesReportPDF(
       doc.setTextColor(0, 78, 152);
       doc.text(`${gameType.toUpperCase()} FINANCIAL SUMMARY`, 15, nextY);
 
-      const finCols = [
-        { header: "Name of Game", dataKey: "gameNameAndEvent" },
-        { header: "Gross Sales", dataKey: "grossSales" },
-        { header: "Commission", dataKey: "commission" },
-        { header: "Net Gross", dataKey: "netGross" },
-        { header: "Wins", dataKey: "wins" },
-        { header: "Reserve", dataKey: "reserve" },
-        { header: "Balance", dataKey: "balance" }
-      ];
+      const finCols = waterfallColumns({ header: "Name of Game", dataKey: "gameNameAndEvent" });
 
       const finData = items.map((item) => ({
         gameNameAndEvent: `${item.eventNumber} (${fmtDate(item.goLiveAt)})`,
-        grossSales: fmt(item.grossSales),
-        commission: fmt(item.commission),
-        netGross: fmt(item.netGross),
-        wins: fmt(item.wins),
-        reserve: fmt(item.reserve),
-        balance: fmt(item.balance),
+        ...waterfallCells(item),
       }));
 
       autoTable(doc, {
@@ -1544,8 +1451,8 @@ export async function generateGameSalesReportPDF(
         body: finData,
         startY: nextY + 4,
         theme: "grid",
-        headStyles: { ...tableTheme.headStyles, halign: "right" },
-        bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+        ...waterfallTableStyles,
+        didParseCell: boldProfitColumn,
         columnStyles: {
           gameNameAndEvent: { halign: "left" },
         },
@@ -1561,7 +1468,7 @@ export async function generateGameSalesReportPDF(
   if (gameFinancials && gameFinancials.length > 0) {
     for (const item of gameFinancials) {
       totalGrossSales += parseFloat(item.grossSales ?? "0");
-      grandNetBalance += parseFloat(item.balance ?? "0");
+      grandNetBalance += waterfallAny(item).profitOrDeficit;
     }
   }
 
@@ -1580,7 +1487,7 @@ export async function generateGameSalesReportPDF(
   doc.setTextColor(100, 100, 100);
   doc.text("Total Ticket Entries:", pageWidth - 90, nextY + 7);
   doc.text("Total Revenue (Sales):", pageWidth - 90, nextY + 14);
-  doc.text("Grand Net Balance:", pageWidth - 90, nextY + 24);
+  doc.text("Profit / (Deficit):", pageWidth - 90, nextY + 24);
 
   doc.setFont("helvetica", "bold");
   doc.setTextColor(40, 40, 40);
@@ -1818,24 +1725,11 @@ export async function generateGameEventReportPDF(
   doc.setTextColor(0, 78, 152);
   doc.text("AGENT CONTRIBUTION BREAKDOWN", 15, startY);
 
-  const agentCols = [
-    { header: "Agent (Owner)", dataKey: "agent" },
-    { header: "Gross Sales", dataKey: "grossSales" },
-    { header: "Commission", dataKey: "commissionAmount" },
-    { header: "Net Gross", dataKey: "netGross" },
-    { header: "Wins Paid", dataKey: "winsAmount" },
-    { header: "Reserve Fund", dataKey: "reserveAmount" },
-    { header: "Net Balance", dataKey: "writerBalance" },
-  ];
+  const agentCols = waterfallColumns({ header: "Agent (Owner)", dataKey: "agent" });
 
   const agentData = agents.map((a) => ({
     agent: `${a.agent.fullCode} (${a.agent.ownerName})`,
-    grossSales: fmt(a.totals.grossSales),
-    commissionAmount: fmt(a.totals.commissionAmount),
-    netGross: fmt(a.totals.netGross),
-    winsAmount: fmt(a.totals.winsAmount),
-    reserveAmount: fmt(a.totals.reserveAmount),
-    writerBalance: fmt(a.totals.writerBalance),
+    ...waterfallCells(a.totals),
   }));
 
   autoTable(doc, {
@@ -1843,8 +1737,8 @@ export async function generateGameEventReportPDF(
     body: agentData,
     startY: startY + 4,
     theme: "striped",
-    headStyles: { ...tableTheme.headStyles, halign: "right" },
-    bodyStyles: { ...tableTheme.bodyStyles, halign: "right" },
+    ...waterfallTableStyles,
+        didParseCell: boldProfitColumn,
     columnStyles: {
       agent: { halign: "left" },
     },
@@ -1865,22 +1759,11 @@ export async function generateGameEventReportPDF(
     doc.setTextColor(0, 78, 152);
     doc.text("WRITER CONTRIBUTION BREAKDOWN", 15, nextY);
 
-    const writerCols = [
-      { header: "Writer Code & Name", dataKey: "writer" },
-      { header: "Gross Sales", dataKey: "grossSales" },
-      { header: "Commission", dataKey: "commissionAmount" },
-      { header: "Net Gross", dataKey: "netGross" },
-      { header: "Wins Paid", dataKey: "winsAmount" },
-      { header: "Net Balance", dataKey: "writerBalance" },
-    ];
+    const writerCols = waterfallColumns({ header: "Writer Code & Name", dataKey: "writer" });
 
     const writerData = writers.map((w) => ({
       writer: `${w.writer.fullCode} — ${w.writer.fullName}`,
-      grossSales: fmt(w.totals.grossSales),
-      commissionAmount: fmt(w.totals.commissionAmount),
-      netGross: fmt(w.totals.netGross),
-      winsAmount: fmt(w.totals.winsAmount),
-      writerBalance: fmt(w.totals.writerBalance),
+      ...waterfallCells(w.totals),
     }));
 
     autoTable(doc, {

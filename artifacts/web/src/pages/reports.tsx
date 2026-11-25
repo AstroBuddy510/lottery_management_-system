@@ -31,6 +31,7 @@ import {
 import { ScrollTable, Pager, usePaged, ReportActions, DirectionBadge, SignedAmount, StatTile, PAGE_SIZE } from "@/components/data-kit";
 import { FileBarChart, User, Users, Building2, Gamepad2, Trophy, Shuffle, Coins, CalendarRange } from "lucide-react";
 import { TokenReportView } from "@/components/token-report";
+import { waterfall, waterfallAny, ghsPD, WATERFALL_COLUMNS } from "@/lib/waterfall";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,29 @@ type ReportTotals = {
   winsAmount: string;
   reserveAmount: string;
   writerBalance: string;
+  netAfterReserve?: string;
+  profitOrDeficit?: string;
 };
+
+/**
+ * One row's figures in the platform waterfall order. Every finance table on
+ * this page renders through here, so a value cannot land under the wrong
+ * heading.
+ */
+function WaterfallCells({ row }: { row: ReportTotals }) {
+  const w = waterfall(row);
+  return (
+    <>
+      <TableCell className="text-right"><AmtCell v={w.gross} /></TableCell>
+      <TableCell className="text-right"><AmtCell v={w.commission} dim /></TableCell>
+      <TableCell className="text-right"><AmtCell v={w.netAfterCommission} /></TableCell>
+      <TableCell className="text-right"><AmtCell v={w.reserve} dim /></TableCell>
+      <TableCell className="text-right"><AmtCell v={w.netAfterReserve} /></TableCell>
+      <TableCell className="text-right"><AmtCell v={w.wins} dim /></TableCell>
+      <TableCell className="text-right font-semibold"><AmtCell v={w.profitOrDeficit} /></TableCell>
+    </>
+  );
+}
 
 function AmtCell({ v, dim }: { v: string | number; dim?: boolean }) {
   const n = Number(v);
@@ -82,26 +105,44 @@ function AmtCell({ v, dim }: { v: string | number; dim?: boolean }) {
   );
 }
 
+/** Same columns for rows that use short field names (gross, commission, wins...). */
+function WaterfallTds({ row, small, bold }: { row: object; small?: boolean; bold?: boolean }) {
+  const w = waterfallAny(row);
+  const cls = `text-right font-mono tabular-nums ${small ? "text-xs" : "text-sm"} ${bold ? "font-bold" : ""}`;
+  const v = (n: number) => (n < 0 ? `(${fmt(Math.abs(n))})` : fmt(n));
+  return (
+    <>
+      <TableCell className={`${cls} font-semibold`}>{v(w.gross)}</TableCell>
+      <TableCell className={`${cls} text-amber-600 dark:text-amber-400`}>{v(w.commission)}</TableCell>
+      <TableCell className={`${cls} text-teal-600 dark:text-teal-400`}>{v(w.netAfterCommission)}</TableCell>
+      <TableCell className={`${cls} text-indigo-600 dark:text-indigo-400`}>{v(w.reserve)}</TableCell>
+      <TableCell className={cls}>{v(w.netAfterReserve)}</TableCell>
+      <TableCell className={`${cls} text-rose-600 dark:text-rose-400`}>{v(w.wins)}</TableCell>
+      <TableCell className={`${cls} pr-5 font-bold ${w.profitOrDeficit < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400"}`}>{v(w.profitOrDeficit)}</TableCell>
+    </>
+  );
+}
+
 function TotalsGrid({ t, label }: { t: ReportTotals; label?: string }) {
-  const balance = Number(t.writerBalance);
-  const show = (v: string) => fmt(v);
+  const w = waterfall(t);
   return (
     <div className="space-y-2">
       {label && <div className="px-1 text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</div>}
-      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        <StatTile label="Gross Sales" value={show(t.grossSales)} />
-        <StatTile label="Commission" value={show(t.commissionAmount)} tone="muted" />
-        <StatTile label="Net Gross" value={show(t.netGross)} />
-        <StatTile label="Wins Paid Out" value={show(t.winsAmount)} tone="out" />
-        <StatTile label="Reserve" value={show(t.reserveAmount)} tone="muted" />
-        <StatTile label="Net Balance" value={show(t.writerBalance)} tone={balance < 0 ? "bad" : "in"} />
+      <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+        <StatTile label="Gross Sales" value={fmt(w.gross)} />
+        <StatTile label="Commission" value={fmt(w.commission)} tone="muted" />
+        <StatTile label="Net After Commission" value={fmt(w.netAfterCommission)} />
+        <StatTile label="Reserve" value={fmt(w.reserve)} tone="muted" />
+        <StatTile label="Net After Reserve" value={fmt(w.netAfterReserve)} />
+        <StatTile label="Wins Deduct" value={fmt(w.wins)} tone="out" />
+        <StatTile label="Profit / (Deficit)" value={ghsPD(w.profitOrDeficit, "GH₵")} tone={w.profitOrDeficit < 0 ? "bad" : "in"} />
       </div>
     </div>
   );
 }
 
 /** A table card: heading bar, a scroll box with pinned headings, and a pager. */
-function ReportTable({ title, right, children, footer, minWidth = "52rem", maxHeight = "36rem" }: {
+function ReportTable({ title, right, children, footer, minWidth = "66rem", maxHeight = "36rem" }: {
   title?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode;
   minWidth?: string; maxHeight?: string;
 }) {
@@ -192,37 +233,36 @@ function ParamPanel({ children, onRun, disabled, loading, buttonLabel, hint }: {
 }
 
 function TableFoot({ row }: { row: ReportTotals & { label?: string; count?: number } }) {
-  const b = Number(row.writerBalance);
+  const w = waterfall(row);
+  const cell = (v: number, extra = "") => (
+    <td className={`px-4 py-2.5 text-right font-mono font-semibold tabular-nums ${v < 0 ? "text-red-600 dark:text-red-400" : ""} ${extra}`}>
+      {v < 0 ? `(${fmt(Math.abs(v))})` : fmt(v)}
+    </td>
+  );
   return (
     <tfoot>
       <tr className="border-t-2 bg-muted/30 text-sm">
         <td className="px-4 py-2.5 text-[11px] font-bold uppercase text-muted-foreground">
           {row.label ?? "Total"}{row.count !== undefined ? ` (${row.count})` : ""}
         </td>
-        <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums">{fmt(row.grossSales)}</td>
-        <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-muted-foreground">{fmt(row.commissionAmount)}</td>
-        <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums">{fmt(row.netGross)}</td>
-        <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-muted-foreground">{fmt(row.winsAmount)}</td>
-        <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-muted-foreground">{fmt(row.reserveAmount)}</td>
-        <td className={`px-4 py-2.5 text-right font-mono font-bold tabular-nums ${b < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
-          {fmt(row.writerBalance)}
-        </td>
+        {cell(w.gross)}
+        {cell(w.commission, "text-muted-foreground")}
+        {cell(w.netAfterCommission)}
+        {cell(w.reserve, "text-muted-foreground")}
+        {cell(w.netAfterReserve)}
+        {cell(w.wins, "text-muted-foreground")}
+        {cell(w.profitOrDeficit, `font-bold ${w.profitOrDeficit >= 0 ? "text-emerald-700 dark:text-emerald-400" : ""}`)}
       </tr>
     </tfoot>
   );
 }
 
-function FinanceTableHead() {
+function FinanceTableHead({ first }: { first?: string } = {}) {
   return (
     <TableHeader>
       <TableRow>
-        <TableHead className="w-[180px] pl-5">Name</TableHead>
-        <TableHead className="text-right text-xs">Gross Sales</TableHead>
-        <TableHead className="text-right text-xs">Commission</TableHead>
-        <TableHead className="text-right text-xs">Net Gross</TableHead>
-        <TableHead className="text-right text-xs">Wins</TableHead>
-        <TableHead className="text-right text-xs">Reserve</TableHead>
-        <TableHead className="text-right text-xs">Balance</TableHead>
+        <TableHead className="w-[180px] pl-5">{first ?? "Name"}</TableHead>
+        {WATERFALL_COLUMNS.map((c) => <TableHead key={c.key} className="text-right text-xs">{c.label}</TableHead>)}
       </TableRow>
     </TableHeader>
   );
@@ -377,27 +417,12 @@ function WriterReportView() {
               footer={<Pager page={pDays.page} totalPages={pDays.totalPages} onPage={pDays.setPage} total={pDays.total} size={pDays.size} noun="days" />}
             >
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="pl-5">Date</TableHead>
-                    <TableHead className="text-right text-xs">Gross Sales</TableHead>
-                    <TableHead className="text-right text-xs">Commission</TableHead>
-                    <TableHead className="text-right text-xs">Net Gross</TableHead>
-                    <TableHead className="text-right text-xs">Wins</TableHead>
-                    <TableHead className="text-right text-xs">Reserve</TableHead>
-                    <TableHead className="text-right text-xs">Balance</TableHead>
-                  </TableRow>
-                </TableHeader>
+                <FinanceTableHead first="Date" />
                 <TableBody>
                   {pDays.rows.map((row, i) => (
                     <TableRow key={i} className="hover:bg-muted/30">
                       <TableCell className="pl-5 text-sm font-medium">{fmtDate(row.calcDate)}</TableCell>
-                      <TableCell className="text-right"><AmtCell v={row.grossSales} /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={row.commissionAmount} dim /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={row.netGross} /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={row.winsAmount} dim /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={row.reserveAmount} dim /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={row.writerBalance} /></TableCell>
+                      <WaterfallCells row={row} />
                     </TableRow>
                   ))}
                 </TableBody>
@@ -437,6 +462,10 @@ type AgentReportFull = {
   writers: WriterSummary[];
   payments?: AgentPayment[];
   totalPaid?: string;
+  totalPayIn?: string;
+  totalPayOut?: string;
+  netPayments?: string;
+  netBalanceDue?: string;
 };
 
 function AgentReportView() {
@@ -512,30 +541,53 @@ function AgentReportView() {
               r.totals,
               r.writers,
               r.payments ?? [],
-              r.totalPaid ?? "0"
+              {
+                totalPayIn: r.totalPayIn ?? "0",
+                totalPayOut: r.totalPayOut ?? "0",
+                netPayments: r.netPayments ?? r.totalPaid ?? "0",
+                netBalanceDue: r.netBalanceDue ?? String(waterfall(r.totals).profitOrDeficit),
+              }
             )}
           />
 
           <TotalsGrid t={r.totals} label="Agent Period Totals" />
 
-          {/* Payments summary */}
-          {r.totalPaid !== undefined && (
-            <div className="flex items-center justify-between rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm">
+          {/* Reconciliation: what the draws left owing, less the net cash moved */}
+          {(() => {
+            const pd = waterfall(r.totals).profitOrDeficit;
+            const payIn = Number(r.totalPayIn ?? 0);
+            const payOut = Number(r.totalPayOut ?? 0);
+            const net = Number(r.netPayments ?? payIn - payOut);
+            const due = Number(r.netBalanceDue ?? pd - net);
+            const tile = (label: string, value: string, cls = "") => (
               <div>
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">
-                  Payments Collected ({r.payments?.length ?? 0})
+                <div className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+                <div className={`font-mono text-sm font-bold tabular-nums ${cls}`}>{value}</div>
+              </div>
+            );
+            return (
+              <div className="rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-5 lg:items-end">
+                  {tile("Profit / (Deficit)", ghsPD(pd, "GH₵"), pd < 0 ? "text-red-600 dark:text-red-400" : "")}
+                  {tile(`Total Pay In (${(r.payments ?? []).filter(p => p.transactionType !== "pay_out").length})`, ghsPD(payIn, "GH₵"), "text-emerald-700 dark:text-emerald-400")}
+                  {tile(`Total Pay Out (${(r.payments ?? []).filter(p => p.transactionType === "pay_out").length})`, ghsPD(payOut, "GH₵"), "text-orange-600 dark:text-orange-400")}
+                  {tile("Net Payments Collected", ghsPD(net, "GH₵"))}
+                  <div className="col-span-2 sm:col-span-1">
+                    {tile("Net Balance Due", ghsPD(due, "GH₵"), `text-base ${due < 0 ? "text-red-600 dark:text-red-400" : "text-blue-700 dark:text-blue-400"}`)}
+                    <div className="text-[10px] text-muted-foreground">{due < 0 ? "Company owes the agent" : due > 0 ? "Agent owes the company" : "Settled"}</div>
+                  </div>
                 </div>
-                <div className="font-mono font-bold text-blue-700 dark:text-blue-400">
-                  GH₵ {Number(r.totalPaid).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-[11px] text-muted-foreground">
+                  <span>Net Balance Due = Profit / (Deficit) − (Total Pay In − Total Pay Out). Completed, non-voided payments only.</span>
+                  {(r.payments?.length ?? 0) > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => setShowPayments(v => !v)}>
+                      {showPayments ? "Hide payments" : `View payments (${r.payments?.length})`}
+                    </Button>
+                  )}
                 </div>
               </div>
-              {(r.payments?.length ?? 0) > 0 && (
-                <Button variant="outline" size="sm" onClick={() => setShowPayments(v => !v)}>
-                  {showPayments ? "Hide" : "View Payments"}
-                </Button>
-              )}
-            </div>
-          )}
+            );
+          })()}
 
           {showPayments && r.payments && r.payments.length > 0 && (
             <ReportTable
@@ -587,12 +639,7 @@ function AgentReportView() {
                           <div className="font-mono text-sm font-semibold">{ws.writer.fullCode}</div>
                           <div className="text-xs text-muted-foreground">{ws.writer.fullName}</div>
                         </TableCell>
-                        <TableCell className="text-right"><AmtCell v={ws.totals.grossSales} /></TableCell>
-                        <TableCell className="text-right"><AmtCell v={ws.totals.commissionAmount} dim /></TableCell>
-                        <TableCell className="text-right"><AmtCell v={ws.totals.netGross} /></TableCell>
-                        <TableCell className="text-right"><AmtCell v={ws.totals.winsAmount} dim /></TableCell>
-                        <TableCell className="text-right"><AmtCell v={ws.totals.reserveAmount} dim /></TableCell>
-                        <TableCell className="text-right"><AmtCell v={ws.totals.writerBalance} /></TableCell>
+                        <WaterfallCells row={ws.totals} />
                       </TableRow>
                     ))}
                   </TableBody>
@@ -695,12 +742,7 @@ function OrgReportView() {
                         <div className="font-mono text-sm font-semibold">{a.agent.fullCode}</div>
                         <div className="text-xs text-muted-foreground">{a.agent.user?.fullName ?? "—"}</div>
                       </TableCell>
-                      <TableCell className="text-right"><AmtCell v={a.totals.grossSales} /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={a.totals.commissionAmount} dim /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={a.totals.netGross} /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={a.totals.winsAmount} dim /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={a.totals.reserveAmount} dim /></TableCell>
-                      <TableCell className="text-right"><AmtCell v={a.totals.writerBalance} /></TableCell>
+                      <WaterfallCells row={a.totals} />
                     </TableRow>
                   ))}
                 </TableBody>
@@ -903,18 +945,19 @@ function GameSalesView() {
           ) : null}
 
           {/* Period totals */}
-          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-            {[
-              { label: "Gross Sales", value: ghs(r.summary.gross), cls: "" },
-              { label: "Commission", value: ghs(r.summary.commission), cls: "text-amber-600 dark:text-amber-400" },
-              { label: "Net Gross", value: ghs(r.summary.netGross), cls: "text-teal-600 dark:text-teal-400" },
-              { label: "Wins Paid", value: ghs(r.summary.wins), cls: "text-rose-600 dark:text-rose-400" },
-              { label: "Reserve", value: ghs(r.summary.reserve), cls: "text-indigo-600 dark:text-indigo-400" },
+          <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+            {(() => { const w = waterfallAny(r.summary); return [
+              { label: "Gross Sales", value: ghs(w.gross), cls: "" },
+              { label: "Commission", value: ghs(w.commission), cls: "text-amber-600 dark:text-amber-400" },
+              { label: "Net After Commission", value: ghs(w.netAfterCommission), cls: "text-teal-600 dark:text-teal-400" },
+              { label: "Reserve", value: ghs(w.reserve), cls: "text-indigo-600 dark:text-indigo-400" },
+              { label: "Net After Reserve", value: ghs(w.netAfterReserve), cls: "" },
+              { label: "Wins Deduct", value: ghs(w.wins), cls: "text-rose-600 dark:text-rose-400" },
               {
-                label: "Net Balance", value: ghs(r.summary.balance),
-                cls: Number(r.summary.balance) < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400",
+                label: "Profit / (Deficit)", value: ghsPD(w.profitOrDeficit, "GH₵"),
+                cls: w.profitOrDeficit < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400",
               },
-            ].map(({ label, value, cls }) => (
+            ]; })().map(({ label, value, cls }) => (
               <div key={label} className="min-w-0 rounded-2xl border border-border/80 bg-card p-4 shadow-sm">
                 <div className="truncate text-[10px] font-black uppercase tracking-wider text-muted-foreground">{label}</div>
                 <div className={`mt-1.5 truncate text-lg font-black tracking-tight tabular-nums ${cls}`}>{value}</div>
@@ -942,7 +985,7 @@ function GameSalesView() {
           {r.byAgent.length > 0 && (
             <ReportTable
               title="Sales by agency"
-              minWidth="62rem"
+              minWidth="74rem"
               right={<span className="text-xs text-muted-foreground">{r.summary.agencyCount} agenc{r.summary.agencyCount === 1 ? "y" : "ies"} · {r.summary.writerCount} writer{r.summary.writerCount === 1 ? "" : "s"} · click a row for its writers</span>}
               footer={<Pager page={pGame.page} totalPages={pGame.totalPages} onPage={pGame.setPage} total={pGame.total} size={pGame.size} noun="agencies" />}
             >
@@ -951,12 +994,7 @@ function GameSalesView() {
                   <TableRow>
                     <TableHead className="pl-5">Agency</TableHead>
                     <TableHead className="w-[120px]">Share</TableHead>
-                    <TableHead className="text-right">Gross Sales</TableHead>
-                    <TableHead className="text-right">Commission</TableHead>
-                    <TableHead className="text-right">Net Gross</TableHead>
-                    <TableHead className="text-right">Wins</TableHead>
-                    <TableHead className="text-right">Reserve</TableHead>
-                    <TableHead className="pr-5 text-right">Balance</TableHead>
+                    {WATERFALL_COLUMNS.map((c) => <TableHead key={c.key} className="text-right">{c.label}</TableHead>)}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -978,14 +1016,7 @@ function GameSalesView() {
                           </div>
                           <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">{a.pct.toFixed(1)}%</div>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm font-semibold">{ghs(a.gross)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-amber-600 dark:text-amber-400">{ghs(a.commission)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-teal-600 dark:text-teal-400">{ghs(a.netGross)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-rose-600 dark:text-rose-400">{ghs(a.wins)}</TableCell>
-                        <TableCell className="text-right font-mono text-sm text-indigo-600 dark:text-indigo-400">{ghs(a.reserve)}</TableCell>
-                        <TableCell className={`text-right font-mono text-sm font-bold ${Number(a.balance) < 0 ? "text-rose-600 dark:text-rose-400" : "text-green-600 dark:text-green-400"}`}>
-                          {ghs(a.balance)}
-                        </TableCell>
+                        <WaterfallTds row={a} />
                       </TableRow>
                       {expanded === a.agent.id && a.writers.map(w => (
                         <TableRow key={w.writer.id} className="bg-muted/20">
@@ -994,12 +1025,7 @@ function GameSalesView() {
                             <div className="text-[10px] font-mono text-muted-foreground">{w.writer.fullCode}</div>
                           </TableCell>
                           <TableCell />
-                          <TableCell className="text-right font-mono text-xs">{ghs(w.gross)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{ghs(w.commission)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{ghs(w.netGross)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{ghs(w.wins)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{ghs(w.reserve)}</TableCell>
-                          <TableCell className="text-right font-mono text-xs">{ghs(w.balance)}</TableCell>
+                          <WaterfallTds row={w} small />
                         </TableRow>
                       ))}
                     </React.Fragment>
@@ -1008,12 +1034,7 @@ function GameSalesView() {
                 <tfoot>
                   <tr className="border-t-2 bg-muted/30">
                     <td className="px-4 py-2.5 text-xs font-bold uppercase text-muted-foreground" colSpan={2}>Total</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm font-bold">{ghs(r.summary.gross)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm">{ghs(r.summary.commission)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm">{ghs(r.summary.netGross)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm">{ghs(r.summary.wins)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm">{ghs(r.summary.reserve)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-sm font-bold">{ghs(r.summary.balance)}</td>
+                    <WaterfallTds row={r.summary} bold />
                   </tr>
                 </tfoot>
               </Table>

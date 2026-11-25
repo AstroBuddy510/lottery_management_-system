@@ -10,27 +10,13 @@ import { handleSettlementWebhook } from "./postpaid-settlement";
 import { handleTransferEvent } from "../lib/payout-disbursement";
 import { logger } from "../lib/logger";
 
+import { nextReceiptNumber } from "../lib/receipts";
+
 const router = Router();
 
 
-async function generateReceiptNumber(): Promise<string> {
-  const [result] = await db
-    .select({
-      maxReceipt: sql<string | null>`max(${paymentsTable.receiptNumber})`
-    })
-    .from(paymentsTable)
-    .where(sql`${paymentsTable.receiptNumber} LIKE 'REC-%'`);
-
-  let next = 1;
-  if (result && result.maxReceipt) {
-    const numPart = result.maxReceipt.replace("REC-", "");
-    const parsed = parseInt(numPart, 10);
-    if (!isNaN(parsed)) {
-      next = parsed + 1;
-    }
-  }
-  return `REC-${String(next).padStart(6, "0")}`;
-}
+/** See lib/receipts.ts: one sequence for every receipt the platform issues. */
+const generateReceiptNumber = () => nextReceiptNumber();
 
 /**
  * The one URL Paystack is told about.

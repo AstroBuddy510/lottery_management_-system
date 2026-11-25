@@ -13,54 +13,72 @@ import {
   gamesTable,
   systemSettingsTable,
 } from "@workspace/db";
-import { eq, and, gte, lte, desc, asc, inArray, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, asc, inArray, sql, isNull } from "drizzle-orm";
 import { GetWriterReportParams, GetAgentReportParams } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { calculateWriter } from "../lib/calculator";
+import { calculateWriter, currentRates, toPesewas, waterfallFromStored } from "../lib/calculator";
 import { quoteDueLedgers } from "../lib/postpaid";
 import { TICKET_VALIDITY_DAYS } from "../lib/receipt";
 
 const router = Router();
 
+/**
+ * One statement row, in the platform waterfall order. Net After Reserve and
+ * Profit/(Deficit) are derived from the stored components (see
+ * waterfallFromStored), so a statement is right by construction; netGross and
+ * writerBalance keep their old names for screens that still read them and
+ * carry the same values (Net After Commission, Profit/(Deficit)).
+ */
 type ReportRow = {
   calcDate?: string;
   grossSales: string;
   commissionAmount: string;
   netGross: string;
-  winsAmount: string;
   reserveAmount: string;
+  netAfterReserve: string;
+  winsAmount: string;
+  profitOrDeficit: string;
   writerBalance: string;
 };
 
+const pes = (p: number) => (p / 100).toFixed(2);
+
 function calcToRow(c: typeof dailyCalculationsTable.$inferSelect): ReportRow {
+  const w = waterfallFromStored(c);
   return {
     calcDate: c.calcDate,
-    grossSales: c.grossSales,
-    commissionAmount: c.commissionAmount,
-    netGross: c.netGross,
-    winsAmount: c.winsAmount,
-    reserveAmount: c.reserveAmount,
-    writerBalance: c.writerBalance,
+    grossSales: pes(w.gross),
+    commissionAmount: pes(w.commission),
+    netGross: pes(w.net),
+    reserveAmount: pes(w.reserve),
+    netAfterReserve: pes(w.netAfterReserve),
+    winsAmount: pes(w.wins),
+    profitOrDeficit: pes(w.profitOrDeficit),
+    writerBalance: pes(w.profitOrDeficit),
   };
 }
 
+/** Column sums in whole pesewas, so totals equal the sum of the rows shown. */
 function sumRows(rows: ReportRow[]): ReportRow {
-  const acc = { grossSales: 0, commissionAmount: 0, netGross: 0, winsAmount: 0, reserveAmount: 0, writerBalance: 0 };
+  const acc = { gross: 0, commission: 0, net: 0, reserve: 0, nar: 0, wins: 0, pd: 0 };
   for (const r of rows) {
-    acc.grossSales += parseFloat(r.grossSales ?? "0");
-    acc.commissionAmount += parseFloat(r.commissionAmount ?? "0");
-    acc.netGross += parseFloat(r.netGross ?? "0");
-    acc.winsAmount += parseFloat(r.winsAmount ?? "0");
-    acc.reserveAmount += parseFloat(r.reserveAmount ?? "0");
-    acc.writerBalance += parseFloat(r.writerBalance ?? "0");
+    acc.gross += toPesewas(r.grossSales);
+    acc.commission += toPesewas(r.commissionAmount);
+    acc.net += toPesewas(r.netGross);
+    acc.reserve += toPesewas(r.reserveAmount);
+    acc.nar += toPesewas(r.netAfterReserve);
+    acc.wins += toPesewas(r.winsAmount);
+    acc.pd += toPesewas(r.profitOrDeficit);
   }
   return {
-    grossSales: acc.grossSales.toFixed(2),
-    commissionAmount: acc.commissionAmount.toFixed(2),
-    netGross: acc.netGross.toFixed(2),
-    winsAmount: acc.winsAmount.toFixed(2),
-    reserveAmount: acc.reserveAmount.toFixed(2),
-    writerBalance: acc.writerBalance.toFixed(2),
+    grossSales: pes(acc.gross),
+    commissionAmount: pes(acc.commission),
+    netGross: pes(acc.net),
+    reserveAmount: pes(acc.reserve),
+    netAfterReserve: pes(acc.nar),
+    winsAmount: pes(acc.wins),
+    profitOrDeficit: pes(acc.pd),
+    writerBalance: pes(acc.pd),
   };
 }
 
@@ -183,7 +201,9 @@ router.get(
       writerSummaries.push({ writer: w, totals: sumRows(writerRows), rows: writerRows });
     }
 
-    const paymentConds = [eq(paymentsTable.agentId, agentId), eq(paymentsTable.isVoided, false)];
+    // Only money that actually moved: completed, not voided. A pending or
+    // rejected cash request (which has no receipt) is not a payment.
+    const paymentConds = [eq(paymentsTable.agentId, agentId), eq(paymentsTable.isVoided, false), eq(paymentsTable.status, "completed")];
     if (dateFrom) paymentConds.push(gte(paymentsTable.paymentDate, dateFrom));
     if (dateTo) paymentConds.push(lte(paymentsTable.paymentDate, dateTo));
     const payments = await db
@@ -192,12 +212,28 @@ router.get(
       .where(and(...paymentConds))
       .orderBy(desc(paymentsTable.paymentDate));
 
+    // Pay-ins and pay-outs are opposite directions: a pay-in is the agency
+    // handing the company cash, a pay-out the company handing the agency
+    // cash. They are totalled apart and netted, never added together.
+    const payInP = payments.filter((p) => p.transactionType === "pay_in").reduce((s, p) => s + toPesewas(p.amount), 0);
+    const payOutP = payments.filter((p) => p.transactionType === "pay_out").reduce((s, p) => s + toPesewas(p.amount), 0);
+    const totals = sumRows(allCalcRows);
+    const netPaymentsP = payInP - payOutP;
+    // Profit/(Deficit) is what the draws left the agency owing (+) or owed
+    // (-); net cash it has already handed over settles that much of it.
+    const netBalanceDueP = toPesewas(totals.profitOrDeficit) - netPaymentsP;
+
     res.json({
       agent: agentRow,
-      totals: sumRows(allCalcRows),
+      totals,
       writers: writerSummaries,
       payments,
-      totalPaid: payments.reduce((s, p) => s + parseFloat(p.amount), 0).toFixed(2),
+      totalPayIn: pes(payInP),
+      totalPayOut: pes(payOutP),
+      netPayments: pes(netPaymentsP),
+      netBalanceDue: pes(netBalanceDueP),
+      /** @deprecated the net of pay-ins and pay-outs; read netPayments. */
+      totalPaid: pes(netPaymentsP),
     });
   },
 );
@@ -600,8 +636,9 @@ router.get(
       .from(systemSettingsTable)
       .orderBy(desc(systemSettingsTable.updatedAt))
       .limit(1);
-    const commissionPct = settings ? parseFloat(settings.commissionPct) : 0.20;
-    const reservePct = settings ? parseFloat(settings.reservePct) : 0.05;
+    const { commissionPct, reservePct } = settings
+      ? { commissionPct: parseFloat(settings.commissionPct), reservePct: parseFloat(settings.reservePct) }
+      : await currentRates();
 
     const gameFinancials = [];
 
@@ -761,7 +798,8 @@ router.get(
     const calcMap = new Map<string, (typeof allCalcs)[0]>();
     for (const c of allCalcs) calcMap.set(`${c.writerId}__${c.calcDate}`, c);
 
-    const allAllocs = await db.select().from(reserveAllocationsTable);
+    // Draws still standing; a draw superseded by a re-run no longer counts.
+    const allAllocs = await db.select().from(reserveAllocationsTable).where(isNull(reserveAllocationsTable.supersededAt));
     const autoCovered = new Map<string, number>();
     const manualCovered = new Map<string, number>();
     const allocMap = new Map<string, number>();
@@ -794,8 +832,8 @@ router.get(
       if (balance >= 0) {
         clearedByAgentNet += wins - draws;
       } else {
-        const currentBalance = Math.abs(balance);
-        const outstanding = Math.max(0, currentBalance - manual);
+        // Full formula deficit, less everything the Reserve has put to it.
+        const outstanding = Math.max(0, Math.abs(balance) - draws);
         remainingDeficit += outstanding;
         const ap = wins - draws - outstanding;
         if (ap > 0) clearedByAgentNet += ap;
@@ -835,8 +873,7 @@ router.get(
         const draws = calc ? (allocMap.get(`${calc.writerId}__${calc.calcDate}`) ?? 0) : 0;
         const balance = calc ? parseFloat(calc.writerBalance) : 0;
         const currentBalance = calc ? Math.abs(balance) : 0;
-        const manual = calc ? (manualCovered.get(`${calc.writerId}__${calc.calcDate}`) ?? 0) : 0;
-        const outstanding = calc ? Math.max(0, currentBalance - manual) : 0;
+        const outstanding = calc ? Math.max(0, currentBalance - draws) : 0;
         const daysToCalc = calc ? Math.max(0, Math.round((new Date(calc.calcDate).getTime() - new Date(e.entryDate).getTime()) / 86400000)) : 0;
 
         let clearedBy: "deficit" | "reserve" | "agent_net" = "agent_net";
@@ -936,8 +973,9 @@ router.get(
         .from(systemSettingsTable)
         .orderBy(desc(systemSettingsTable.updatedAt))
         .limit(1);
-      const commissionPct = settings ? parseFloat(settings.commissionPct) : 0.20;
-      const reservePct = settings ? parseFloat(settings.reservePct) : 0.05;
+      const { commissionPct, reservePct } = settings
+        ? { commissionPct: parseFloat(settings.commissionPct), reservePct: parseFloat(settings.reservePct) }
+        : await currentRates();
 
       // Fetch entries
       const grossEntries = await db

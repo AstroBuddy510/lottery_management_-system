@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { WaterfallHeads, WaterfallRowCells } from "@/components/waterfall-cells";
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -314,19 +315,14 @@ export function AgentDetail() {
                   <TableRow>
                     <TableHead>Writer</TableHead>
                     <TableHead>Time</TableHead>
-                    <TableHead className="text-right">Gross</TableHead>
-                    <TableHead className="text-right">Commission</TableHead>
-                    <TableHead className="text-right">Net</TableHead>
-                    <TableHead className="text-right">Wins</TableHead>
-                    <TableHead className="text-right">Reserve</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
+                    <WaterfallHeads />
                     <TableHead>Payment</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {dateCalcs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-sm">
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground text-sm">
                         No calculations for {selectedDate}. Run calculations first.
                       </TableCell>
                     </TableRow>
@@ -342,14 +338,7 @@ export function AgentDetail() {
                           {writer && <div className="text-xs text-muted-foreground">{writer.fullName}</div>}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground font-mono">{calcTime}</TableCell>
-                        <TableCell className="text-sm text-right font-mono">{fmtGHS(c.grossSales)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(c.commissionAmount)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono">{fmtGHS(c.netGross)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-destructive">{fmtGHS(c.winsAmount)}</TableCell>
-                        <TableCell className="text-sm text-right font-mono text-muted-foreground">{fmtGHS(c.reserveAmount)}</TableCell>
-                        <TableCell className={`text-sm text-right font-mono font-semibold ${Number(c.writerBalance) < 0 ? "text-destructive" : "text-primary"}`}>
-                          {fmtGHS(c.writerBalance)}
-                        </TableCell>
+                        <WaterfallRowCells row={c} size="sm" />
                         <TableCell>
                           <Badge variant={hasPaid ? "default" : "destructive"} className="text-xs">
                             {hasPaid ? "Paid" : "Not Paid"}
