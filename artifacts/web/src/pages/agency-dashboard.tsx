@@ -16,7 +16,10 @@ import {
   getGetAgencyRosterQueryKey,
   type RosterEntry,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { Wallet } from "lucide-react";
+import { apiGet } from "@/lib/finance-api";
+import { Pager } from "@/components/data-kit";
 import { useToast } from "@/hooks/use-toast";
 import { Map as PigeonMapBase, Overlay, type MapProps } from "pigeon-maps";
 import { tileProvider, hasTileKey, TILE_ATTRIBUTION } from "@/lib/map-tiles";
@@ -117,7 +120,7 @@ function AgingBadge({ debtSince, debt }: { debtSince: string | null | undefined;
     ? "bg-amber-50 text-amber-600 border-amber-200"
     : "bg-rose-50 text-rose-600 border-rose-200";
   return (
-    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-semibold px-2 py-0.5 rounded-full border ${cls}`}>
       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
@@ -383,13 +386,14 @@ function StatCard({
   detail?: string;
 }) {
   return (
-    <div className="bg-white border rounded-2xl p-4.5 shadow-sm hover:shadow-md transition-all flex items-start gap-4">
-      <div className={`w-11 h-11 rounded-2xl ${color} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+    <div className="min-w-0 bg-white border rounded-2xl p-4 shadow-sm hover:shadow-md transition-all flex items-start gap-4">
+      {/* The icon gives way on narrower screens, where four cards share a row. */}
+      <div className={`w-11 h-11 rounded-2xl ${color} hidden sm:flex lg:hidden xl:flex items-center justify-center flex-shrink-0 shadow-sm`}>
         {icon}
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 leading-none">{label}</div>
-        <div className="text-xl font-black text-slate-800 leading-snug">{value}</div>
+        <div className="text-lg xl:text-xl font-black text-slate-800 leading-snug whitespace-nowrap">{value}</div>
         {detail && <div className="text-[10px] text-slate-400 mt-1 leading-none font-medium">{detail}</div>}
       </div>
     </div>
@@ -596,17 +600,90 @@ function RosterDialog({
   );
 }
 
+/* ─── commission wallet ───────────────────────────────────────────────────── */
+
+/** One agency's commission, as /finance/commissions/wallets reports it. */
+export interface CommissionWallet {
+  agentId: string;
+  totalEarned: number;
+  earnedClosed: number;
+  currentWeek: number;
+  paid: number;
+  pending: number;
+  /** Earned and not yet paid out, the running week included. */
+  accrued: number;
+  /** Closed weeks, less what is paid or already requested. */
+  available: number;
+}
+
+const ghsFmt = (v: number) => `GHS ${v.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function walletTitle(w?: CommissionWallet): string {
+  if (!w) return "No commission earned yet";
+  return [
+    `Accrued (unpaid): ${ghsFmt(w.accrued)}`,
+    `This week, accruing: ${ghsFmt(w.currentWeek)}`,
+    `Available to request: ${ghsFmt(Math.max(0, w.available))}`,
+    `Requested, pending: ${ghsFmt(w.pending)}`,
+    `Paid to date: ${ghsFmt(w.paid)}`,
+  ].join("\n");
+}
+
+/** The commission the company owes this agency, with its wallet icon. */
+function CommissionWalletBadge({ wallet, loading, compact }: { wallet?: CommissionWallet; loading?: boolean; compact?: boolean }) {
+  const accrued = wallet?.accrued ?? 0;
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2" title={walletTitle(wallet)}>
+        <span className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 border border-violet-100 flex items-center justify-center flex-shrink-0">
+          <Wallet className="w-3.5 h-3.5" />
+        </span>
+        <div className="min-w-0">
+          <div className="font-mono font-bold text-slate-800 whitespace-nowrap">{loading ? "…" : ghsFmt(accrued)}</div>
+          {wallet && wallet.currentWeek > 0 && (
+            <div className="text-[10px] text-slate-400 whitespace-nowrap">{ghsFmt(wallet.currentWeek)} this week</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return (
+    // Label over amount, so the figure keeps the card's full width even when
+    // four cards share a row on a laptop.
+    <div className="rounded-xl border border-violet-100 bg-violet-50/60 px-3 py-2.5" title={walletTitle(wallet)}>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="w-6 h-6 rounded-md bg-white text-violet-600 shadow-sm border border-violet-100 flex items-center justify-center flex-shrink-0">
+          <Wallet className="w-3.5 h-3.5" />
+        </span>
+        <span className="text-[9px] text-violet-500 font-bold uppercase tracking-wider truncate">
+          {/* Four to a row on a laptop leaves room for one word only. */}
+          <span className="lg:hidden xl:inline">Commission accrued</span>
+          <span className="hidden lg:inline xl:hidden">Commission</span>
+        </span>
+      </div>
+      <div className="mt-1.5 font-mono font-bold text-[15px] leading-tight text-violet-700 whitespace-nowrap">{loading ? "…" : ghsFmt(accrued)}</div>
+      <div className="text-[10px] text-slate-400 truncate">
+        {loading ? "\u00a0" : wallet && wallet.currentWeek > 0 ? `incl. ${ghsFmt(wallet.currentWeek)} this week` : "nothing accruing this week"}
+      </div>
+    </div>
+  );
+}
+
 /* ─── grid view ───────────────────────────────────────────────────────────── */
 
 function GridView({
   agents,
   lastPaymentsMap,
+  walletMap,
+  walletsLoading,
   onSelect,
   onPhotoClick,
   onOpenRoster,
 }: {
   agents: AgentWithUser[];
   lastPaymentsMap: Record<string, Payment>;
+  walletMap: Record<string, CommissionWallet>;
+  walletsLoading?: boolean;
   onSelect: (a: AgentWithUser) => void;
   onPhotoClick: (a: AgentWithUser) => void;
   onOpenRoster: (a: AgentWithUser, tab: "writers" | "terminals") => void;
@@ -620,7 +697,7 @@ function GridView({
     );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {agents.map(a => {
         const status = getStatus(a);
         const cfg = STATUS_CFG[status];
@@ -631,11 +708,11 @@ function GridView({
           <div
             key={a.id}
             onClick={() => onSelect(a)}
-            className={`group bg-white border border-l-4 ${cfg.border} rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:-translate-y-0.5 flex flex-col justify-between`}
+            className={`group min-w-0 bg-white border border-l-4 ${cfg.border} rounded-2xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:-translate-y-0.5 flex flex-col justify-between`}
           >
             <div>
               {/* Header row */}
-              <div className="flex items-start justify-between mb-3.5">
+              <div className="flex items-start justify-between gap-2 mb-3">
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); onPhotoClick(a); }}
@@ -659,7 +736,7 @@ function GridView({
                     </svg>
                   </span>
                 </button>
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${cfg.badge}`}>
+                <span className={`text-[10px] font-bold px-2 py-1 rounded-full border whitespace-nowrap ${cfg.badge}`}>
                   {status === "active-clear" ? "Clear" : status === "active-debt" ? "Has Debt" : "Closed"}
                 </span>
               </div>
@@ -682,9 +759,15 @@ function GridView({
               <div className="mt-3">
                 <RosterBadges agent={a} onOpen={onOpenRoster} />
               </div>
+
+              {/* Commission the company owes the agency, earned on its writers'
+                  sales. In the top block so it lines up across a row. */}
+              <div className="mt-3">
+                <CommissionWalletBadge wallet={walletMap[a.id]} loading={walletsLoading} />
+              </div>
             </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-3 space-y-3">
               {/* Last Transaction Box */}
               <div className="bg-slate-50/75 p-2.5 rounded-xl border border-slate-100/50">
                 <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-1">
@@ -697,11 +780,11 @@ function GridView({
               <div className={`pt-3 border-t ${debt < 0 ? "border-amber-100" : "border-slate-100"}`}>
                 {debt < 0 ? (
                   <>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                       <span className="text-xs text-slate-500">Agent owes Company</span>
                       <AgingBadge debtSince={a.debtSince} debt={a.outstandingDebt} />
                     </div>
-                    <div className="text-lg font-bold text-amber-600 mt-0.5 font-mono">
+                    <div className="text-base font-bold text-amber-600 mt-0.5 font-mono truncate">
                       GHS {Math.abs(debt).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
                     </div>
                   </>
@@ -710,7 +793,7 @@ function GridView({
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500">Company owes Agent</span>
                     </div>
-                    <div className="text-lg font-bold text-emerald-600 mt-0.5 font-mono">
+                    <div className="text-base font-bold text-emerald-600 mt-0.5 font-mono truncate">
                       GHS {debt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}
                     </div>
                   </>
@@ -742,12 +825,16 @@ function GridView({
 function ListView({
   agents,
   lastPaymentsMap,
+  walletMap,
+  walletsLoading,
   onSelect,
   onPhotoClick,
   onOpenRoster,
 }: {
   agents: AgentWithUser[];
   lastPaymentsMap: Record<string, Payment>;
+  walletMap: Record<string, CommissionWallet>;
+  walletsLoading?: boolean;
   onSelect: (a: AgentWithUser) => void;
   onPhotoClick: (a: AgentWithUser) => void;
   onOpenRoster: (a: AgentWithUser, tab: "writers" | "terminals") => void;
@@ -772,6 +859,7 @@ function ListView({
               <th className="px-6 py-4">Location</th>
               <th className="px-6 py-4">Team</th>
               <th className="px-6 py-4">Last Transaction</th>
+              <th className="px-6 py-4">Commission</th>
               <th className="px-6 py-4">Balance / Debt</th>
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
@@ -852,6 +940,9 @@ function ListView({
                     <LastPaymentBadge payment={lastPayment} />
                   </td>
                   <td className="px-6 py-4">
+                    <CommissionWalletBadge wallet={walletMap[a.id]} loading={walletsLoading} compact />
+                  </td>
+                  <td className="px-6 py-4">
                     {debt < 0 ? (
                       <div className="space-y-1">
                         <div className="text-amber-600 font-bold font-mono">
@@ -888,45 +979,6 @@ function ListView({
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-/* ─── pagination ──────────────────────────────────────────────────────────── */
-
-function Pagination({
-  page,
-  totalPages,
-  onPage,
-}: {
-  page: number;
-  totalPages: number;
-  onPage: (p: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-center gap-2 mt-8">
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={page <= 1}
-        onClick={() => onPage(page - 1)}
-        className="h-9 px-3 gap-1 rounded-xl shadow-sm hover:bg-slate-50"
-      >
-        <ChevronLeft className="w-4 h-4" /> Previous
-      </Button>
-      <span className="text-xs text-slate-500 font-semibold px-2">
-        Page {page} of {totalPages}
-      </span>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={page >= totalPages}
-        onClick={() => onPage(page + 1)}
-        className="h-9 px-3 gap-1 rounded-xl shadow-sm hover:bg-slate-50"
-      >
-        Next <ChevronRight className="w-4 h-4" />
-      </Button>
     </div>
   );
 }
@@ -1618,7 +1670,29 @@ export function AgencyDashboard() {
   /* Which agency's roster is open, and which of its two lists is showing. */
   const [roster, setRoster] = useState<{ agent: AgentWithUser; tab: "writers" | "terminals" } | null>(null);
 
-  const pageSize = 12;
+  // Multiples of four, so the last row of the four-column grid is full.
+  const [pageSize, setPageSize] = useState(12);
+  const gridTopRef = useRef<HTMLDivElement>(null);
+  const goToPage = (p: number) => {
+    setPage(p);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    gridTopRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  };
+
+  const { data: walletData, isLoading: walletsLoading } = useQuery({
+    queryKey: ["/api/finance/commissions/wallets"],
+    queryFn: apiGet<{ wallets: CommissionWallet[] }>("/finance/commissions/wallets"),
+    refetchInterval: 120_000,
+  });
+  const walletMap = useMemo(() => {
+    const m: Record<string, CommissionWallet> = {};
+    for (const w of walletData?.wallets ?? []) m[w.agentId] = w;
+    return m;
+  }, [walletData]);
+  const totalAccrued = useMemo(
+    () => (walletData?.wallets ?? []).reduce((s, w) => s + w.accrued, 0),
+    [walletData],
+  );
   const isLoading = isAgentsLoading || isPaymentsLoading;
 
   const handlePhotoClick = (a: AgentWithUser) => {
@@ -1739,12 +1813,29 @@ export function AgencyDashboard() {
   // Reset page when sorting/filtering changes
   useEffect(() => {
     setPage(1);
-  }, [filter, search, sortBy]);
+  }, [filter, search, sortBy, pageSize]);
 
-  const totalPages = Math.ceil(filteredAndSorted.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / pageSize));
+  const safePage = Math.min(page, totalPages);
   const paginatedAgents = useMemo(() => {
-    return filteredAndSorted.slice((page - 1) * pageSize, page * pageSize);
-  }, [filteredAndSorted, page]);
+    return filteredAndSorted.slice((safePage - 1) * pageSize, safePage * pageSize);
+  }, [filteredAndSorted, safePage, pageSize]);
+
+  const pager = filteredAndSorted.length > 0 && (
+    <div className="mt-6 bg-white border rounded-2xl shadow-sm overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center">
+        <Pager className="flex-1 border-t-0 bg-transparent" page={safePage} totalPages={totalPages} onPage={goToPage}
+          total={filteredAndSorted.length} size={pageSize} noun={filteredAndSorted.length === 1 ? "agency" : "agencies"} />
+        <label className="flex items-center justify-center gap-2 px-5 pb-3 sm:pb-0 text-xs text-slate-500">
+          Per page
+          <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}
+            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+            {[8, 12, 16, 24, 48].map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1759,7 +1850,14 @@ export function AgencyDashboard() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-slate-900">Agency Dashboard</h1>
-              <p className="text-xs text-slate-400 mt-0.5">Network overview — {stats.total} registered {stats.total === 1 ? "agency" : "agencies"}</p>
+              <p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-x-1.5">
+                <span>Network overview — {stats.total} registered {stats.total === 1 ? "agency" : "agencies"}</span>
+                {totalAccrued > 0 && (
+                  <span className="inline-flex items-center gap-1 text-violet-600 font-semibold">
+                    · <Wallet className="w-3 h-3" /> {ghsFmt(totalAccrued)} commission accrued
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
@@ -1879,9 +1977,9 @@ export function AgencyDashboard() {
       </div>
 
       {/* Content */}
-      <div className="px-6 py-6">
+      <div ref={gridTopRef} className="px-6 py-6 scroll-mt-4">
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
               <div key={i} className="bg-white rounded-2xl border p-5 animate-pulse space-y-3 shadow-sm">
                 <div className="flex justify-between">
@@ -1900,22 +1998,26 @@ export function AgencyDashboard() {
             <GridView
               agents={paginatedAgents}
               lastPaymentsMap={lastPaymentsMap}
+              walletMap={walletMap}
+              walletsLoading={walletsLoading}
               onSelect={setSelected}
               onPhotoClick={handlePhotoClick}
               onOpenRoster={(a, tab) => setRoster({ agent: a, tab })}
             />
-            <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+            {pager}
           </>
         ) : view === "list" ? (
           <>
             <ListView
               agents={paginatedAgents}
               lastPaymentsMap={lastPaymentsMap}
+              walletMap={walletMap}
+              walletsLoading={walletsLoading}
               onSelect={setSelected}
               onPhotoClick={handlePhotoClick}
               onOpenRoster={(a, tab) => setRoster({ agent: a, tab })}
             />
-            <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+            {pager}
           </>
         ) : view === "terminals" ? (
           <TerminalMapView focusId={focusParam ?? undefined} />

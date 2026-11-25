@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { syncBooks, audit } from "../lib/finance/books";
 import {
-  derivedAgencyBalances, refreshAgencyBalances, agencyStatement, commissionWeeks, commissionWallet,
+  derivedAgencyBalances, refreshAgencyBalances, agencyStatement, commissionWeeks, commissionWallet, commissionWallets,
 } from "../lib/finance/agencies";
 import { dispatchSystemNotification } from "../lib/notify";
 import { logger } from "../lib/logger";
@@ -227,6 +227,11 @@ router.get("/finance/commissions", requireAuth, requireRole(...MGMT, "cashier"),
   ]);
   const agents = await db.select({ id: agentsTable.id, code: agentsTable.fullCode, name: agentsTable.agencyName }).from(agentsTable);
   res.json({ weeks, payouts: payouts.rows, agents });
+});
+
+/** Each agency's commission wallet, for the Agency Overview cards. */
+router.get("/finance/commissions/wallets", requireAuth, requireRole(...MGMT, "cashier"), async (_req, res) => {
+  res.json({ wallets: await commissionWallets() });
 });
 
 async function myAgent(userId: string) {

@@ -204,6 +204,46 @@ export async function commissionWeeks(exec: Exec = db, agentId?: string) {
   });
 }
 
+/**
+ * Every agency's commission wallet in two queries, for the Agency Overview.
+ * Same figures as commissionWallet(), per agency. "accrued" is commission
+ * earned and not yet paid out, the running week included.
+ */
+export async function commissionWallets(exec: Exec = db) {
+  const [weeks, payouts] = await Promise.all([
+    commissionWeeks(exec),
+    exec.execute(sql`
+      SELECT agent_id,
+             coalesce(sum(amount) FILTER (WHERE status = 'paid'), 0) AS paid,
+             coalesce(sum(amount) FILTER (WHERE status IN ('requested', 'approved')), 0) AS pending
+        FROM agent_commission_payouts GROUP BY agent_id`),
+  ]);
+  const paidBy = new Map((payouts.rows as Array<Record<string, unknown>>).map((r) => [String(r.agent_id), { paid: n(r.paid), pending: n(r.pending) }]));
+  const byAgent = new Map<string, { totalEarned: number; earnedClosed: number; currentWeek: number }>();
+  for (const w of weeks) {
+    const a = byAgent.get(w.agentId) ?? { totalEarned: 0, earnedClosed: 0, currentWeek: 0 };
+    a.totalEarned += w.commission;
+    if (w.closed) a.earnedClosed += w.commission;
+    else a.currentWeek += w.commission;
+    byAgent.set(w.agentId, a);
+  }
+  const ids = new Set([...byAgent.keys(), ...paidBy.keys()]);
+  return [...ids].map((agentId) => {
+    const e = byAgent.get(agentId) ?? { totalEarned: 0, earnedClosed: 0, currentWeek: 0 };
+    const p = paidBy.get(agentId) ?? { paid: 0, pending: 0 };
+    return {
+      agentId,
+      totalEarned: r2(e.totalEarned),
+      earnedClosed: r2(e.earnedClosed),
+      currentWeek: r2(e.currentWeek),
+      paid: p.paid,
+      pending: p.pending,
+      accrued: r2(e.totalEarned - p.paid),
+      available: r2(e.earnedClosed - p.paid - p.pending),
+    };
+  });
+}
+
 /** An agent's commission wallet: earned, paid, pending, available. Payable by the company - not cash it holds. */
 export async function commissionWallet(agentId: string, exec: Exec = db) {
   const weeks = await commissionWeeks(exec, agentId);
