@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { Search, Users, UserCheck, UserX, CreditCard } from "lucide-react";
+import { Pager, usePaged } from "@/components/data-kit";
+import { cn } from "@/lib/utils";
 import { useGetMyAgent, getGetMyAgentQueryKey, useListWriters, useCreateWriter, useUpdateWriter, getListWritersQueryKey, Writer } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { IssuePinDialog, type IssuePinTarget } from "@/components/issue-pin-dialog";
 import { ModelRequestsPanel } from "@/components/model-requests-panel";
+
+const WRITERS_PER_PAGE = 12;
 
 const AVATAR_COLORS = [
   "bg-blue-600","bg-emerald-600","bg-violet-600","bg-orange-500",
@@ -23,6 +28,18 @@ function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg"
   return (
     <div className={`${sz} rounded-full ${color} flex items-center justify-center text-white font-bold flex-shrink-0`}>
       {initials || "?"}
+    </div>
+  );
+}
+
+function Stat({ icon, tone, label, value, className }: { icon: React.ReactNode; tone: string; label: string; value: number; className?: string }) {
+  return (
+    <div className={cn("flex items-center gap-3 rounded-2xl border bg-card px-3 sm:px-4 py-3", className)}>
+      <span className={cn("hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", tone)}>{icon}</span>
+      <div className="min-w-0">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="text-xl font-black tabular-nums leading-tight">{value}</div>
+      </div>
     </div>
   );
 }
@@ -121,6 +138,27 @@ export function MyWriters() {
   };
 
   const activeCount = writerList.filter(w => w.isActive).length;
+  const postpaidCount = writerList.filter(w => w.operationModel === "postpaid").length;
+
+  // Search and status narrow the list; the pager then works on what is left.
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return writerList
+      .filter(w => status === "all" || (status === "active" ? w.isActive : !w.isActive))
+      .filter(w => !q || w.fullName.toLowerCase().includes(q) || w.fullCode.toLowerCase().includes(q) || (w.phone ?? "").includes(q));
+  }, [writerList, query, status]);
+  const paged = usePaged(filtered, WRITERS_PER_PAGE, `${query}|${status}`);
+  const listRef = useRef<HTMLDivElement>(null);
+  const goToPage = (p: number) => {
+    paged.setPage(p);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    listRef.current?.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+    // On a phone the list does not scroll on its own; bring its top into view.
+    const top = listRef.current?.getBoundingClientRect().top ?? 0;
+    if (top < 80) listRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  };
 
   if (agentLoading) {
     return (
@@ -146,7 +184,7 @@ export function MyWriters() {
     <div className="pb-4">
       {/* Sticky header */}
       <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-border z-10 px-4 py-3">
-        <div className="flex items-center gap-3 max-w-xl mx-auto md:max-w-2xl">
+        <div className="flex items-center gap-3 max-w-xl mx-auto md:max-w-3xl lg:max-w-5xl">
           <div className="flex-1">
             <h1 className="text-base font-semibold">My Writers</h1>
             <p className="text-xs text-muted-foreground">{activeCount} active · {writerList.length} total</p>
@@ -160,77 +198,128 @@ export function MyWriters() {
         </div>
       </div>
 
-      <div className="px-4 pt-4 max-w-xl mx-auto md:max-w-2xl space-y-4">
-        {/* Agent badge */}
-        <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-2xl px-4 py-3">
-          <div className="flex-1 min-w-0">
-            <div className="text-xs text-muted-foreground">Your agent code</div>
-            <div className="text-lg font-bold font-mono text-primary">{agent.fullCode}</div>
+      <div className="mx-auto w-[calc(100%-2rem)] max-w-xl md:max-w-3xl lg:max-w-5xl pt-4 space-y-4">
+        {/* Agency at a glance */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+          <div className="col-span-3 sm:col-span-1 flex items-center justify-between gap-3 sm:block rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Agent code</div>
+            <div className="sm:mt-1 text-lg font-black font-mono text-primary leading-tight">{agent.fullCode}</div>
           </div>
-          <div className="text-right">
-            <div className="text-xs text-muted-foreground">Writers active</div>
-            <div className="text-2xl font-bold">{activeCount}</div>
-          </div>
+          <Stat icon={<UserCheck className="h-4 w-4" />} tone="text-emerald-600 bg-emerald-500/10" label="Active" value={activeCount} />
+          <Stat icon={<UserX className="h-4 w-4" />} tone="text-slate-500 bg-slate-500/10" label="Inactive" value={writerList.length - activeCount} />
+          <Stat icon={<CreditCard className="h-4 w-4" />} tone="text-indigo-600 bg-indigo-500/10" label="Postpaid" value={postpaidCount} />
         </div>
 
         {/* Credit requests reach the agent here - previously they reached nobody. */}
         <ModelRequestsPanel />
 
-        {/* Writer cards */}
-        {writersLoading ? (
-          [1,2,3].map(i => <Skeleton key={i} className="h-20 rounded-2xl" />)
-        ) : writerList.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <div className="text-4xl mb-3">👥</div>
-            <div className="font-medium text-sm">No writers yet</div>
-            <div className="text-xs mt-1">Tap Add to register your first writer</div>
-          </div>
-        ) : (
-          <div className="space-y-2.5">
-            {writerList.map(w => (
-              <div key={w.id} className={`bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3 ${!w.isActive ? "opacity-60" : ""}`}>
-                <Avatar name={w.fullName} size="md" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">{w.fullName}</div>
-                  <div className="text-xs font-mono text-muted-foreground mt-0.5">{w.fullCode}</div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                    w.isActive
-                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
-                      : "bg-muted text-muted-foreground"
-                  }`}>
-                    {w.isActive ? "Active" : "Inactive"}
-                  </span>
-                  <button
-                    title="Issue or reset sign-in PIN"
-                    aria-label="Issue or reset sign-in PIN"
-                    onClick={() => setPinWriter({
-                      id: w.id,
-                      fullName: w.fullName,
-                      fullCode: w.fullCode,
-                      phone: (w as { phone?: string | null }).phone ?? null,
-                      hasPin: undefined,
-                    })}
-                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="7.5" cy="15.5" r="5.5"/>
-                      <path d="m21 2-9.6 9.6"/>
-                      <path d="m15.5 7.5 3 3L22 7l-3-3"/>
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}
-                    className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
-                  >
-                    <EditIcon />
-                  </button>
-                </div>
+        {/* Writers: search, status, a scrolling list and a pager */}
+        <section className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+          <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+              <h2 className="text-sm font-bold">Writers</h2>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">{filtered.length}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 sm:w-56 sm:flex-none">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search writers"
+                  aria-label="Search writers" className="h-9 pl-8 text-xs rounded-lg" />
               </div>
-            ))}
+              <div role="group" aria-label="Status" className="inline-flex h-9 items-center rounded-lg border bg-muted/40 p-0.5 shrink-0">
+                {(["all", "active", "inactive"] as const).map(k => (
+                  <button key={k} type="button" onClick={() => setStatus(k)} aria-pressed={status === k}
+                    className={cn("h-7 rounded-md px-2.5 text-[11px] font-semibold capitalize transition-colors",
+                      status === k ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Column heads, desktop only */}
+          <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_7rem_6rem_5.5rem] gap-3 border-b bg-muted/30 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <span>Writer</span><span>Phone</span><span>Model</span><span>Status</span><span className="text-right">Actions</span>
+          </div>
+
+          <div ref={listRef} className="max-h-[min(36rem,62vh)] overflow-y-auto overscroll-contain scroll-mt-40">
+            {writersLoading ? (
+              <div className="p-3 space-y-2">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
+            ) : writerList.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <Users className="mx-auto h-8 w-8 text-muted-foreground/40" />
+                <div className="mt-3 font-medium text-sm text-foreground">No writers yet</div>
+                <div className="text-xs mt-1">Tap Add to register your first writer</div>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="py-14 text-center text-xs text-muted-foreground">No writers match this search.</div>
+            ) : (
+              <ul className="divide-y">
+                {paged.rows.map(w => (
+                  <li key={w.id}
+                    className={cn("grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_7rem_6rem_5.5rem] items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors",
+                      !w.isActive && "opacity-60")}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Avatar name={w.fullName} size="md" />
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate">{w.fullName}</div>
+                        <div className="text-xs font-mono text-muted-foreground truncate">
+                          {w.fullCode}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="hidden md:block text-xs font-mono text-muted-foreground truncate">{w.phone || "—"}</span>
+                    <span className="hidden md:block">
+                      {w.operationModel ? (
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize",
+                          w.operationModel === "postpaid" ? "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" : "bg-muted text-muted-foreground")}>
+                          {w.operationModel}
+                        </span>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </span>
+                    <div className="flex items-center justify-end gap-1 md:contents">
+                      <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full md:justify-self-start",
+                        w.isActive ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
+                        {w.isActive ? "Active" : "Inactive"}
+                      </span>
+                      <div className="flex items-center justify-end gap-0.5">
+                        <button
+                          title="Issue or reset sign-in PIN"
+                          aria-label={`Issue or reset sign-in PIN for ${w.fullName}`}
+                          onClick={() => setPinWriter({
+                            id: w.id,
+                            fullName: w.fullName,
+                            fullCode: w.fullCode,
+                            phone: w.phone ?? null,
+                            hasPin: undefined,
+                          })}
+                          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="7.5" cy="15.5" r="5.5"/>
+                            <path d="m21 2-9.6 9.6"/>
+                            <path d="m15.5 7.5 3 3L22 7l-3-3"/>
+                          </svg>
+                        </button>
+                        <button
+                          title="Edit writer"
+                          aria-label={`Edit ${w.fullName}`}
+                          onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}
+                          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
+                        >
+                          <EditIcon />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <Pager page={paged.page} totalPages={paged.totalPages} onPage={goToPage} total={paged.total} size={paged.size} noun="writers" />
+        </section>
       </div>
 
       <Dialog open={addOpen} onOpenChange={o => { if (!o) setCreateForm({ writerCode: "", fullName: "", phone: "", operationModel: "postpaid", location: "", lat: "", lng: "" }); setAddOpen(o); }}>

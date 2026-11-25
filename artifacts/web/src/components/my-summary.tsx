@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Loader2, Radio } from "lucide-react";
-import { fmtGHS } from "@/lib/utils";
+import { fmtGHS, cn } from "@/lib/utils";
+import { ghsPD } from "@/lib/waterfall";
 import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS } from "@/components/live-sales";
 
 /**
@@ -45,7 +46,7 @@ function Figure({
         {label}
       </div>
       <div
-        className={`text-base font-bold tabular-nums mt-0.5 ${
+        className={`text-sm sm:text-base font-bold tabular-nums whitespace-nowrap mt-0.5 ${
           negative ? "text-destructive" : accent ? "text-primary" : ""
         }`}
       >
@@ -55,7 +56,7 @@ function Figure({
   );
 }
 
-export function MySummarySection({ title }: { title?: string }) {
+export function MySummarySection({ title, className }: { title?: string; className?: string }) {
   const [gameId, setGameId] = useLiveGameSelection();
   const { games } = useLiveGames(gameId, setGameId);
 
@@ -78,7 +79,7 @@ export function MySummarySection({ title }: { title?: string }) {
   const split = data?.sourceSplit;
 
   return (
-    <Card>
+    <Card className={cn(className)}>
       {/* Stacked on a phone. Side by side, the game badge would not shrink and
           squeezed the title column until "My Live Sales" wrapped one word per
           line and the description was clipped. */}
@@ -130,14 +131,15 @@ export function MySummarySection({ title }: { title?: string }) {
                 />
               </div>
             ) : (
+              // The platform waterfall, in its order and with its names.
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <Figure label="Gross" value={fmtGHS(t.gross)} />
+                <Figure label="Gross Sales" value={fmtGHS(t.gross)} />
                 <Figure label="Commission" value={fmtGHS(t.commission)} />
-                <Figure label="Net Before Deduction" value={fmtGHS(t.netBeforeDeduction)} />
-                <Figure label="Reserve Fund" value={fmtGHS(t.reserve)} />
+                <Figure label="Net After Commission" value={fmtGHS(t.netBeforeDeduction)} />
+                <Figure label="Reserve" value={fmtGHS(t.reserve)} />
                 <Figure label="Net After Reserve" value={fmtGHS(t.netAfterReserve)} />
-                <Figure label="Wins" value={fmtGHS(t.wins)} />
-                <Figure label="Profit / Deficit" value={fmtGHS(t.profitOrDeficit)} accent />
+                <Figure label="Wins Deduct" value={fmtGHS(t.wins)} />
+                <Figure label="Profit / (Deficit)" value={ghsPD(t.profitOrDeficit, "GH₵")} accent negative={t.profitOrDeficit < 0} />
                 <Figure label="Writers Active" value={String(data!.writers.length)} />
               </div>
             )}
@@ -159,10 +161,11 @@ export function MySummarySection({ title }: { title?: string }) {
             )}
 
             {!isWriter && data!.writers.length > 0 && (
-              <div className="rounded-md border overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b">
+              // Scrolls on its own so a large team does not stretch the page.
+              <div className="rounded-md border overflow-auto max-h-[22rem] overscroll-contain">
+                <table className="w-full text-sm whitespace-nowrap">
+                  <thead className="sticky top-0 z-[1] bg-card shadow-[0_1px_0_hsl(var(--border))]">
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
                       <th className="text-left font-bold px-3 py-2">Writer</th>
                       <th className="text-right font-bold px-3 py-2">My Entries</th>
                       <th className="text-right font-bold px-3 py-2">Portal</th>

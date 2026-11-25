@@ -12,7 +12,11 @@ import {
   getGetUnreadCountQueryKey, getGetMeQueryKey,
   useUpdateMyPhoto,
 } from "@workspace/api-client-react";
-import { fmtGHS } from "@/lib/utils";
+import { fmtGHS, cn } from "@/lib/utils";
+import {
+  TrendingUp, Trophy, Users, Ticket, CalendarDays, Bell, ChevronRight, Plus,
+  CreditCard, Gamepad2, Activity, ScanLine, Camera, type LucideIcon,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { CountdownTimer } from "@/pages/games";
@@ -101,62 +105,6 @@ function relTime(dateStr: string): string {
   if (diffH < 24) return `${diffH}h ago`;
   return `${Math.floor(diffH / 24)}d ago`;
 }
-
-// ── Icon components ──────────────────────────────────────────
-function IconSale() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="5" y="2" width="14" height="20" rx="2"/>
-      <path d="M9 7h6M9 11h6M9 15h4"/>
-    </svg>
-  );
-}
-function IconGross() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
-      <polyline points="17 6 23 6 23 12"/>
-    </svg>
-  );
-}
-function IconWins() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-      <path d="M4 22h16"/>
-      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
-      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
-      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-    </svg>
-  );
-}
-function IconWriters() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-      <circle cx="9" cy="7" r="4"/>
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-    </svg>
-  );
-}
-function IconPlus({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-    </svg>
-  );
-}
-function IconChevronRight() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="9 18 15 12 9 6"/>
-    </svg>
-  );
-}
-
-
 
 // ── Main Dashboard ───────────────────────────────────────────
 export function AgentDashboard() {
@@ -273,403 +221,305 @@ export function AgentDashboard() {
   }, [salesList, grossList, winsList, liveGames]);
 
   const actStyle = {
-    sale:  { dot: "#3b82f6", badge: { bg: "#eff6ff", color: "#1d4ed8" }, label: "Sale"  },
-    gross: { dot: "#10b981", badge: { bg: "#ecfdf5", color: "#065f46" }, label: "Gross" },
-    wins:  { dot: "#f59e0b", badge: { bg: "#fffbeb", color: "#92400e" }, label: "Wins"  },
+    sale:  { dot: "bg-blue-500",    chip: "bg-blue-500/10 text-blue-700 dark:text-blue-300",       label: "Sale"  },
+    gross: { dot: "bg-emerald-500", chip: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", label: "Gross" },
+    wins:  { dot: "bg-amber-500",   chip: "bg-amber-500/10 text-amber-700 dark:text-amber-300",    label: "Wins"  },
   };
 
+  const balance = parseFloat(agent?.outstandingDebt || "0");
+  const companyOwes = balance > 0;
+  const agentOwes = balance < 0;
+  const isToday = selectedDate === today;
+  const grossGap = declaredGross > 0 && Math.abs(declaredGross - liveGross) >= 0.01 ? declaredGross - liveGross : 0;
+
   return (
-    <div className="px-4 max-w-xl mx-auto md:max-w-2xl mt-4 pb-6 space-y-5">
+    <div className="px-4 md:px-6 max-w-xl mx-auto md:max-w-3xl lg:max-w-6xl mt-4 pb-6 space-y-5">
 
-      {/* ── Profile and agent details ── */}
-      <div
-        className="rounded-3xl p-5 text-white shadow-xl"
-        style={{
-          background: "linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 100%)",
-          boxShadow: "0 8px 30px rgba(29, 78, 216, 0.15)",
-        }}
+      {/* ── Hero: who, what they owe, what is running ── */}
+      <section
+        className="relative overflow-hidden rounded-3xl text-white shadow-lg"
+        style={{ background: "linear-gradient(135deg, #0f2747 0%, #1e3a8a 45%, #1d4ed8 100%)" }}
       >
-        <div className="flex items-center gap-4">
-          {/* Avatar */}
-          <div className="relative">
-            <Avatar
-              name={user?.fullName ?? "Agent"}
-              src={user?.profilePicture}
-              size="lg"
-              onPress={() => photoInputRef.current?.click()}
-              uploading={photoUploading}
+        {/* Soft shapes for depth; purely decorative. */}
+        <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-white/[0.06]" />
+        <div aria-hidden className="pointer-events-none absolute -bottom-24 right-1/3 h-56 w-56 rounded-full bg-sky-300/[0.07]" />
+
+        <div className="relative p-5 sm:p-6 space-y-5">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <Avatar
+                name={user?.fullName ?? "Agent"}
+                src={user?.profilePicture}
+                size="lg"
+                onPress={() => photoInputRef.current?.click()}
+                uploading={photoUploading}
+              />
+              <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white text-blue-700 shadow-md">
+                <Camera className="h-2.5 w-2.5" strokeWidth={2.5} />
+              </span>
+            </div>
+            <input ref={photoInputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoChange(f); e.target.value = ""; }}
             />
-            {/* Camera badge */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-md pointer-events-none">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
-              </svg>
-            </div>
-          </div>
-          <input ref={photoInputRef} type="file" accept="image/*" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoChange(f); e.target.value = ""; }}
-          />
 
-          {/* Greeting */}
-          <div className="flex-1 min-w-0">
-            <div className="text-white/70 text-xs font-medium tracking-wide">{getGreeting()}</div>
-            <div className="text-white text-xl font-black leading-tight truncate">{firstName}</div>
-            {agentLoading ? (
-              <Skeleton className="h-5 w-24 mt-1 bg-white/20" />
-            ) : agent ? (
-              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <span className="text-[11px] font-black font-mono bg-white/20 text-white px-2.5 py-1 rounded-lg tracking-wider">
-                  {agent.fullCode}
-                </span>
-                <span className="text-white/60 text-xs">{activeWriters} active writer{activeWriters !== 1 ? "s" : ""}</span>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Notification chip */}
-          {unreadCount > 0 && (
-            <Link href="/notifications">
-              <div className="flex flex-col items-center bg-red-500 text-white px-3 py-1.5 rounded-2xl active:opacity-80 transition-opacity shadow-lg">
-                <span className="text-base font-black leading-none">{unreadCount}</span>
-                <span className="text-[9px] font-semibold leading-tight mt-0.5">new</span>
-              </div>
-            </Link>
-          )}
-        </div>
-
-        {/* Date and Balance section */}
-        <div className="flex flex-col gap-3 mt-4">
-          {/* Date chip with overlay calendar input */}
-          <div className="relative inline-flex items-center gap-1.5 bg-white/10 rounded-xl px-3 py-1.5 self-start text-white cursor-pointer hover:bg-white/20 transition-colors">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            <span className="text-white/80 text-xs font-medium">{todayLabel}</span>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value || today)}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer [color-scheme:dark]"
-            />
-          </div>
-
-          {/* Active Game Event Cards */}
-          {liveGames.length > 0 ? (
-            <div className="space-y-2 w-full">
-              {liveGames.map(g => {
-                const isGrossClosed = new Date(g.closeAt) <= getServerNow() || g.status === "closed";
-                return (
-                  <div key={g.id} className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1">
-                    {g.logoUrl ? (
-                      <img src={g.logoUrl} alt={g.name} className="w-10 h-10 object-contain rounded bg-white p-1 shadow-sm flex-shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 shadow-inner">
-                        🎮
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[9px] font-bold text-white/70 uppercase tracking-wider block">
-                        Active Game Event
-                      </span>
-                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                        <span className="text-xs font-mono font-bold text-yellow-300 px-1.5 py-0.5 bg-white/10 rounded">
-                          {g.eventNumber}
-                        </span>
-                        <span className="text-sm font-black tracking-tight leading-tight text-white truncate">
-                          {g.name}
-                        </span>
-                        {isGrossClosed ? (
-                          <span className="text-[9px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded-full shadow-sm">
-                            GROSS CLOSED
-                          </span>
-                        ) : (
-                          <span className="text-[9px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full shadow-sm animate-pulse">
-                            LIVE
-                          </span>
-                        )}
-                        <CountdownTimer closeAt={g.closeAt} status={g.status} className="flex items-center gap-1.5 text-[9px] font-bold text-yellow-300 bg-white/10 border border-white/20 px-2 py-0.5 rounded-lg animate-pulse" />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 border border-white/10 w-full mt-1 text-white/60 text-xs font-semibold">
-              <span className="text-white/40 text-lg">🎮</span>
-              No active game event at the moment
-            </div>
-          )}
-
-          {/* Balance card */}
-          {agent && (
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3 flex items-center justify-between border border-white/10 w-full mt-1">
-              {(() => {
-                const val = parseFloat(agent.outstandingDebt || "0");
-                const isCompanyOwes = val > 0;
-                const isAgentOwes = val < 0;
-                const absVal = Math.abs(val);
-                return (
-                  <>
-                    <div>
-                      <span className="text-[10px] font-semibold text-white/70 uppercase tracking-wider block">
-                        {isCompanyOwes ? "Company Owes You" : isAgentOwes ? "You owe Company" : "Clear Balance"}
-                      </span>
-                      <span className="text-lg font-black font-mono text-white tracking-tight">
-                        <span className="font-normal opacity-70 text-sm mr-1">GH₵</span>
-                        {absVal.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <Link href="/online-payment">
-                      <button className="bg-white text-[#1d4ed8] font-bold text-xs px-3.5 py-2 rounded-xl hover:bg-blue-50 active:scale-95 transition-all shadow-md flex items-center gap-1.5">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="2" y="4" width="20" height="16" rx="2"/>
-                          <line x1="2" y1="10" x2="22" y2="10"/>
-                        </svg>
-                        {isAgentOwes ? "Pay Now" : "Deposit"}
-                      </button>
-                    </Link>
-                  </>
-                );
-              })()}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Page Title Block */}
-      <div className="flex items-center gap-2 mb-1">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900">Dashboard</h1>
-        <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-700 px-2 py-0.5 rounded-md">Agent</span>
-      </div>
-
-      {/* Live agency figures, directly under the identity they belong to. */}
-      <MySummarySection title="My Agency · Live" />
-
-      {/* Commission earned on the writers' sales, and the way to ask for it. */}
-      <div className="mt-5">
-        <AgentCommissionWallet agencyCode={agent?.fullCode} agencyName={agent?.agencyName ?? null} agentName={user?.fullName} />
-      </div>
-
-      <div className="space-y-5">
-
-        {/* ── Today's Summary Card ── */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Today's Summary</div>
-          <div className="space-y-1">
-            
-            {/* Sales Logged Row - Hidden since we are not using Sales Log
-            <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl text-blue-600 bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <IconSale />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium text-white/70">{getGreeting()}</div>
+              <div className="truncate text-xl sm:text-2xl font-black leading-tight">{firstName}</div>
+              {agentLoading ? (
+                <Skeleton className="h-5 w-24 mt-1.5 bg-white/20" />
+              ) : agent ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="rounded-md bg-white/15 px-2 py-0.5 font-mono text-[11px] font-black tracking-wider">{agent.fullCode}</span>
+                  {agent.agencyName && <span className="truncate text-xs text-white/70">{agent.agencyName}</span>}
                 </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-800">Sales Logged</div>
-                  <div className="text-[11px] text-gray-400">{salesList.length === 1 ? "1 ticket" : `${salesList.length} tickets`} today</div>
-                </div>
-              </div>
-              <div className="text-base font-bold text-gray-900 font-mono">{salesList.length}</div>
-            </div>
-            */}
-
-            {/* Gross Today Row */}
-            <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl text-emerald-600 bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                  <IconGross />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <div className="text-sm font-semibold text-gray-800">Gross Sales</div>
-                    {/* Says where the number comes from. Without it, a figure
-                        that disagrees with the declared entry just looks wrong. */}
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Live
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-gray-400">
-                    {liveTickets === 1 ? "1 ticket" : `${liveTickets} tickets`} sold today
-                  </div>
-                  {/* The declared figure, shown only when it disagrees. That gap
-                      is the reconciliation question an agent most needs to see. */}
-                  {declaredGross > 0 && Math.abs(declaredGross - liveGross) >= 0.01 && (
-                    <div className="text-[10px] text-amber-600 mt-0.5 font-medium">
-                      Declared GH₵{declaredGross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      {" · "}
-                      {declaredGross > liveGross ? "over" : "under"} by GH₵
-                      {Math.abs(declaredGross - liveGross).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="text-base font-black text-gray-900 font-mono">
-                <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                {liveGross.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
+              ) : null}
             </div>
 
-            {/* Wins Today Row */}
-            <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl text-amber-600 bg-amber-50 flex items-center justify-center flex-shrink-0">
-                  <IconWins />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-800">Wins Claimed</div>
-                  <div className="text-[11px] text-gray-400">{winsList.length === 1 ? "1 entry" : `${winsList.length} entries`} today</div>
-                </div>
-              </div>
-              <div className="text-base font-black text-gray-900 font-mono">
-                <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                {todayWins.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-            </div>
-
-            {/* Active Writers Row */}
-            <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl text-violet-600 bg-violet-50 flex items-center justify-center flex-shrink-0">
-                  <IconWriters />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-800">Active Writers</div>
-                  <div className="text-[11px] text-gray-400">{activeWriters} of {writerList.length} active</div>
-                </div>
-              </div>
-              <div className="text-base font-bold text-gray-900 font-mono">{activeWriters}</div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* ── Quick actions ── */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Quick Actions</div>
-          {/* Link to /sales is hidden since Sales Log is disabled
-          <Link href="/sales">
-            <button className="w-full flex items-center justify-between rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-3.5 mb-4 font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98]">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0 text-white">
-                  <IconSale />
-                </div>
-                <div className="text-left">
-                  <div className="font-bold text-sm text-white">Log a Sale</div>
-                  <div className="text-[10px] text-blue-100 font-medium">Record a new ticket sale</div>
-                </div>
-              </div>
-              <div className="text-white/70"><IconChevronRight /></div>
-            </button>
-          </Link>
-          */}
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/entries/gross" className="w-full">
-              <button className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-3 font-semibold text-xs transition-colors active:scale-[0.98]">
-                <span className="text-emerald-600"><IconGross /></span>
-                Gross Entry
-              </button>
-            </Link>
-            <Link href="/entries/wins" className="w-full">
-              <button className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-3 font-semibold text-xs transition-colors active:scale-[0.98]">
-                <span className="text-amber-600"><IconWins /></span>
-                Wins Entry
-              </button>
-            </Link>
-          </div>
-        </div>
-
-        {/* ── My Writers ── */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">My Writers</div>
-            <Link href="/my-writers">
-              <button className="flex items-center gap-1 text-xs text-[#1d4ed8] font-semibold active:opacity-70">
-                Manage <IconChevronRight />
-              </button>
-            </Link>
-          </div>
-
-          {writersLoading ? (
-            <div className="space-y-2.5">
-              {[1, 2].map(i => <Skeleton key={i} className="h-16 rounded-2xl" />)}
-            </div>
-          ) : writerList.length === 0 ? (
-            <div className="rounded-2xl bg-white border border-dashed border-gray-200 py-8 text-center shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2">
-                <IconWriters />
-              </div>
-              <div className="text-sm font-semibold text-gray-700">No writers yet</div>
-              <Link href="/my-writers">
-                <button className="mt-1.5 text-xs text-[#1d4ed8] font-semibold">+ Add your first writer</button>
+            {unreadCount > 0 && (
+              <Link href="/notifications" aria-label={`${unreadCount} unread notifications`}
+                className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold hover:bg-white/25 transition-colors">
+                <Bell className="h-3.5 w-3.5" />
+                <span className="tabular-nums">{unreadCount}</span>
+                <span className="hidden sm:inline font-medium text-white/80">new</span>
               </Link>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {writerList.slice(0, 4).map(w => (
-                <div key={w.id} className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 shadow-sm"
-                  style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
-                  {/* Coloured left accent */}
-                  <div className="w-1 h-10 rounded-full flex-shrink-0" style={{ background: w.isActive ? "#10b981" : "#d1d5db" }} />
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                    style={{ background: avatarBg(w.fullName) }}>
-                    {w.fullName.split(" ").filter(Boolean).map((n: string) => n[0]).slice(0,2).join("").toUpperCase()}
+            )}
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+            {/* Balance */}
+            {agent ? (
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-white/70">
+                    <span className={cn("h-1.5 w-1.5 rounded-full", agentOwes ? "bg-amber-300" : companyOwes ? "bg-emerald-300" : "bg-white/60")} />
+                    {companyOwes ? "Company owes you" : agentOwes ? "You owe the company" : "Balance clear"}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-gray-900 truncate">{w.fullName}</div>
-                    <div className="text-xs font-mono text-gray-400">{w.fullCode}</div>
+                  <div className="mt-1 whitespace-nowrap font-mono text-2xl font-black tracking-tight tabular-nums">
+                    <span className="mr-1 text-sm font-normal opacity-70">GH₵</span>
+                    {Math.abs(balance).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </div>
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                    w.isActive ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"
-                  }`}>
-                    {w.isActive ? "Active" : "Inactive"}
-                  </span>
                 </div>
-              ))}
-              {writerList.length > 4 && (
-                <Link href="/my-writers">
-                  <div className="text-center text-xs text-[#1d4ed8] font-semibold py-2 active:opacity-70">
-                    +{writerList.length - 4} more writers →
-                  </div>
+                <Link href="/online-payment"
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3.5 py-2 text-xs font-bold text-blue-700 shadow-md hover:bg-blue-50 active:scale-95 transition-all">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  {agentOwes ? "Pay now" : "Deposit"}
                 </Link>
+              </div>
+            ) : agentLoading ? (
+              <Skeleton className="h-[84px] rounded-2xl bg-white/15" />
+            ) : null}
+
+            {/* Draws open on the chosen day */}
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
+              <div className="mb-2 flex items-center justify-between px-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">
+                  {isToday ? "Today's draws" : "Draws"}
+                </span>
+                <span className="text-[10px] text-white/60">{liveGames.length} open</span>
+              </div>
+              {liveGames.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {liveGames.map(g => {
+                    const isGrossClosed = new Date(g.closeAt) <= getServerNow() || g.status === "closed";
+                    return (
+                      <li key={g.id} className="flex items-center gap-3 rounded-xl bg-white/[0.07] px-2.5 py-2">
+                        {g.logoUrl ? (
+                          <img src={g.logoUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg bg-white object-contain p-1" />
+                        ) : (
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15"><Gamepad2 className="h-4 w-4" /></span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="shrink-0 rounded bg-white/10 px-1.5 py-px font-mono text-[10px] font-bold text-yellow-300">{g.eventNumber}</span>
+                            <span className="truncate text-sm font-bold">{g.name}</span>
+                          </div>
+                          <CountdownTimer closeAt={g.closeAt} status={g.status} className="mt-0.5 flex items-center gap-1 text-[10px] font-semibold text-white/70" />
+                        </div>
+                        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide",
+                          isGrossClosed ? "bg-amber-400/90 text-amber-950" : "bg-emerald-400 text-emerald-950")}>
+                          {isGrossClosed ? "GROSS CLOSED" : "LIVE"}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.05] px-3 py-3 text-xs font-medium text-white/60">
+                  <Gamepad2 className="h-4 w-4 text-white/40" />
+                  No draw open {isToday ? "right now" : "on this day"}
+                </div>
               )}
             </div>
-          )}
+          </div>
+        </div>
+      </section>
+
+      {/* ── The day at a glance ── */}
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-base font-bold tracking-tight">{isToday ? "Today at a glance" : "Day at a glance"}</h1>
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Live · refreshes every 15 seconds
+          </p>
+        </div>
+        <label className="relative inline-flex h-9 cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 text-xs font-semibold shadow-sm hover:bg-muted/50 transition-colors">
+          <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="sm:hidden">{new Date(selectedDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</span>
+          <span className="hidden sm:inline">{todayLabel}</span>
+          <input
+            type="date"
+            value={selectedDate}
+            max={today}
+            onChange={e => setSelectedDate(e.target.value || today)}
+            aria-label="Show figures for"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi icon={TrendingUp} tone="text-emerald-600 bg-emerald-500/10" label="Gross sales" live
+          value={fmtGHS(liveGross)}
+          sub={grossGap !== 0
+            ? <span className="text-amber-600 dark:text-amber-400 font-medium">Declared {fmtGHS(declaredGross)} · {grossGap > 0 ? "over" : "under"} by {fmtGHS(Math.abs(grossGap))}</span>
+            : "from tickets sold"} />
+        <Kpi icon={Ticket} tone="text-blue-600 bg-blue-500/10" label="Tickets sold"
+          value={liveTickets.toLocaleString("en-GB")} sub={`${liveDay?.totals.winningTickets ?? 0} winning`} />
+        <Kpi icon={Trophy} tone="text-amber-600 bg-amber-500/10" label="Wins claimed"
+          value={fmtGHS(todayWins)} sub={`${winsList.length} ${winsList.length === 1 ? "entry" : "entries"}`} />
+        <Kpi icon={Users} tone="text-violet-600 bg-violet-500/10" label="Active writers"
+          value={String(activeWriters)} sub={`of ${writerList.length} registered`} />
+      </div>
+
+      {/* ── Quick actions ── */}
+      <nav aria-label="Quick actions" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <QuickAction href="/entries/gross" icon={TrendingUp} tone="text-emerald-600 bg-emerald-500/10" title="Gross entry" sub="Record a writer's sales" />
+        <QuickAction href="/entries/wins" icon={Trophy} tone="text-amber-600 bg-amber-500/10" title="Wins entry" sub="Record wins paid out" />
+        <QuickAction href="/ticket-lookup" icon={ScanLine} tone="text-blue-600 bg-blue-500/10" title="Validate ticket" sub="Scan or look one up" />
+        <QuickAction href="/my-writers" icon={Plus} tone="text-violet-600 bg-violet-500/10" title="Writers" sub="Add or manage" />
+      </nav>
+
+      {/* ── Detail: figures on the left, people and activity on the right ── */}
+      <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+        <div className="space-y-5 lg:col-span-2 min-w-0">
+          {/* Live agency figures, in the platform's waterfall. */}
+          <MySummarySection title="My Agency · Live" className="rounded-2xl shadow-sm" />
+          {/* Commission earned on the writers' sales, and the way to ask for it. */}
+          <AgentCommissionWallet agencyCode={agent?.fullCode} agencyName={agent?.agencyName ?? null} agentName={user?.fullName} />
         </div>
 
-        {/* ── Recent Activity ── */}
-        {recentActivity.length > 0 && (
-          <div>
-            <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Today's Activity</div>
-            <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-              {recentActivity.map((item, idx) => {
-                const s = actStyle[item.type];
-                return (
-                  <div key={item.id} className={`flex items-center gap-3 px-4 py-3.5 ${idx > 0 ? "border-t border-gray-50" : ""}`}>
-                    {/* Coloured dot */}
-                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.dot, boxShadow: `0 0 6px ${s.dot}80` }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-gray-800 truncate">{item.label}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{relTime(item.time)}</div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-sm font-black font-mono tabular-nums text-gray-800">
-                        <span className="font-normal text-gray-400 text-xs mr-0.5">GH₵</span>
-                        {Number(item.amount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <div className="space-y-5 min-w-0">
+          {/* ── Writers ── */}
+          <Panel title="My writers" icon={Users}
+            action={<Link href="/my-writers" className="inline-flex items-center gap-0.5 text-xs font-semibold text-primary hover:underline">Manage <ChevronRight className="h-3.5 w-3.5" /></Link>}>
+            {writersLoading ? (
+              <div className="space-y-2 p-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-11 rounded-xl" />)}</div>
+            ) : writerList.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <Users className="mx-auto h-7 w-7 text-muted-foreground/40" />
+                <div className="mt-2 text-sm font-semibold">No writers yet</div>
+                <Link href="/my-writers" className="mt-1 inline-block text-xs font-semibold text-primary">+ Add your first writer</Link>
+              </div>
+            ) : (
+              <>
+                <ul className="divide-y">
+                  {writerList.slice(0, 5).map(w => (
+                    <li key={w.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                        style={{ background: avatarBg(w.fullName) }}>
+                        {w.fullName.split(" ").filter(Boolean).map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
                       </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg" style={{ background: s.badge.bg, color: s.badge.color }}>
-                        {s.label}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold">{w.fullName}</div>
+                        <div className="truncate font-mono text-[11px] text-muted-foreground">{w.fullCode}</div>
+                      </div>
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", w.isActive ? "bg-emerald-500" : "bg-muted-foreground/30")}
+                        title={w.isActive ? "Active" : "Inactive"} aria-label={w.isActive ? "Active" : "Inactive"} />
+                    </li>
+                  ))}
+                </ul>
+                {writerList.length > 5 && (
+                  <Link href="/my-writers" className="block border-t px-4 py-2.5 text-center text-xs font-semibold text-primary hover:bg-muted/40">
+                    View all {writerList.length} writers
+                  </Link>
+                )}
+              </>
+            )}
+          </Panel>
 
+          {/* ── Activity ── */}
+          <Panel title={isToday ? "Today's activity" : "Activity"} icon={Activity}>
+            {recentActivity.length === 0 ? (
+              <p className="px-4 py-8 text-center text-xs text-muted-foreground">No entries recorded {isToday ? "yet today" : "on this day"}.</p>
+            ) : (
+              <ul className="divide-y">
+                {recentActivity.map(item => {
+                  const st = actStyle[item.type];
+                  return (
+                    <li key={item.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", st.dot)} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold">{item.label}</div>
+                        <div className="text-[11px] text-muted-foreground">{relTime(item.time)}</div>
+                      </div>
+                      <span className="whitespace-nowrap text-sm font-bold tabular-nums">{fmtGHS(item.amount)}</span>
+                      <span className={cn("shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold", st.chip)}>{st.label}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Panel>
+        </div>
       </div>
     </div>
+  );
+}
+
+// ── Building blocks ──────────────────────────────────────────
+function Kpi({ icon: Icon, tone, label, value, sub, live }: {
+  icon: LucideIcon; tone: string; label: string; value: string; sub?: React.ReactNode; live?: boolean;
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border bg-card p-3.5 sm:p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", tone)}><Icon className="h-4 w-4" /></span>
+        {live && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+          </span>
+        )}
+      </div>
+      <div className="mt-2.5 sm:mt-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-0.5 truncate text-lg sm:text-xl font-black tabular-nums leading-tight">{value}</div>
+      {sub && <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{sub}</div>}
+    </div>
+  );
+}
+
+function QuickAction({ href, icon: Icon, tone, title, sub }: { href: string; icon: LucideIcon; tone: string; title: string; sub: string }) {
+  return (
+    <Link href={href}
+      className="group flex min-w-0 items-center gap-2.5 sm:gap-3 rounded-2xl border bg-card px-3 sm:px-3.5 py-3 shadow-sm transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-md active:scale-[0.98]">
+      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", tone)}><Icon className="h-4 w-4" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] sm:text-sm font-bold">{title}</span>
+        <span className="hidden sm:block truncate text-[11px] text-muted-foreground">{sub}</span>
+      </span>
+      <ChevronRight className="hidden sm:block h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
+function Panel({ title, icon: Icon, action, children }: { title: string; icon: LucideIcon; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+      <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
+        <h2 className="flex items-center gap-2 text-sm font-bold"><Icon className="h-4 w-4 text-muted-foreground" />{title}</h2>
+        {action}
+      </header>
+      {children}
+    </section>
   );
 }

@@ -352,74 +352,87 @@ export function TicketLookup() {
     return d.toISOString().slice(0, 10);
   })();
 
+  const dayLabel = describeDay(date);
+
   return (
-    <div className="p-4 sm:p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-4">
       {/* ── Header ── */}
-      <div className="flex flex-col gap-1">
-        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Audit</div>
-        <h1 className="text-2xl font-black tracking-tight">Ticket Lookup</h1>
-        <p className="text-xs text-muted-foreground font-medium max-w-3xl">
-          Scan or type a ticket to validate it, or browse a day&apos;s book by category. Pick a ticket to see its
-          receipt and every state it has passed through.
-        </p>
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight leading-tight">Ticket Lookup</h1>
+          <p className="text-xs text-muted-foreground font-medium">
+            Validate a ticket by scan or number, or browse a day&apos;s book by status.
+          </p>
+        </div>
       </div>
 
-      {/* ── Search + day ── */}
-      <div className="rounded-2xl border bg-card p-3 shadow-sm space-y-3">
-        <div className="flex flex-col lg:flex-row gap-2">
+      {/* ── Toolbar: search · day · status ── */}
+      <div className="rounded-2xl border bg-card shadow-sm divide-y">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3 p-3">
           <form onSubmit={submit} className="flex min-w-0 flex-1 gap-2">
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 autoFocus
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Scan a QR, or type a ticket number, writer or numbers"
-                className="pl-9 h-10 font-mono"
+                aria-label="Ticket number, writer or numbers"
+                className="pl-9 h-10 font-mono text-sm"
               />
             </div>
-            <Button type="submit" className="h-10" disabled={!input.trim() || scan.isFetching}>
+            <Button type="submit" className="h-10 shrink-0" disabled={!input.trim() || scan.isFetching}>
               {scan.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               <span className="ml-2 hidden sm:inline">Validate</span>
             </Button>
             {(filter || scanQuery) && (
-              <Button type="button" variant="ghost" className="h-10" onClick={() => { setInput(""); setFilter(""); setScanQuery(null); }}>
+              <Button type="button" variant="ghost" className="h-10 shrink-0 px-3" onClick={() => { setInput(""); setFilter(""); setScanQuery(null); }}>
                 Clear
               </Button>
             )}
           </form>
 
           {/* The day being read. Hidden on Flagged, which is a rolling 30-day scan. */}
-          <div className={cn("flex flex-wrap items-center gap-1.5", category === "flagged" && "hidden")}>
-            <div className="inline-flex rounded-lg border bg-muted/40 p-0.5 h-10 items-center">
-              {[
-                { label: "Today", value: today },
-                { label: "Yesterday", value: yesterday },
-                { label: "All dates", value: "" },
-              ].map((d) => (
-                <button key={d.label} type="button" onClick={() => setDate(d.value)}
-                  className={cn("text-[11px] font-semibold px-3 h-8 rounded-md transition-colors",
-                    date === d.value ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                  {d.label}
-                </button>
-              ))}
+          {category !== "flagged" && (
+            <div className="flex items-center gap-2 lg:border-l lg:pl-3">
+              <span className="hidden xl:inline text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Day</span>
+              <div role="group" aria-label="Day" className="inline-flex flex-1 lg:flex-none rounded-lg border bg-muted/40 p-0.5 h-10 items-center">
+                {[
+                  { label: "Today", value: today },
+                  { label: "Yesterday", value: yesterday },
+                  { label: "All dates", value: "" },
+                ].map((d) => (
+                  <button key={d.label} type="button" onClick={() => setDate(d.value)} aria-pressed={date === d.value}
+                    className={cn("flex-1 lg:flex-none whitespace-nowrap text-xs font-semibold px-2.5 sm:px-3 h-8 rounded-md transition-colors",
+                      date === d.value ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <DayPicker value={date} max={today} onChange={setDate}
+                custom={!!date && date !== today && date !== yesterday} />
             </div>
-            <div className="relative">
-              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)}
-                aria-label="Show tickets sold on" className="h-10 w-[11.5rem] pl-9" />
-            </div>
-          </div>
+          )}
         </div>
-        {scan.isError && <p className="text-sm text-destructive">{(scan.error as Error).message}</p>}
+        {scan.isError && <p className="px-3 py-2 text-sm text-destructive">{(scan.error as Error).message}</p>}
 
-        {/* Categories */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {CATEGORIES.map((c) => (
-            <CategoryTab key={c.key} label={c.label} count={counts[c.key]} active={category === c.key} onClick={() => setCategory(c.key)} />
-          ))}
-          {canSeeFraud && (
-            <CategoryTab label="Flagged" count={flaggedCount} active={category === "flagged"} danger onClick={() => setCategory("flagged")} />
+        {/* Status counters for the day */}
+        <div className="p-3">
+          <div className={cn("grid grid-cols-3 gap-2", canSeeFraud ? "sm:grid-cols-4 lg:grid-cols-7" : "sm:grid-cols-6")}>
+            {CATEGORIES.map((c) => (
+              <StatusTile key={c.key} label={c.label} count={counts[c.key]} dot={CATEGORY_DOT[c.key]}
+                active={category === c.key} onClick={() => setCategory(c.key)} />
+            ))}
+            {canSeeFraud && (
+              <StatusTile label="Flagged" count={flaggedCount} dot="bg-red-600" danger
+                active={category === "flagged"} onClick={() => setCategory("flagged")} />
+            )}
+          </div>
+          {category !== "flagged" && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Counts for <span className="font-semibold text-foreground">{dayLabel}</span>
+              {filter ? <> matching <span className="font-mono">“{filter}”</span></> : null}
+            </p>
           )}
         </div>
       </div>
@@ -679,15 +692,27 @@ function PagerButton({ label, disabled, onClick, children }: { label: string; di
   );
 }
 
-function CategoryTab({
+const CATEGORY_DOT: Record<(typeof CATEGORIES)[number]["key"], string> = {
+  all: "bg-slate-500",
+  active: "bg-blue-500",
+  won: "bg-amber-500",
+  redeemed: "bg-emerald-500",
+  lost: "bg-slate-400",
+  voided: "bg-red-500",
+};
+
+/** One status counter: label over its count, the whole tile is the filter. */
+function StatusTile({
   label,
   count,
+  dot,
   active,
   danger,
   onClick,
 }: {
   label: string;
   count?: number;
+  dot: string;
   active: boolean;
   danger?: boolean;
   onClick: () => void;
@@ -696,33 +721,58 @@ function CategoryTab({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+        "flex min-w-0 flex-col items-start gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors",
         active
           ? danger
-            ? "border-red-500 bg-red-500 text-white"
-            : "border-foreground bg-foreground text-background"
-          : danger
-            ? "border-red-300/60 text-red-600 dark:text-red-400 hover:bg-red-500/10"
-            : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            ? "border-red-500 bg-red-500/[0.07] ring-1 ring-red-500"
+            : "border-primary bg-primary/[0.07] ring-1 ring-primary"
+          : "bg-background hover:bg-muted/50 hover:border-foreground/20",
       )}
     >
-      {label}
-      {count !== undefined && (
-        <span
-          className={cn(
-            "rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
-            active
-              ? "bg-background/20 text-inherit"
-              : danger && count > 0
-                ? "bg-red-500/15 text-red-700 dark:text-red-300"
-                : "bg-muted text-muted-foreground",
-          )}
-        >
-          {count.toLocaleString()}
-        </span>
-      )}
+      <span className={cn(
+        "flex w-full min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider",
+        active ? (danger ? "text-red-700 dark:text-red-300" : "text-primary") : "text-muted-foreground",
+      )}>
+        <span className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
+        <span className="truncate">{label}</span>
+      </span>
+      <span className={cn(
+        "text-xl font-black tabular-nums leading-none",
+        danger && (count ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-foreground",
+      )}>
+        {count === undefined ? "–" : count.toLocaleString()}
+      </span>
     </button>
+  );
+}
+
+/**
+ * A compact date chip. The native picker opens over it, so the browser's own
+ * calendar (and its keyboard handling) is kept without a wide date field.
+ */
+function DayPicker({ value, max, onChange, custom }: { value: string; max: string; onChange: (v: string) => void; custom: boolean }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const label = value ? format(new Date(`${value}T12:00:00Z`), "d MMM yyyy") : "Pick date";
+  return (
+    <div className={cn(
+      "relative inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-xs font-semibold transition-colors",
+      custom ? "border-primary bg-primary/[0.07] text-primary" : "bg-background text-muted-foreground hover:text-foreground",
+    )}>
+      <CalendarDays className="h-4 w-4 shrink-0" />
+      <span className="whitespace-nowrap tabular-nums">{label}</span>
+      <input
+        ref={ref}
+        type="date"
+        value={value}
+        max={max}
+        onChange={(e) => onChange(e.target.value)}
+        onClick={() => { try { ref.current?.showPicker?.(); } catch { /* not supported: the field still takes typing */ } }}
+        aria-label="Show tickets sold on"
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      />
+    </div>
   );
 }
 

@@ -41,7 +41,7 @@ export function AgentCommissionWallet({ agencyCode, agencyName, agentName }: { a
   if (!w) return null;
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm space-y-4">
+    <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Commission wallet</div>
