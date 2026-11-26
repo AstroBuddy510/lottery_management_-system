@@ -1,6 +1,6 @@
 import { AgentCommissionWallet } from "@/components/agent-commission-wallet";
-import { useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { getServerNow } from "../lib/time-sync";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
@@ -118,6 +118,38 @@ export function AgentDashboard() {
   const [selectedDate, setSelectedDate] = useState(today);
   const firstName = user?.fullName?.split(" ")[0] ?? "Agent";
   const todayLabel = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+
+  /*
+   * The profile menu's "Wallet" lands here as /dashboard?wallet=1: open the
+   * folded wallet, bring it into view, and tidy the address so a refresh or
+   * a second tap behaves the same.
+   */
+  const [walletOpen, setWalletOpen] = useState(false);
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const [scrollToWallet, setScrollToWallet] = useState(false);
+  useEffect(() => {
+    if (!new URLSearchParams(search).has("wallet")) return;
+    setWalletOpen(true);
+    setScrollToWallet(true);
+    navigate("/dashboard", { replace: true });
+  }, [search, navigate]);
+  // The wallet appears once its figures have loaded; wait for it (up to a few
+  // seconds), then bring it into view.
+  useEffect(() => {
+    if (!scrollToWallet) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const el = document.getElementById("commission-wallet");
+      if (el || ++tries > 40) {
+        window.clearInterval(timer);
+        setScrollToWallet(false);
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        el?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      }
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [scrollToWallet]);
 
   const handlePhotoChange = async (file: File) => {
     setPhotoUploading(true);
@@ -405,11 +437,14 @@ export function AgentDashboard() {
         <div className="space-y-5 lg:col-span-2 min-w-0">
           {/* Live agency figures, in the platform's waterfall. */}
           <MySummarySection title="My Agency · Live" className="rounded-2xl shadow-sm" />
-          {/* Commission earned on the writers' sales, and the way to ask for it. */}
-          <AgentCommissionWallet agencyCode={agent?.fullCode} agencyName={agent?.agencyName ?? null} agentName={user?.fullName} />
         </div>
 
         <div className="space-y-5 min-w-0">
+          {/* Commission earned on the writers' sales, and the way to ask for it.
+              Folded to its icon until tapped. */}
+          <AgentCommissionWallet id="commission-wallet" collapsible open={walletOpen} onOpenChange={setWalletOpen}
+            agencyCode={agent?.fullCode} agencyName={agent?.agencyName ?? null} agentName={user?.fullName} />
+
           {/* ── Writers ── */}
           <Panel title="My writers" icon={Users}
             action={<Link href="/my-writers" className="inline-flex items-center gap-0.5 text-xs font-semibold text-primary hover:underline">Manage <ChevronRight className="h-3.5 w-3.5" /></Link>}>

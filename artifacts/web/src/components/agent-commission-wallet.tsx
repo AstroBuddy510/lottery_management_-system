@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgePercent, ChevronDown, ChevronUp, FileText, Loader2 } from "lucide-react";
+import { BadgePercent, ChevronDown, ChevronUp, FileText, Loader2, Wallet as WalletIcon } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,7 +27,13 @@ const KEY = ["agent-commission"] as const;
  * what has been paid, and a way to ask for the rest. Commission is owed by
  * the company - it is not money the agent already holds.
  */
-export function AgentCommissionWallet({ agencyCode, agencyName, agentName }: { agencyCode?: string; agencyName?: string | null; agentName?: string }) {
+export function AgentCommissionWallet({
+  agencyCode, agencyName, agentName, collapsible, open, onOpenChange, id,
+}: {
+  agencyCode?: string; agencyName?: string | null; agentName?: string;
+  /** Show only the wallet icon and title until tapped; the figures stay hidden. */
+  collapsible?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void; id?: string;
+}) {
   const q = useQuery({ queryKey: KEY, queryFn: apiGet<Wallet>("/agent/commission"), refetchInterval: 60_000 });
   const [requestOpen, setRequestOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -40,15 +48,16 @@ export function AgentCommissionWallet({ agencyCode, agencyName, agentName }: { a
   const w = q.data;
   if (!w) return null;
 
-  return (
-    <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-4">
+  const body = (
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Commission wallet</div>
+          {/* Folded, the bar above already names the wallet. */}
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">{collapsible ? "Available to request" : "Commission wallet"}</div>
           <div className="mt-1 text-2xl font-black font-mono text-gray-900">{ghs(w.available)}</div>
-          <div className="text-[11px] text-gray-500">available to request · owed to you by the company</div>
+          <div className="text-[11px] text-gray-500">{collapsible ? "owed to you by the company" : "available to request · owed to you by the company"}</div>
         </div>
-        <span className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><BadgePercent className="w-5 h-5" /></span>
+        {!collapsible && <span className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><BadgePercent className="w-5 h-5" /></span>}
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
         {[
@@ -107,9 +116,54 @@ export function AgentCommissionWallet({ agencyCode, agencyName, agentName }: { a
         </div>
       )}
 
+    </div>
+  );
+
+  const dialogs = (
+    <>
       {requestOpen && <RequestDialog available={w.available} onClose={() => { setRequestOpen(false); qc.invalidateQueries({ queryKey: KEY }); }} />}
       {statement && <StatementDialog a={{ id: w.agentId, code: agencyCode ?? "My agency", agencyName: agencyName ?? null, agentName: agentName ?? "" }} onClose={() => setStatement(false)} />}
-    </div>
+    </>
+  );
+
+  if (!collapsible) {
+    return (
+      <div id={id} className="bg-card border rounded-2xl p-5 shadow-sm">
+        {body}
+        {dialogs}
+      </div>
+    );
+  }
+
+  // Folded to an icon and a title: nothing about the money shows until the
+  // agent taps it, which keeps the home screen short.
+  return (
+    <Collapsible id={id} open={open} onOpenChange={onOpenChange}
+      className="bg-card border rounded-2xl shadow-sm overflow-hidden scroll-mt-4">
+      <CollapsibleTrigger asChild>
+        <button type="button"
+          className="group w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          <span className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <WalletIcon className="w-5 h-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold">Commission wallet</span>
+            <span className="block text-[11px] text-muted-foreground">
+              <span className="group-data-[state=open]:hidden">Tap to view your commission</span>
+              <span className="hidden group-data-[state=open]:inline">Tap to hide</span>
+            </span>
+          </span>
+          {w.pending > 0 && (
+            <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-700">Request pending</span>
+          )}
+          <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className={cn("overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up")}>
+        <div className="border-t px-5 pb-5 pt-4">{body}</div>
+      </CollapsibleContent>
+      {dialogs}
+    </Collapsible>
   );
 }
 
