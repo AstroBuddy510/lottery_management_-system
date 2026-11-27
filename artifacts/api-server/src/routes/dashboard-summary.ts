@@ -336,16 +336,22 @@ router.get("/dashboard/my-summary", requireAuth, async (req, res) => {
   for (const [writerId, t] of unified) {
     if (!writerIds.has(writerId)) continue;
 
-    // A writer sees only what they sold themselves; their agent's entries on
-    // their behalf belong to the agent's view, not theirs.
-    const gross = role === "writer" ? t.ticketGross : t.gross;
-    const wins = role === "writer" ? t.ticketWins : t.wins;
+    /*
+     * Everything sold under this writer's code for the draw: their portal
+     * tickets and any gross or wins their agent entered for them. Counting
+     * only the tickets left a writer whose agent records their booklet sales
+     * looking at "no sales" for a draw they had sold and settled - and it
+     * was not what their settlement is worked out on. The split below still
+     * says which part came from where.
+     */
+    const gross = t.gross;
+    const wins = t.wins;
     if (gross === 0 && wins === 0) continue;
 
     addWriter(totals, gross, wins, commissionPct, reservePct);
-    sourceSplit.entryGross += role === "writer" ? 0 : t.entryGross;
+    sourceSplit.entryGross += t.entryGross;
     sourceSplit.ticketGross += t.ticketGross;
-    sourceSplit.entryWins += role === "writer" ? 0 : t.entryWins;
+    sourceSplit.entryWins += t.entryWins;
     sourceSplit.ticketWins += t.ticketWins;
     sourceSplit.ticketCount += t.ticketCount;
 
@@ -356,7 +362,7 @@ router.get("/dashboard/my-summary", requireAuth, async (req, res) => {
       writerCode: m?.fullCode ?? "—",
       gross,
       wins,
-      entryGross: role === "writer" ? 0 : t.entryGross,
+      entryGross: t.entryGross,
       ticketGross: t.ticketGross,
       ticketCount: t.ticketCount,
     });

@@ -102,15 +102,21 @@ function TicketItem({ t, active, onOpen }: { t: TicketRow; active: boolean; onOp
       <button
         type="button"
         onClick={onOpen}
-        className="w-full text-left py-3 flex items-center gap-3 hover:bg-muted/40 transition-colors rounded-lg px-1 -mx-1"
+        className="w-full text-left py-3 flex items-center gap-3 hover:bg-muted/40 transition-colors rounded-xl px-2"
       >
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-xs font-semibold truncate">{t.ticketNumber}</span>
             <StatusBadge status={t.status} />
           </div>
-          <div className="font-mono font-bold text-primary text-sm tracking-wide break-words">
-            {t.numbers.split(",").map((n) => n.trim()).join(" · ")}
+          <div className="flex flex-wrap gap-1">
+            {t.numbers.split(",").map((n) => n.trim()).filter(Boolean).map((n, i) => (
+              <span key={`${n}-${i}`}
+                className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 font-mono text-[11px] font-bold ${
+                  active ? "bg-primary/10 text-primary" : "bg-muted text-foreground/80"}`}>
+                {n.padStart(2, "0")}
+              </span>
+            ))}
           </div>
           <div className="text-[11px] text-muted-foreground truncate">
             {t.gameName} · {t.betTypeName}
@@ -177,12 +183,20 @@ export function WriterTickets() {
   const pastData = past.data;
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-xl font-bold tracking-tight">My Tickets</h1>
+    <div className="mx-auto w-full max-w-2xl space-y-5">
+      <header className="flex items-end justify-between gap-3 px-1">
+        <div>
+          <h1 className="text-xl font-black tracking-tight">My Tickets</h1>
+          <p className="text-xs text-muted-foreground">Active bets on top; drawn tickets folded below.</p>
+        </div>
+        <Button asChild size="sm" className="h-9 rounded-xl font-semibold">
+          <Link href="/writer/place-bet"><Ticket className="mr-1.5 h-4 w-4" /> New bet</Link>
+        </Button>
+      </header>
 
       {/* ── Active: waiting for their draw, nearest draw first ── */}
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="overflow-hidden rounded-2xl border-0 shadow-sm ring-1 ring-border/70">
+        <CardHeader className="border-b bg-gradient-to-r from-primary/[0.06] to-transparent pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Ticket className="h-4 w-4 text-primary" />
             Active Tickets
@@ -192,7 +206,7 @@ export function WriterTickets() {
           </CardTitle>
           <CardDescription className="text-xs">Waiting for their draw. Tap a ticket to see the full receipt.</CardDescription>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6">
+        <CardContent className="px-3 pt-2 sm:px-5">
           {active.isLoading ? (
             <div className="py-10 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
           ) : active.isError ? (
@@ -205,11 +219,21 @@ export function WriterTickets() {
               </Button>
             </div>
           ) : (
-            <ul className="divide-y divide-border/60">
-              {activeRows.map((t) => (
-                <TicketItem key={t.id} t={t} active onOpen={() => setOpenTicket(t.id)} />
-              ))}
-            </ul>
+            /* Its own scroll: a busy day's active tickets no longer stretch
+               the page - the list keeps a steady height and scrolls inside. */
+            <div className="relative">
+              <ul
+                aria-label="Active tickets"
+                className="max-h-[min(30rem,58vh)] divide-y divide-border/60 overflow-y-auto overscroll-contain thin-scroll -mx-1 px-1"
+              >
+                {activeRows.map((t) => (
+                  <TicketItem key={t.id} t={t} active onOpen={() => setOpenTicket(t.id)} />
+                ))}
+              </ul>
+              {activeRows.length > 5 && (
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-card to-transparent" />
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

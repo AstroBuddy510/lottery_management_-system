@@ -17,6 +17,8 @@ export interface LiveGame {
   status: "offline" | "live" | "closed";
   goLiveAt: string;
   closeAt: string;
+  /** Comma-separated, once the draw has been made. */
+  winningNumbers?: string | null;
 }
 
 interface Totals {

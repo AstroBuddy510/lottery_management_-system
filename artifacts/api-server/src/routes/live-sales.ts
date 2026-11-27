@@ -92,6 +92,8 @@ router.get("/live-sales/games", requireAuth, async (_req, res) => {
       status: gamesTable.status,
       goLiveAt: gamesTable.goLiveAt,
       closeAt: gamesTable.closeAt,
+      // Shown beside a closed draw's figures once it has been drawn.
+      winningNumbers: gamesTable.winningNumbers,
     })
     .from(gamesTable)
     .where(
