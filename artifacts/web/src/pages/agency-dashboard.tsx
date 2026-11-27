@@ -458,10 +458,12 @@ function LastPaymentBadge({ payment }: { payment?: Payment }) {
  * agency's financial detail, so these stop their click from reaching it.
  */
 function RosterBadges({
-  agent, onOpen,
+  agent, onOpen, compact,
 }: {
   agent: AgentWithUser & { writerCount?: number; activeWriterCount?: number; terminalCount?: number };
   onOpen: (agent: AgentWithUser, tab: "writers" | "terminals") => void;
+  /** One tight row for the agency card; the "without" note becomes a dot. */
+  compact?: boolean;
 }) {
   const writers = agent.writerCount ?? 0;
   const terminals = agent.terminalCount ?? 0;
@@ -478,12 +480,28 @@ function RosterBadges({
       onClick={e => { e.stopPropagation(); onOpen(agent, kind); }}
       title={title}
       aria-label={title}
-      className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+      className={compact
+        ? "relative flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-slate-200 bg-white hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+        : "flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-100 hover:border-slate-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"}
     >
-      <Icon className="w-3.5 h-3.5 text-slate-500" />
-      <span className="text-xs font-bold text-slate-700 tabular-nums">{count}</span>
+      <Icon className={compact ? "w-3 h-3 text-slate-500" : "w-3.5 h-3.5 text-slate-500"} />
+      <span className={compact ? "text-[11px] font-bold text-slate-700 tabular-nums" : "text-xs font-bold text-slate-700 tabular-nums"}>{count}</span>
+      {compact && kind === "terminals" && unequipped > 0 && (
+        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white"
+          title={`${unequipped} writer${unequipped === 1 ? " has" : "s have"} no terminal`} />
+      )}
     </button>
   );
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-1 shrink-0">
+        {badge("writers", Users, writers, `${writers} writer${writers === 1 ? "" : "s"} — click for the list`)}
+        {badge("terminals", Smartphone, terminals,
+          `${terminals} terminal${terminals === 1 ? "" : "s"} issued${unequipped > 0 ? ` · ${unequipped} writer${unequipped === 1 ? "" : "s"} without one` : ""} — click for the list`)}
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
@@ -698,125 +716,163 @@ function GridView({
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {agents.map(a => {
-        const status = getStatus(a);
-        const cfg = STATUS_CFG[status];
-        const debt = parseFloat(a.outstandingDebt);
-        const photo = (a.user as { profilePicture?: string | null }).profilePicture;
-        const lastPayment = lastPaymentsMap[a.id];
-        return (
-          <div
-            key={a.id}
-            onClick={() => onSelect(a)}
-            className={`group min-w-0 bg-white border border-l-4 ${cfg.border} rounded-2xl p-4 shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:-translate-y-0.5 flex flex-col justify-between`}
-          >
-            <div>
-              {/* Header row */}
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <button
-                  type="button"
-                  onClick={e => { e.stopPropagation(); onPhotoClick(a); }}
-                  className="relative group/icon flex-shrink-0 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-                  aria-label="Change agency profile photo"
-                  title="Click to change photo"
-                >
-                  {photo ? (
-                    <img
-                      src={photo}
-                      alt={a.agencyName ?? a.user.fullName}
-                      className="w-12 h-12 rounded-2xl object-cover shadow-sm border border-slate-100"
-                    />
-                  ) : (
-                    <AgencyIcon status={status} size="md" />
-                  )}
-                  <span className="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/40 opacity-0 group-hover/icon:opacity-100 transition-opacity">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                      <circle cx="12" cy="13" r="4"/>
-                    </svg>
-                  </span>
-                </button>
-                <span className={`text-[10px] font-bold px-2 py-1 rounded-full border whitespace-nowrap ${cfg.badge}`}>
-                  {status === "active-clear" ? "Clear" : status === "active-debt" ? "Has Debt" : "Closed"}
-                </span>
-              </div>
-
-              {/* Agency name */}
-              <h3 className="font-bold text-slate-800 text-base leading-tight mb-0.5 group-hover:text-slate-900 truncate">
-                {a.agencyName ?? a.user.fullName}
-              </h3>
-              <code className="text-xs text-slate-400 font-mono">{a.fullCode}</code>
-
-              {/* Location */}
-              {a.location && (
-                <div className="flex items-center gap-1 mt-2 text-xs text-slate-500 truncate font-medium">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                  {a.location}
-                </div>
-              )}
-
-              {/* Who works here and what they are holding. */}
-              <div className="mt-3">
-                <RosterBadges agent={a} onOpen={onOpenRoster} />
-              </div>
-
-              {/* Commission the company owes the agency, earned on its writers'
-                  sales. In the top block so it lines up across a row. */}
-              <div className="mt-3">
-                <CommissionWalletBadge wallet={walletMap[a.id]} loading={walletsLoading} />
-              </div>
-            </div>
-
-            <div className="mt-3 space-y-3">
-              {/* Last Transaction Box */}
-              <div className="bg-slate-50/75 p-2.5 rounded-xl border border-slate-100/50">
-                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-1">
-                  Last Transaction
-                </div>
-                <LastPaymentBadge payment={lastPayment} />
-              </div>
-
-              {/* Debt section */}
-              <div className={`pt-3 border-t ${debt < 0 ? "border-amber-100" : "border-slate-100"}`}>
-                {debt < 0 ? (
-                  <>
-                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                      <span className="text-xs text-slate-500">Agent owes Company</span>
-                      <AgingBadge debtSince={a.debtSince} debt={a.outstandingDebt} />
-                    </div>
-                    <div className="text-base font-bold text-amber-600 mt-0.5 font-mono truncate">
-                      GHS {Math.abs(debt).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
-                    </div>
-                  </>
-                ) : debt > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">Company owes Agent</span>
-                    </div>
-                    <div className="text-base font-bold text-emerald-600 mt-0.5 font-mono truncate">
-                      GHS {debt.toLocaleString("en-GH", { minimumFractionDigits: 2 })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-semibold">
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><polyline points="20 6 9 17 4 12"/></svg>
-                    Clear Balance
-                  </div>
-                )}
-              </div>
-
-              {/* Agent info footer */}
-              <div className="pt-2.5 border-t border-slate-100 flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 flex-shrink-0">
-                  {a.user.fullName.charAt(0)}
-                </div>
-                <span className="text-xs text-slate-500 truncate font-semibold">{a.user.fullName}</span>
-              </div>
-            </div>
-          </div>
-        );
-      })}
+      {agents.map(a => (
+        <AgencyCard
+          key={a.id}
+          a={a}
+          lastPayment={lastPaymentsMap[a.id]}
+          wallet={walletMap[a.id]}
+          walletsLoading={walletsLoading}
+          onSelect={onSelect}
+          onPhotoClick={onPhotoClick}
+          onOpenRoster={onOpenRoster}
+        />
+      ))}
     </div>
+  );
+}
+
+/**
+ * One agency, in three bands that line up across a row:
+ *   identity  - photo, name, code and agent, location, status
+ *   money     - balance with the company, commission accrued
+ *   activity  - team and terminals, last transaction
+ * Every band keeps its height whatever the data, so cards side by side align
+ * line for line.
+ */
+function AgencyCard({
+  a, lastPayment, wallet, walletsLoading, onSelect, onPhotoClick, onOpenRoster,
+}: {
+  a: AgentWithUser;
+  lastPayment?: Payment;
+  wallet?: CommissionWallet;
+  walletsLoading?: boolean;
+  onSelect: (a: AgentWithUser) => void;
+  onPhotoClick: (a: AgentWithUser) => void;
+  onOpenRoster: (a: AgentWithUser, tab: "writers" | "terminals") => void;
+}) {
+  const status = getStatus(a);
+  const cfg = STATUS_CFG[status];
+  const debt = parseFloat(a.outstandingDebt);
+  const photo = (a.user as { profilePicture?: string | null }).profilePicture;
+  const days = debt < 0 && a.debtSince ? debtDays(a.debtSince) ?? 0 : null;
+  const agingTone = days === null ? "" : days < 7 ? "text-emerald-600" : days < 30 ? "text-amber-600" : "text-rose-600";
+
+  return (
+    <div
+      onClick={() => onSelect(a)}
+      className={`@container group min-w-0 bg-white border border-l-4 ${cfg.border} rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden`}
+    >
+      {/* The card reads its own width, not the window's: four to a row on a
+          laptop is narrower than one to a row on a phone. Below 16rem the
+          figures move under their labels and the status word gives way to the
+          coloured edge and icon, which already say it. */}
+      {/* ── Identity ── */}
+      <div className="flex items-start gap-2.5 @min-[16rem]:gap-3 p-3 pb-2.5 @min-[16rem]:p-4 @min-[16rem]:pb-3">
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onPhotoClick(a); }}
+          className="relative group/icon flex-shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          aria-label="Change agency profile photo"
+          title="Click to change photo"
+        >
+          {photo ? (
+            <img src={photo} alt={a.agencyName ?? a.user.fullName} className="w-9 h-9 @min-[16rem]:w-10 @min-[16rem]:h-10 rounded-xl object-cover border border-slate-100" />
+          ) : (
+            <span className={`w-9 h-9 @min-[16rem]:w-10 @min-[16rem]:h-10 rounded-xl ${cfg.iconBg} flex items-center justify-center shadow-sm`}>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+              </svg>
+            </span>
+          )}
+          <span className="absolute inset-0 rounded-xl flex items-center justify-center bg-black/40 opacity-0 group-hover/icon:opacity-100 transition-opacity">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+            </svg>
+          </span>
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-bold text-slate-800 text-sm leading-5 truncate group-hover:text-slate-900">
+              {a.agencyName ?? a.user.fullName}
+            </h3>
+            <span className={`hidden @min-[16rem]:inline shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border ${cfg.badge}`}>
+              {status === "active-clear" ? "Clear" : status === "active-debt" ? "Debt" : "Closed"}
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-500 truncate leading-4">
+            <span className="font-mono text-slate-400">{a.fullCode}</span>
+            <span className="text-slate-300"> · </span>
+            {a.user.fullName}
+          </div>
+          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400 leading-4 min-w-0">
+            <MapPin className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">{a.location || "No location set"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Money ── */}
+      <dl className="mx-3 @min-[16rem]:mx-4 divide-y divide-slate-100 rounded-xl border border-slate-100 bg-slate-50/60">
+        <div className="flex flex-col items-stretch gap-0.5 @min-[16rem]:flex-row @min-[16rem]:items-center @min-[16rem]:justify-between @min-[16rem]:gap-2 px-3 py-2">
+          <dt className="min-w-0">
+            <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">
+              {debt < 0 ? "Owes company" : debt > 0 ? "Company owes" : "Balance"}
+            </span>
+            <span className={`block text-[10px] leading-4 truncate ${days !== null ? agingTone : "text-slate-400"}`}>
+              {days !== null ? (days === 0 ? "since today" : `${days}d pending`) : debt > 0 ? "surplus" : "settled"}
+            </span>
+          </dt>
+          <dd className={`font-mono text-[13px] font-bold whitespace-nowrap tabular-nums ${debt < 0 ? "text-amber-600" : debt > 0 ? "text-emerald-600" : "text-slate-400"}`}>
+            {debt === 0 ? "Clear" : ghsFmt(Math.abs(debt))}
+          </dd>
+        </div>
+        <div className="flex flex-col items-stretch gap-0.5 @min-[16rem]:flex-row @min-[16rem]:items-center @min-[16rem]:justify-between @min-[16rem]:gap-2 px-3 py-2" title={walletTitle(wallet)}>
+          <dt className="min-w-0 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-md bg-white text-violet-600 border border-violet-100 flex items-center justify-center flex-shrink-0">
+              <Wallet className="w-3.5 h-3.5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Commission</span>
+              <span className="block text-[10px] leading-4 text-slate-400 truncate">
+                {wallet && wallet.currentWeek > 0 ? `+${wallet.currentWeek.toFixed(2)} this week` : "accrued"}
+              </span>
+            </span>
+          </dt>
+          <dd className="font-mono text-[13px] font-bold whitespace-nowrap tabular-nums text-violet-700">
+            {walletsLoading ? "…" : ghsFmt(wallet?.accrued ?? 0)}
+          </dd>
+        </div>
+      </dl>
+
+      {/* ── Activity ── */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-t border-slate-100 bg-slate-50/40 px-3 @min-[16rem]:px-4 py-2.5 min-h-[44px]">
+        <RosterBadges agent={a} onOpen={onOpenRoster} compact />
+        <LastPaymentChip payment={lastPayment} />
+      </div>
+    </div>
+  );
+}
+
+/** The last completed transaction, in a word and a figure; opens it on Payments. */
+function LastPaymentChip({ payment }: { payment?: Payment }) {
+  const [, setLocation] = useLocation();
+  if (!payment) {
+    return <span className="flex items-center gap-1 text-[10px] text-slate-400 whitespace-nowrap" title="No payments yet"><Clock className="w-3 h-3" /> No payments</span>;
+  }
+  const isPayIn = payment.transactionType === "pay_in";
+  const day = payment.paymentDate?.split("T")[0] || "";
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); setLocation(`/payments?agentId=${payment.agentId}&dateFrom=${day}&dateTo=${day}`); }}
+      title={`Last ${isPayIn ? "pay-in" : "pay-out"} — open on the Payments page`}
+      className="flex min-w-0 items-center gap-1 text-[10px] text-slate-500 hover:text-primary transition-colors"
+    >
+      {isPayIn ? <ArrowDownLeft className="w-3 h-3 text-emerald-500 flex-shrink-0" /> : <ArrowUpRight className="w-3 h-3 text-rose-500 flex-shrink-0" />}
+      <span className="font-mono font-semibold text-slate-700 whitespace-nowrap">{parseFloat(payment.amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
+      <span className="whitespace-nowrap">· {new Date(payment.paymentDate).toLocaleDateString("en-GH", { day: "numeric", month: "short" })}</span>
+    </button>
   );
 }
 
