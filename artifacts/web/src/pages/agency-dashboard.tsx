@@ -19,7 +19,6 @@ import {
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Wallet } from "lucide-react";
 import { apiGet } from "@/lib/finance-api";
-import { Pager } from "@/components/data-kit";
 import { useToast } from "@/hooks/use-toast";
 import { Map as PigeonMapBase, Overlay, type MapProps } from "pigeon-maps";
 import { tileProvider, hasTileKey, TILE_ATTRIBUTION } from "@/lib/map-tiles";
@@ -715,7 +714,7 @@ function GridView({
     );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
       {agents.map(a => (
         <AgencyCard
           key={a.id}
@@ -757,108 +756,122 @@ function AgencyCard({
   const photo = (a.user as { profilePicture?: string | null }).profilePicture;
   const days = debt < 0 && a.debtSince ? debtDays(a.debtSince) ?? 0 : null;
   const agingTone = days === null ? "" : days < 7 ? "text-emerald-600" : days < 30 ? "text-amber-600" : "text-rose-600";
+  const tint = status === "active-clear" ? "from-emerald-50/80" : status === "active-debt" ? "from-amber-50/80" : "from-slate-50";
 
   return (
     <div
       onClick={() => onSelect(a)}
-      className={`@container group min-w-0 bg-white border border-l-4 ${cfg.border} rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden`}
+      className="@container group relative min-w-0 bg-white border border-slate-200/80 rounded-2xl shadow-sm hover:shadow-xl hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col overflow-hidden"
     >
-      {/* The card reads its own width, not the window's: four to a row on a
-          laptop is narrower than one to a row on a phone. Below 16rem the
-          figures move under their labels and the status word gives way to the
-          coloured edge and icon, which already say it. */}
+      {/* Status colour runs along the top; the card reads its own width (below
+          16rem the figures move under their labels). */}
+      <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${cfg.iconBg}`} />
+
       {/* ── Identity ── */}
-      <div className="flex items-start gap-2.5 @min-[16rem]:gap-3 p-3 pb-2.5 @min-[16rem]:p-4 @min-[16rem]:pb-3">
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); onPhotoClick(a); }}
-          className="relative group/icon flex-shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-          aria-label="Change agency profile photo"
-          title="Click to change photo"
-        >
-          {photo ? (
-            <img src={photo} alt={a.agencyName ?? a.user.fullName} className="w-9 h-9 @min-[16rem]:w-10 @min-[16rem]:h-10 rounded-xl object-cover border border-slate-100" />
-          ) : (
-            <span className={`w-9 h-9 @min-[16rem]:w-10 @min-[16rem]:h-10 rounded-xl ${cfg.iconBg} flex items-center justify-center shadow-sm`}>
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+      <div className={`bg-gradient-to-b ${tint} to-white px-4 pt-5 pb-4`}>
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onPhotoClick(a); }}
+            className="relative group/icon flex-shrink-0 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            aria-label="Change agency profile photo"
+            title="Click to change photo"
+          >
+            {photo ? (
+              <img src={photo} alt={a.agencyName ?? a.user.fullName} className="w-11 h-11 rounded-xl object-cover ring-2 ring-white shadow-sm" />
+            ) : (
+              <span className={`w-11 h-11 rounded-xl ${cfg.iconBg} flex items-center justify-center ring-2 ring-white shadow-sm`}>
+                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+              </span>
+            )}
+            <span className="absolute inset-0 rounded-xl flex items-center justify-center bg-black/40 opacity-0 group-hover/icon:opacity-100 transition-opacity">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
               </svg>
             </span>
-          )}
-          <span className="absolute inset-0 rounded-xl flex items-center justify-center bg-black/40 opacity-0 group-hover/icon:opacity-100 transition-opacity">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
-            </svg>
-          </span>
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="font-bold text-slate-800 text-sm leading-5 truncate group-hover:text-slate-900">
-              {a.agencyName ?? a.user.fullName}
-            </h3>
-            <span className={`hidden @min-[16rem]:inline shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md border ${cfg.badge}`}>
-              {status === "active-clear" ? "Clear" : status === "active-debt" ? "Debt" : "Closed"}
-            </span>
+          </button>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-bold text-slate-900 text-[15px] leading-5 truncate">{a.agencyName ?? a.user.fullName}</h3>
+            <div className="mt-0.5 text-xs text-slate-500 truncate">
+              <span className="font-mono font-semibold text-slate-400">{a.fullCode}</span>
+              <span className="text-slate-300"> · </span>
+              {a.user.fullName}
+            </div>
           </div>
-          <div className="text-[11px] text-slate-500 truncate leading-4">
-            <span className="font-mono text-slate-400">{a.fullCode}</span>
-            <span className="text-slate-300"> · </span>
-            {a.user.fullName}
-          </div>
-          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400 leading-4 min-w-0">
-            <MapPin className="w-3 h-3 flex-shrink-0" />
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-1 text-[11px] text-slate-500">
+            <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
             <span className="truncate">{a.location || "No location set"}</span>
-          </div>
+          </span>
+          <span className={`inline-flex shrink-0 items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.badge}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+            {status === "active-clear" ? "Clear" : status === "active-debt" ? "In debt" : "Closed"}
+          </span>
         </div>
       </div>
 
-      {/* ── Money ── */}
-      <dl className="mx-3 @min-[16rem]:mx-4 divide-y divide-slate-100 rounded-xl border border-slate-100 bg-slate-50/60">
-        <div className="flex flex-col items-stretch gap-0.5 @min-[16rem]:flex-row @min-[16rem]:items-center @min-[16rem]:justify-between @min-[16rem]:gap-2 px-3 py-2">
-          <dt className="min-w-0">
-            <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">
+      {/* ── Money: label line on top, figure underneath, same in every card ── */}
+      <dl className="mx-4 grid min-w-0 divide-y divide-slate-100 rounded-xl border border-slate-200/70 bg-slate-50/70">
+        <div className="px-3.5 py-2.5">
+          <dt className="flex min-w-0 flex-col items-start gap-0.5 @min-[16rem]:flex-row @min-[16rem]:items-center @min-[16rem]:justify-between @min-[16rem]:gap-2 text-[10px]">
+            <span className="font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">
               {debt < 0 ? "Owes company" : debt > 0 ? "Company owes" : "Balance"}
             </span>
-            <span className={`block text-[10px] leading-4 truncate ${days !== null ? agingTone : "text-slate-400"}`}>
+            <span className={`max-w-full truncate font-medium ${days !== null ? agingTone : "text-slate-400"}`}>
               {days !== null ? (days === 0 ? "since today" : `${days}d pending`) : debt > 0 ? "surplus" : "settled"}
             </span>
           </dt>
-          <dd className={`font-mono text-[13px] font-bold whitespace-nowrap tabular-nums ${debt < 0 ? "text-amber-600" : debt > 0 ? "text-emerald-600" : "text-slate-400"}`}>
+          <dd className={`mt-0.5 font-mono text-base font-bold leading-6 whitespace-nowrap tabular-nums ${debt < 0 ? "text-amber-600" : debt > 0 ? "text-emerald-600" : "text-slate-400"}`}>
             {debt === 0 ? "Clear" : ghsFmt(Math.abs(debt))}
           </dd>
         </div>
-        <div className="flex flex-col items-stretch gap-0.5 @min-[16rem]:flex-row @min-[16rem]:items-center @min-[16rem]:justify-between @min-[16rem]:gap-2 px-3 py-2" title={walletTitle(wallet)}>
-          <dt className="min-w-0 flex items-center gap-2">
-            <span className="w-6 h-6 rounded-md bg-white text-violet-600 border border-violet-100 flex items-center justify-center flex-shrink-0">
-              <Wallet className="w-3.5 h-3.5" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Commission</span>
-              <span className="block text-[10px] leading-4 text-slate-400 truncate">
-                {wallet && wallet.currentWeek > 0 ? `+${wallet.currentWeek.toFixed(2)} this week` : "accrued"}
+        <div className="px-3.5 py-2.5" title={walletTitle(wallet)}>
+          <dt className="flex min-w-0 flex-col items-start gap-0.5 @min-[16rem]:flex-row @min-[16rem]:items-center @min-[16rem]:justify-between @min-[16rem]:gap-2 text-[10px]">
+            <span className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">
+              <span className="w-5 h-5 rounded-md bg-white text-violet-600 border border-violet-100 shadow-sm flex items-center justify-center">
+                <Wallet className="w-3 h-3" />
               </span>
+              Commission
+            </span>
+            <span className="truncate font-medium text-slate-400">
+              {wallet && wallet.currentWeek > 0 ? `+${wallet.currentWeek.toFixed(2)} this wk` : "accrued"}
             </span>
           </dt>
-          <dd className="font-mono text-[13px] font-bold whitespace-nowrap tabular-nums text-violet-700">
+          <dd className="mt-0.5 font-mono text-base font-bold leading-6 whitespace-nowrap tabular-nums text-violet-700">
             {walletsLoading ? "…" : ghsFmt(wallet?.accrued ?? 0)}
           </dd>
         </div>
       </dl>
 
-      {/* ── Activity ── */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-t border-slate-100 bg-slate-50/40 px-3 @min-[16rem]:px-4 py-2.5 min-h-[44px]">
-        <RosterBadges agent={a} onOpen={onOpenRoster} compact />
-        <LastPaymentChip payment={lastPayment} />
+      {/* ── Activity: labelled; pinned to the bottom so rows of cards line up ── */}
+      <div className="mt-auto pt-4">
+        <div className="grid grid-cols-1 gap-y-3 @min-[16rem]:grid-cols-[auto_minmax(0,1fr)] gap-x-4 border-t border-slate-100 px-4 py-3.5">
+          <div>
+            <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Team</div>
+            <RosterBadges agent={a} onOpen={onOpenRoster} compact />
+          </div>
+          <div className="min-w-0 @min-[16rem]:text-right">
+            <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Last transaction</div>
+            <LastPaymentChip payment={lastPayment} />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-/** The last completed transaction, in a word and a figure; opens it on Payments. */
+/** The last completed transaction: labelled Pay-in or Pay-out, its amount and day. Opens it on Payments. */
 function LastPaymentChip({ payment }: { payment?: Payment }) {
   const [, setLocation] = useLocation();
   if (!payment) {
-    return <span className="flex items-center gap-1 text-[10px] text-slate-400 whitespace-nowrap" title="No payments yet"><Clock className="w-3 h-3" /> No payments</span>;
+    return (
+      <span className="inline-flex h-[22px] items-center gap-1 text-[11px] text-slate-400 whitespace-nowrap">
+        <Clock className="w-3 h-3" /> No payments yet
+      </span>
+    );
   }
   const isPayIn = payment.transactionType === "pay_in";
   const day = payment.paymentDate?.split("T")[0] || "";
@@ -866,12 +879,16 @@ function LastPaymentChip({ payment }: { payment?: Payment }) {
     <button
       type="button"
       onClick={e => { e.stopPropagation(); setLocation(`/payments?agentId=${payment.agentId}&dateFrom=${day}&dateTo=${day}`); }}
-      title={`Last ${isPayIn ? "pay-in" : "pay-out"} — open on the Payments page`}
-      className="flex min-w-0 items-center gap-1 text-[10px] text-slate-500 hover:text-primary transition-colors"
+      title={`${isPayIn ? "Pay-in" : "Pay-out"} of ${ghsFmt(parseFloat(payment.amount))} on ${new Date(payment.paymentDate).toLocaleDateString("en-GB")} — open on Payments`}
+      className="inline-flex h-[22px] max-w-full items-center justify-start @min-[16rem]:justify-end gap-1.5 text-[11px] text-slate-500 hover:text-primary transition-colors"
     >
-      {isPayIn ? <ArrowDownLeft className="w-3 h-3 text-emerald-500 flex-shrink-0" /> : <ArrowUpRight className="w-3 h-3 text-rose-500 flex-shrink-0" />}
-      <span className="font-mono font-semibold text-slate-700 whitespace-nowrap">{parseFloat(payment.amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}</span>
-      <span className="whitespace-nowrap">· {new Date(payment.paymentDate).toLocaleDateString("en-GH", { day: "numeric", month: "short" })}</span>
+      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${isPayIn ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"}`}>
+        {isPayIn ? <ArrowDownLeft className="w-3 h-3" /> : <ArrowUpRight className="w-3 h-3" />}
+        {isPayIn ? "Pay-in" : "Pay-out"}
+      </span>
+      <span className="truncate font-mono font-semibold text-slate-700">
+        {parseFloat(payment.amount).toLocaleString("en-GH", { minimumFractionDigits: 2 })}
+      </span>
     </button>
   );
 }
@@ -1877,20 +1894,72 @@ export function AgencyDashboard() {
     return filteredAndSorted.slice((safePage - 1) * pageSize, safePage * pageSize);
   }, [filteredAndSorted, safePage, pageSize]);
 
-  const pager = filteredAndSorted.length > 0 && (
-    <div className="mt-6 bg-white border rounded-2xl shadow-sm overflow-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center">
-        <Pager className="flex-1 border-t-0 bg-transparent" page={safePage} totalPages={totalPages} onPage={goToPage}
-          total={filteredAndSorted.length} size={pageSize} noun={filteredAndSorted.length === 1 ? "agency" : "agencies"} />
-        <label className="flex items-center justify-center gap-2 px-5 pb-3 sm:pb-0 text-xs text-slate-500">
-          Per page
-          <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}
-            className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
-            {[8, 12, 16, 24, 48].map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </label>
-      </div>
+  const shownFrom = filteredAndSorted.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const shownTo = Math.min(safePage * pageSize, filteredAndSorted.length);
+  const noun = filteredAndSorted.length === 1 ? "agency" : "agencies";
+
+  /* Above the cards: where you are, and a quick step either way. */
+  const resultsBar = filteredAndSorted.length > 0 && (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <p className="text-xs text-slate-500">
+        <span className="font-semibold text-slate-800 tabular-nums">{shownFrom}–{shownTo}</span> of{" "}
+        <span className="font-semibold text-slate-800 tabular-nums">{filteredAndSorted.length}</span> {noun}
+      </p>
+      {totalPages > 1 && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-500 tabular-nums">Page {safePage} of {totalPages}</span>
+          <button type="button" aria-label="Previous page" disabled={safePage <= 1} onClick={() => goToPage(safePage - 1)}
+            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button type="button" aria-label="Next page" disabled={safePage >= totalPages} onClick={() => goToPage(safePage + 1)}
+            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
+  );
+
+  /* Below the cards: the full pager. */
+  const pageItems: (number | "…")[] = [];
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || Math.abs(i - safePage) <= 1) pageItems.push(i);
+    else if (pageItems[pageItems.length - 1] !== "…") pageItems.push("…");
+  }
+  const pager = filteredAndSorted.length > 0 && (
+    <nav aria-label="Agency pages"
+      className="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm md:flex-row md:justify-between">
+      <p className="text-xs text-slate-500 order-2 md:order-1">
+        Showing <span className="font-semibold text-slate-800 tabular-nums">{shownFrom}–{shownTo}</span> of{" "}
+        <span className="font-semibold text-slate-800 tabular-nums">{filteredAndSorted.length}</span> {noun}
+      </p>
+      <div className="order-1 md:order-2 flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+        <button type="button" disabled={safePage <= 1} onClick={() => goToPage(safePage - 1)}
+          className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-slate-600 hover:bg-white hover:shadow-sm disabled:opacity-40 disabled:pointer-events-none transition-all">
+          <ChevronLeft className="w-4 h-4" /> <span className="hidden sm:inline">Prev</span>
+        </button>
+        {pageItems.map((p, i) => p === "…" ? (
+          <span key={`gap-${i}`} className="px-1.5 text-xs text-slate-400">…</span>
+        ) : (
+          <button key={p} type="button" onClick={() => goToPage(p)} aria-current={p === safePage ? "page" : undefined}
+            className={`h-8 min-w-8 rounded-lg px-2 text-xs font-bold tabular-nums transition-all ${p === safePage ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>
+            {p}
+          </button>
+        ))}
+        <button type="button" disabled={safePage >= totalPages} onClick={() => goToPage(safePage + 1)}
+          className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold text-slate-600 hover:bg-white hover:shadow-sm disabled:opacity-40 disabled:pointer-events-none transition-all">
+          <span className="hidden sm:inline">Next</span> <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+      <label className="order-3 flex items-center gap-2 text-xs text-slate-500">
+        Per page
+        <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}
+          className="h-8 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+          {[8, 12, 16, 24, 48].map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+    </nav>
   );
 
   return (
@@ -2051,6 +2120,7 @@ export function AgencyDashboard() {
           </div>
         ) : view === "grid" ? (
           <>
+            {resultsBar}
             <GridView
               agents={paginatedAgents}
               lastPaymentsMap={lastPaymentsMap}
@@ -2064,6 +2134,7 @@ export function AgencyDashboard() {
           </>
         ) : view === "list" ? (
           <>
+            {resultsBar}
             <ListView
               agents={paginatedAgents}
               lastPaymentsMap={lastPaymentsMap}

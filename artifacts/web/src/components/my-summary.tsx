@@ -1,8 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2, Radio, CalendarX } from "lucide-react";
+import { Loader2, Radio, CalendarX, ChevronDown, History, Check } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { fmtGHS, cn } from "@/lib/utils";
 import { ghsPD } from "@/lib/waterfall";
 import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS, type LiveGame } from "@/components/live-sales";
@@ -257,46 +258,113 @@ function WriterEventSummaries({ title, className }: { title?: string; className?
     },
     refetchInterval: LIVE_REFETCH_MS,
   });
-  // Live draws first, soonest to close at the top; then closed ones, latest first.
-  const list = [...(games.data ?? [])].sort((a, b) => {
-    if (a.status !== b.status) return a.status === "live" ? -1 : 1;
-    const d = +new Date(a.closeAt) - +new Date(b.closeAt);
-    return a.status === "live" ? d : -d;
-  });
+  const all = games.data ?? [];
+  // Live draws, soonest to close first; closed draws, latest first.
+  const live = all.filter((g) => g.status === "live").sort((a, b) => +new Date(a.closeAt) - +new Date(b.closeAt));
+  const closed = all.filter((g) => g.status !== "live").sort((a, b) => +new Date(b.closeAt) - +new Date(a.closeAt));
+
+  /*
+   * Closed draws sit folded away. Opening the list and choosing one shows that
+   * draw alone; folding it again puts the live draw back.
+   */
+  const [closedOpen, setClosedOpen] = useState(false);
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const toggleClosed = (open: boolean) => {
+    setClosedOpen(open);
+    if (!open) setPickedId(null);
+  };
+  const picked = closedOpen ? closed.find((g) => g.id === pickedId) ?? null : null;
+  const shown = picked ? [picked] : live;
 
   const summaries = useQueries({
-    queries: list.map((g) => ({
+    queries: shown.map((g) => ({
       queryKey: ["/api/dashboard/my-summary", g.id],
       queryFn: () => fetchSummary(g.id),
-      refetchInterval: LIVE_REFETCH_MS,
+      refetchInterval: g.status === "live" ? LIVE_REFETCH_MS : false,
     })),
   });
   const fetching = summaries.some((q) => q.isFetching);
 
   return (
     <Card className={cn(className)}>
-      <CardHeader className="space-y-1">
+      <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Radio className={`h-4 w-4 shrink-0 ${fetching ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
           {title ?? "My Sales"}
         </CardTitle>
-        <CardDescription className="text-xs leading-snug">
-          Each draw on its own. Net = Gross − Commission · Profit / (Deficit) = Net − Wins.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {games.isLoading ? (
           <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
-        ) : list.length === 0 ? (
+        ) : all.length === 0 ? (
           <div className="flex flex-col items-center gap-1.5 py-8 text-center">
             <CalendarX className="h-6 w-6 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">No draw is running today.</p>
           </div>
         ) : (
-          list.map((g, i) => (
-            <WriterEventPanel key={g.id} game={g} summary={summaries[i]?.data} loading={!!summaries[i]?.isLoading}
-              error={summaries[i]?.error as Error | null} />
-          ))
+          <>
+            {closed.length > 0 && (
+              <Collapsible open={closedOpen} onOpenChange={toggleClosed} className="rounded-xl border bg-muted/20">
+                <CollapsibleTrigger asChild>
+                  <button type="button"
+                    className="group flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left hover:bg-muted/40 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      <History className="h-4 w-4 text-muted-foreground" />
+                      Closed games
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">{closed.length}</span>
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+                  <ul role="listbox" aria-label="Closed games" className="max-h-56 overflow-y-auto border-t p-1.5">
+                    {closed.map((g) => {
+                      const on = g.id === pickedId;
+                      return (
+                        <li key={g.id}>
+                          <button type="button" role="option" aria-selected={on} onClick={() => setPickedId(g.id)}
+                            className={cn("flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors",
+                              on ? "bg-primary/10 text-primary" : "hover:bg-muted/60")}>
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-medium">{g.name}</span>
+                              <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                                {g.eventNumber} · closed {new Date(g.closeAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </span>
+                            {on && <Check className="h-4 w-4 shrink-0" />}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {picked && (
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-1.5 text-[11px] text-muted-foreground">
+                <span>Showing a closed game</span>
+                <button type="button" onClick={() => toggleClosed(false)} className="font-semibold text-primary hover:underline">
+                  Back to live
+                </button>
+              </div>
+            )}
+
+            {shown.length === 0 ? (
+              <div className="flex flex-col items-center gap-1.5 py-6 text-center">
+                <CalendarX className="h-6 w-6 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No live game right now.</p>
+                {closed.length > 0 && !closedOpen && (
+                  <p className="text-xs text-muted-foreground">Open Closed games above to see an earlier draw.</p>
+                )}
+              </div>
+            ) : (
+              shown.map((g, i) => (
+                <WriterEventPanel key={g.id} game={g} summary={summaries[i]?.data} loading={!!summaries[i]?.isLoading}
+                  error={summaries[i]?.error as Error | null} />
+              ))
+            )}
+          </>
         )}
       </CardContent>
     </Card>
