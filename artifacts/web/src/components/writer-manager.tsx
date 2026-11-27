@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { WriterLocationField, locationPayload, EMPTY_LOCATION } from "@/components/writer-location-field";
+import { WriterMomoFields, useWriterMomoForm } from "@/components/writer-momo-fields";
 
 interface Props {
   agentId: string;
@@ -63,7 +64,12 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
     }
   };
 
+  const momo = useWriterMomoForm(editWriter?.id);
+  const [momoTouched, setMomoTouched] = useState(false);
+  const [savingMomo, setSavingMomo] = useState(false);
+
   const openEdit = (w: Writer) => {
+    setMomoTouched(false);
     setEditWriter(w);
     setEditForm({
       fullName: w.fullName,
@@ -77,6 +83,13 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editWriter) return;
+    // An active writer must have a payout wallet. Only those who may change
+    // the wallet (the administrator) are held to it here.
+    if (momo.canEdit && editForm.isActive && !momo.valid) {
+      setMomoTouched(true);
+      toast({ title: momo.problem ?? "Add the writer's MoMo wallet", variant: "destructive" });
+      return;
+    }
     try {
       await updateMutation.mutateAsync({
         id: editWriter.id,
@@ -90,7 +103,24 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
           lng: editForm.lng,
         },
       });
-      toast({ title: "Writer updated" });
+      if (momo.canEdit && momo.dirty && momo.valid) {
+        setSavingMomo(true);
+        try {
+          const name = await momo.save();
+          toast({
+            title: "Writer updated",
+            description: name ? `MoMo wallet confirmed: ${name}` : "MoMo wallet saved. The network did not confirm the name - check the number with the writer.",
+          });
+        } catch (err) {
+          toast({ title: (err as Error).message || "The MoMo wallet was not saved", variant: "destructive" });
+          invalidate();
+          return;
+        } finally {
+          setSavingMomo(false);
+        }
+      } else {
+        toast({ title: "Writer updated" });
+      }
       setEditWriter(null);
       invalidate();
     } catch {
@@ -140,9 +170,17 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
                 <TableCell className="font-mono text-sm font-medium">{w.fullCode}</TableCell>
                 <TableCell className="text-sm">{w.fullName}</TableCell>
                 <TableCell>
-                  <Badge variant={w.isActive ? "default" : "secondary"} className="text-xs">
-                    {w.isActive ? "Active" : "Inactive"}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant={w.isActive ? "default" : "secondary"} className="text-xs">
+                      {w.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                    {!(w as { momoNumber?: string | null }).momoNumber && (
+                      <Badge variant="outline" title="No MoMo wallet: winning tickets cannot be paid"
+                        className="text-[10px] border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                        No MoMo
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
                 {!readOnly && (
                   <TableCell>
@@ -206,7 +244,7 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
 
       {/* Edit Writer Dialog */}
       <Dialog open={!!editWriter} onOpenChange={open => !open && setEditWriter(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Writer</DialogTitle>
           </DialogHeader>
@@ -223,6 +261,7 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
                 className="h-9 text-sm"
               />
             </div>
+            <WriterMomoFields form={momo} idPrefix="edit-writer-momo" touched={momoTouched} />
             <WriterLocationField
               id="edit-writer-location"
               required={false}
@@ -250,7 +289,9 @@ export function WriterManager({ agentId, agentFullCode, readOnly = false }: Prop
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditWriter(null)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save Changes</Button>
+              <Button type="submit" size="sm" disabled={updateMutation.isPending || savingMomo}>
+                {updateMutation.isPending || savingMomo ? "Saving…" : "Save Changes"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

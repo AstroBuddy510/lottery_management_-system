@@ -106,6 +106,8 @@ function priceBet(
     multiplier: parseFloat(betType.payoutMultiplier),
     minStake: parseFloat(betType.minStake) || 0,
     maxStake: parseFloat(betType.maxStake) || 0,
+    minNumbers: betType.minNumbers,
+    maxNumbers: betType.maxNumbers,
   };
 
   const invalid = validateSelection(selection);
@@ -614,6 +616,8 @@ router.post("/tickets/quote", requireAuth, requireRole("writer"), async (req, re
     multiplier: parseFloat(betType.payoutMultiplier),
     minStake: parseFloat(betType.minStake) || 0,
     maxStake: parseFloat(betType.maxStake) || 0,
+    minNumbers: betType.minNumbers,
+    maxNumbers: betType.maxNumbers,
   };
 
   const invalid = validateSelection(selection);

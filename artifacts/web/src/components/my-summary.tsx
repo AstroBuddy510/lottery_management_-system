@@ -1,9 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useQuery, useQueries } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Loader2, Radio } from "lucide-react";
+import { Loader2, Radio, CalendarX } from "lucide-react";
 import { fmtGHS, cn } from "@/lib/utils";
 import { ghsPD } from "@/lib/waterfall";
-import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS } from "@/components/live-sales";
+import { GamePicker, useLiveGames, useLiveGameSelection, LIVE_REFETCH_MS, type LiveGame } from "@/components/live-sales";
 
 /**
  * Consolidated performance for whoever is signed in, scoped server-side:
@@ -56,23 +58,48 @@ function Figure({
   );
 }
 
-export function MySummarySection({ title, className }: { title?: string; className?: string }) {
-  const [gameId, setGameId] = useLiveGameSelection();
-  const { games } = useLiveGames(gameId, setGameId);
+async function fetchSummary(gameId: string): Promise<MySummary> {
+  const params = new URLSearchParams({ gameId });
+  const res = await fetch(`/api/dashboard/my-summary?${params}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed to load summary");
+  return res.json();
+}
 
-  const { data, isLoading, isFetching, isError, error } = useQuery<MySummary>({
+interface SummaryProps {
+  title?: string;
+  className?: string;
+  /** Lets a page drive which draw is shown (the agent home's draw chips). */
+  gameId?: string | null;
+  onGameChange?: (id: string) => void;
+}
+
+export function MySummarySection(props: SummaryProps) {
+  const { user } = useAuth();
+  // A writer sees every draw of the day side by side, each on its own.
+  if (user?.role === "writer") return <WriterEventSummaries title={props.title} className={props.className} />;
+  return <AgencySummary {...props} />;
+}
+
+function AgencySummary({ title, className, gameId: controlledId, onGameChange }: SummaryProps) {
+  const [ownId, setOwnId] = useLiveGameSelection();
+  const controlled = controlledId !== undefined && !!onGameChange;
+  const gameId = controlled ? controlledId : ownId;
+  const setGameId = controlled ? onGameChange! : setOwnId;
+  // When the page drives the draw, it also picks the default; the list here
+  // must not override it (the two lists can differ for a past date).
+  const noAutoPick = useCallback(() => {}, []);
+  const { games, isLoading: gamesLoading } = useLiveGames(gameId ?? null, controlled ? noAutoPick : setGameId);
+
+  // Never asked for without a draw: the server reports one event at a time.
+  const { data, isLoading: summaryLoading, isFetching, isError, error } = useQuery<MySummary>({
     queryKey: ["/api/dashboard/my-summary", gameId],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (gameId) params.set("gameId", gameId);
-      const res = await fetch(`/api/dashboard/my-summary?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
-      });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Failed to load summary");
-      return res.json();
-    },
+    queryFn: () => fetchSummary(gameId!),
+    enabled: !!gameId,
     refetchInterval: LIVE_REFETCH_MS,
   });
+  const isLoading = gamesLoading || (!!gameId && summaryLoading);
 
   const isWriter = data?.scope === "writer";
   const t = data?.totals;
@@ -103,13 +130,19 @@ export function MySummarySection({ title, className }: { title?: string; classNa
           </CardDescription>
         </div>
         <div className="min-w-0 sm:shrink-0">
-          <GamePicker games={games} selectedId={gameId} onSelect={setGameId} />
+          {/* Driven from the page's draw chips, the picker would be a second
+              control for the same thing. */}
+          {!controlled && <GamePicker games={games} selectedId={gameId} onSelect={setGameId} />}
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
         {isLoading ? (
           <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
+        ) : !gameId && games.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No draw is running today.</p>
+        ) : !gameId ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Choose a draw to see its figures.</p>
         ) : isError ? (
           <p className="py-6 text-center text-sm text-destructive">{(error as Error).message}</p>
         ) : !t || (t.gross === 0 && t.wins === 0) ? (
@@ -197,5 +230,122 @@ export function MySummarySection({ title, className }: { title?: string; classNa
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/* ─── Writer portal: one panel per draw ─────────────────────────────────── */
+
+/**
+ * A writer's sales, event by event.
+ *
+ * Every draw of the day gets its own panel and its own figures, and nothing
+ * is added across them: a good morning draw must not hide a bad afternoon
+ * one. The figures follow the writer's formula, with no reserve:
+ *
+ *   Gross Sales - Commission = Net
+ *   Net - Wins = Profit / (Deficit)
+ */
+function WriterEventSummaries({ title, className }: { title?: string; className?: string }) {
+  const games = useQuery<LiveGame[]>({
+    queryKey: ["/api/live-sales/games"],
+    queryFn: async () => {
+      const res = await fetch("/api/live-sales/games", {
+        headers: { Authorization: `Bearer ${localStorage.getItem("accessToken")}` },
+      });
+      if (!res.ok) throw new Error("Could not load draws");
+      return res.json();
+    },
+    refetchInterval: LIVE_REFETCH_MS,
+  });
+  // Live draws first, soonest to close at the top; then closed ones, latest first.
+  const list = [...(games.data ?? [])].sort((a, b) => {
+    if (a.status !== b.status) return a.status === "live" ? -1 : 1;
+    const d = +new Date(a.closeAt) - +new Date(b.closeAt);
+    return a.status === "live" ? d : -d;
+  });
+
+  const summaries = useQueries({
+    queries: list.map((g) => ({
+      queryKey: ["/api/dashboard/my-summary", g.id],
+      queryFn: () => fetchSummary(g.id),
+      refetchInterval: LIVE_REFETCH_MS,
+    })),
+  });
+  const fetching = summaries.some((q) => q.isFetching);
+
+  return (
+    <Card className={cn(className)}>
+      <CardHeader className="space-y-1">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Radio className={`h-4 w-4 shrink-0 ${fetching ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
+          {title ?? "My Sales"}
+        </CardTitle>
+        <CardDescription className="text-xs leading-snug">
+          Each draw on its own. Net = Gross − Commission · Profit / (Deficit) = Net − Wins.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {games.isLoading ? (
+          <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
+        ) : list.length === 0 ? (
+          <div className="flex flex-col items-center gap-1.5 py-8 text-center">
+            <CalendarX className="h-6 w-6 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">No draw is running today.</p>
+          </div>
+        ) : (
+          list.map((g, i) => (
+            <WriterEventPanel key={g.id} game={g} summary={summaries[i]?.data} loading={!!summaries[i]?.isLoading}
+              error={summaries[i]?.error as Error | null} />
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WriterEventPanel({ game, summary, loading, error }: {
+  game: LiveGame; summary?: MySummary; loading: boolean; error: Error | null;
+}) {
+  const t = summary?.totals;
+  const tickets = summary?.sourceSplit.ticketCount ?? 0;
+  const empty = !t || (t.gross === 0 && t.wins === 0);
+  // The writer formula, worked from the server's figures in whole pesewas.
+  const p = (v: number) => Math.round(v * 100);
+  const net = t ? (p(t.gross) - p(t.commission)) / 100 : 0;
+  const profit = t ? (p(t.gross) - p(t.commission) - p(t.wins)) / 100 : 0;
+  return (
+    <section className="rounded-xl border">
+      <header className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">{game.name}</div>
+          <div className="truncate font-mono text-[10px] text-muted-foreground">
+            {game.eventNumber}{!empty ? ` · ${tickets} ticket${tickets === 1 ? "" : "s"}` : ""}
+          </div>
+        </div>
+        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+          game.status === "live" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
+          {game.status === "live" ? "Live" : "Closed"}
+        </span>
+      </header>
+      <div className="p-3">
+        {loading ? (
+          <div className="py-4 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
+        ) : error ? (
+          <p className="py-3 text-center text-xs text-destructive">{error.message}</p>
+        ) : empty ? (
+          <p className="py-3 text-center text-xs text-muted-foreground">No sales on this draw yet.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <Figure label="Gross Sales" value={fmtGHS(t!.gross)} />
+            <Figure label="Commission" value={fmtGHS(t!.commission)} />
+            <Figure label="Net" value={fmtGHS(net)} />
+            <Figure label="Wins" value={fmtGHS(t!.wins)} />
+            <div className="col-span-2">
+              <Figure label="Profit / (Deficit)" value={ghsPD(profit, "GH₵")} accent negative={profit < 0} />
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

@@ -202,7 +202,10 @@ export function AgentDashboard() {
   const { data: liveDay } = useQuery<{
     date: string;
     totals: { ticketCount: number; totalStakes: string; winningTickets: number; totalWins: string };
-    byGame: { gameId: string; gameName: string; ticketCount: number; totalStakes: string }[];
+    byGame: {
+      gameId: string; gameName: string; eventNumber: string; status: string;
+      ticketCount: number; totalStakes: string; winningTickets: number; totalWins: string;
+    }[];
   }>({
     queryKey: ["/api/live-sales/day", selectedDate],
     queryFn: async () => {
@@ -216,23 +219,38 @@ export function AgentDashboard() {
     refetchOnWindowFocus: true,
   });
 
-  const liveGross = Number(liveDay?.totals.totalStakes ?? 0);
-  const liveTickets = liveDay?.totals.ticketCount ?? 0;
+  /*
+   * The draws of the chosen day, each reported on its own. Several games can
+   * run on one date; the figures below are always for ONE of them, picked
+   * here, and never added together across draws.
+   */
+  const events = useMemo(() => {
+    const m = new Map<string, { id: string; name: string; eventNumber: string; status: string }>();
+    for (const g of liveGames) m.set(g.id, { id: g.id, name: g.name, eventNumber: g.eventNumber, status: g.status });
+    for (const b of liveDay?.byGame ?? []) {
+      if (!m.has(b.gameId)) m.set(b.gameId, { id: b.gameId, name: b.gameName, eventNumber: b.eventNumber, status: b.status });
+    }
+    return [...m.values()];
+  }, [liveGames, liveDay]);
+  const [eventId, setEventId] = useState<string | null>(null);
+  useEffect(() => {
+    if (events.length === 0) { if (eventId) setEventId(null); return; }
+    if (!eventId || !events.some(e => e.id === eventId)) {
+      setEventId((events.find(e => e.status === "live") ?? events[0]!).id);
+    }
+  }, [events, eventId]);
+  const eventSales = liveDay?.byGame.find(b => b.gameId === eventId);
 
-  /** What was declared through gross entries, kept for the comparison below. */
-  const declaredGross = useMemo(() => {
-    const liveGameIds = new Set(liveGames.map(g => g.id));
-    return grossList
-      .filter(e => e.gameId && liveGameIds.has(e.gameId))
-      .reduce((s, e) => s + Number(e.grossAmount ?? 0), 0);
-  }, [grossList, liveGames]);
+  const liveGross = Number(eventSales?.totalStakes ?? 0);
+  const liveTickets = eventSales?.ticketCount ?? 0;
 
-  const todayWins = useMemo(() => {
-    const liveGameIds = new Set(liveGames.map(g => g.id));
-    return winsList
-      .filter(e => e.gameId && liveGameIds.has(e.gameId))
-      .reduce((s, e) => s + Number(e.winsAmount ?? 0), 0);
-  }, [winsList, liveGames]);
+  /** What was declared through gross entries for this draw, for the comparison below. */
+  const declaredGross = useMemo(() => grossList
+    .filter(e => e.gameId === eventId)
+    .reduce((s, e) => s + Number(e.grossAmount ?? 0), 0), [grossList, eventId]);
+
+  const eventWinsEntries = useMemo(() => winsList.filter(e => e.gameId === eventId), [winsList, eventId]);
+  const todayWins = eventWinsEntries.reduce((s, e) => s + Number(e.winsAmount ?? 0), 0);
 
   const activeWriters = writerList.filter(w => w.isActive).length;
   const unreadCount = unread?.count ?? 0;
@@ -244,13 +262,13 @@ export function AgentDashboard() {
       // ...salesList.map(s => ({ id: s.id, type: "sale" as const, label: `Sale · ${s.gameType ?? "—"}`, amount: Number(s.ticketAmount ?? 0), time: s.createdAt ?? s.saleDate ?? "" })),
       ...grossList
         .filter(e => e.gameId && liveGameIds.has(e.gameId))
-        .map(e => ({ id: e.id, type: "gross" as const, label: "Gross Entry", amount: Number(e.grossAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
+        .map(e => ({ id: e.id, type: "gross" as const, label: `Gross Entry · ${gameList.find(g => g.id === e.gameId)?.name ?? "draw"}`, amount: Number(e.grossAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
       ...winsList
         .filter(e => e.gameId && liveGameIds.has(e.gameId))
-        .map(e => ({ id: e.id, type: "wins" as const, label: "Wins Entry", amount: Number(e.winsAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
+        .map(e => ({ id: e.id, type: "wins" as const, label: `Wins Entry · ${gameList.find(g => g.id === e.gameId)?.name ?? "draw"}`, amount: Number(e.winsAmount ?? 0), time: e.createdAt ?? e.entryDate ?? "" })),
     ];
     return items.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 6);
-  }, [salesList, grossList, winsList, liveGames]);
+  }, [salesList, grossList, winsList, liveGames, gameList]);
 
   const actStyle = {
     sale:  { dot: "bg-blue-500",    chip: "bg-blue-500/10 text-blue-700 dark:text-blue-300",       label: "Sale"  },
@@ -392,7 +410,7 @@ export function AgentDashboard() {
           <h1 className="text-base font-bold tracking-tight">{isToday ? "Today at a glance" : "Day at a glance"}</h1>
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live · refreshes every 15 seconds
+            Per draw · live, refreshes every 15 seconds
           </p>
         </div>
         <label className="relative inline-flex h-9 cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 text-xs font-semibold shadow-sm hover:bg-muted/50 transition-colors">
@@ -410,6 +428,28 @@ export function AgentDashboard() {
         </label>
       </div>
 
+      {/* One draw at a time: pick it here. */}
+      <div role="tablist" aria-label="Draw" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {events.length === 0 ? (
+          <span className="rounded-xl border border-dashed bg-card px-3 py-2 text-xs text-muted-foreground">
+            No draw {isToday ? "today" : "on this day"}
+          </span>
+        ) : events.map(e => {
+          const on = e.id === eventId;
+          return (
+            <button key={e.id} type="button" role="tab" aria-selected={on} onClick={() => setEventId(e.id)}
+              className={cn("flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors",
+                on ? "border-primary bg-primary/[0.07] ring-1 ring-primary" : "bg-card hover:bg-muted/50")}>
+              <span className={cn("h-2 w-2 shrink-0 rounded-full", e.status === "live" ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+              <span className="min-w-0">
+                <span className={cn("block max-w-[11rem] truncate text-xs font-bold", on && "text-primary")}>{e.name}</span>
+                <span className="block font-mono text-[10px] text-muted-foreground">{e.eventNumber}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi icon={TrendingUp} tone="text-emerald-600 bg-emerald-500/10" label="Gross sales" live
           value={fmtGHS(liveGross)}
@@ -417,9 +457,9 @@ export function AgentDashboard() {
             ? <span className="text-amber-600 dark:text-amber-400 font-medium">Declared {fmtGHS(declaredGross)} · {grossGap > 0 ? "over" : "under"} by {fmtGHS(Math.abs(grossGap))}</span>
             : "from tickets sold"} />
         <Kpi icon={Ticket} tone="text-blue-600 bg-blue-500/10" label="Tickets sold"
-          value={liveTickets.toLocaleString("en-GB")} sub={`${liveDay?.totals.winningTickets ?? 0} winning`} />
+          value={liveTickets.toLocaleString("en-GB")} sub={`${eventSales?.winningTickets ?? 0} winning`} />
         <Kpi icon={Trophy} tone="text-amber-600 bg-amber-500/10" label="Wins claimed"
-          value={fmtGHS(todayWins)} sub={`${winsList.length} ${winsList.length === 1 ? "entry" : "entries"}`} />
+          value={fmtGHS(todayWins)} sub={`${eventWinsEntries.length} ${eventWinsEntries.length === 1 ? "entry" : "entries"}`} />
         <Kpi icon={Users} tone="text-violet-600 bg-violet-500/10" label="Active writers"
           value={String(activeWriters)} sub={`of ${writerList.length} registered`} />
       </div>
@@ -436,7 +476,7 @@ export function AgentDashboard() {
       <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
         <div className="space-y-5 lg:col-span-2 min-w-0">
           {/* Live agency figures, in the platform's waterfall. */}
-          <MySummarySection title="My Agency · Live" className="rounded-2xl shadow-sm" />
+          <MySummarySection title="My Agency · Live" className="rounded-2xl shadow-sm" gameId={eventId} onGameChange={setEventId} />
         </div>
 
         <div className="space-y-5 min-w-0">

@@ -36,6 +36,7 @@ import {
   MOMO_PROVIDERS,
   isMomoProvider,
   normaliseMomoNumber,
+  isGhanaMobile,
   resolveMomoName,
   paystackGhsBalance,
 } from "../lib/paystack-transfers";
@@ -882,6 +883,10 @@ router.put(
     const number = parsed.success ? normaliseMomoNumber(parsed.data.number) : null;
     if (!parsed.success || !number || !isMomoProvider(parsed.data.provider)) {
       res.status(400).json({ error: "Enter a 10-digit mobile money number and choose its network" });
+      return;
+    }
+    if (!isGhanaMobile(number)) {
+      res.status(400).json({ error: `${number} is not a Ghana mobile number, so it cannot be a MoMo wallet` });
       return;
     }
     const provider = parsed.data.provider;

@@ -248,8 +248,18 @@ router.get(
  */
 router.get("/dashboard/my-summary", requireAuth, async (req, res) => {
   const role = req.user!.role;
-  const gameId = typeof req.query["gameId"] === "string" ? req.query["gameId"] : undefined;
+  const gameId = typeof req.query["gameId"] === "string" && req.query["gameId"] ? req.query["gameId"] : undefined;
   let calcDate = typeof req.query["date"] === "string" ? req.query["date"] : undefined;
+
+  /*
+   * One draw at a time. Several games can run on the same date, and adding
+   * them together would hide which event made or lost money - so this
+   * summary is only ever given for a single event, never a day's bundle.
+   */
+  if (!gameId) {
+    res.status(400).json({ error: "Choose a draw: sales are reported per event" });
+    return;
+  }
 
   if (gameId) {
     const [g] = await db
@@ -271,7 +281,12 @@ router.get("/dashboard/my-summary", requireAuth, async (req, res) => {
     return;
   }
   const commissionPct = parseFloat(settings.commissionPct);
-  const reservePct = parseFloat(settings.reservePct);
+  /*
+   * A writer's own figures carry no reserve: Gross - Commission = Net, and
+   * Net - Wins = Profit / (Deficit). The reserve is an agency-level deduction
+   * and stays in the agent's view.
+   */
+  const reservePct = role === "writer" ? 0 : parseFloat(settings.reservePct);
 
   // Which writers this viewer's figures cover.
   let writerIds: Set<string>;

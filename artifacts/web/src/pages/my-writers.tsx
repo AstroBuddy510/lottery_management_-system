@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { IssuePinDialog, type IssuePinTarget } from "@/components/issue-pin-dialog";
 import { ModelRequestsPanel } from "@/components/model-requests-panel";
+import { WriterMomoFields, useWriterMomoForm } from "@/components/writer-momo-fields";
 
 const WRITERS_PER_PAGE = 12;
 
@@ -113,9 +114,19 @@ export function MyWriters() {
     }
   };
 
+  const momo = useWriterMomoForm(editWriter?.id);
+  const [momoTouched, setMomoTouched] = useState(false);
+  const [savingMomo, setSavingMomo] = useState(false);
+
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editWriter) return;
+    // An active writer must have a payout wallet; a deactivated one may not.
+    if (editForm.isActive && !momo.valid) {
+      setMomoTouched(true);
+      toast.error(momo.problem ?? "Add the writer's MoMo wallet");
+      return;
+    }
     try {
       await updateMutation.mutateAsync({
         id: editWriter.id,
@@ -129,7 +140,23 @@ export function MyWriters() {
           lng: editForm.lng,
         },
       });
-      toast.success("Writer updated");
+      if (momo.dirty && momo.valid) {
+        setSavingMomo(true);
+        try {
+          const name = await momo.save();
+          toast.success("Writer updated", {
+            description: name ? `MoMo wallet confirmed: ${name}` : "MoMo wallet saved. The network did not confirm the name - check the number with the writer.",
+          });
+        } catch (err) {
+          toast.error((err as Error).message || "The MoMo wallet was not saved");
+          invalidate();
+          return;
+        } finally {
+          setSavingMomo(false);
+        }
+      } else {
+        toast.success("Writer updated");
+      }
       setEditWriter(null);
       invalidate();
     } catch {
@@ -142,11 +169,13 @@ export function MyWriters() {
 
   // Search and status narrow the list; the pager then works on what is left.
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
+  const [status, setStatus] = useState<"all" | "active" | "inactive" | "nomomo">("all");
+  const hasMomo = (w: Writer) => !!(w as { momoNumber?: string | null }).momoNumber;
+  const noMomoActive = writerList.filter(w => w.isActive && !hasMomo(w)).length;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return writerList
-      .filter(w => status === "all" || (status === "active" ? w.isActive : !w.isActive))
+      .filter(w => status === "all" || (status === "active" ? w.isActive : status === "inactive" ? !w.isActive : !hasMomo(w)))
       .filter(w => !q || w.fullName.toLowerCase().includes(q) || w.fullCode.toLowerCase().includes(q) || (w.phone ?? "").includes(q));
   }, [writerList, query, status]);
   const paged = usePaged(filtered, WRITERS_PER_PAGE, `${query}|${status}`);
@@ -210,6 +239,18 @@ export function MyWriters() {
           <Stat icon={<CreditCard className="h-4 w-4" />} tone="text-indigo-600 bg-indigo-500/10" label="Postpaid" value={postpaidCount} />
         </div>
 
+        {/* A writer with no wallet cannot be paid when a ticket wins. */}
+        {noMomoActive > 0 && (
+          <button type="button" onClick={() => setStatus("nomomo")}
+            className="flex w-full items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-left text-xs text-amber-900 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:text-amber-200 transition-colors">
+            <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+            <span>
+              <span className="font-semibold">{noMomoActive} active writer{noMomoActive === 1 ? " has" : "s have"} no MoMo wallet.</span>{" "}
+              Their winning tickets cannot be paid out. Tap to list them, then use Edit to add a wallet.
+            </span>
+          </button>
+        )}
+
         {/* Credit requests reach the agent here - previously they reached nobody. */}
         <ModelRequestsPanel />
 
@@ -228,11 +269,11 @@ export function MyWriters() {
                   aria-label="Search writers" className="h-9 pl-8 text-xs rounded-lg" />
               </div>
               <div role="group" aria-label="Status" className="inline-flex h-9 items-center rounded-lg border bg-muted/40 p-0.5 shrink-0">
-                {(["all", "active", "inactive"] as const).map(k => (
+                {(["all", "active", "inactive", "nomomo"] as const).map(k => (
                   <button key={k} type="button" onClick={() => setStatus(k)} aria-pressed={status === k}
-                    className={cn("h-7 rounded-md px-2.5 text-[11px] font-semibold capitalize transition-colors",
+                    className={cn("h-7 rounded-md px-2 sm:px-2.5 text-[11px] font-semibold capitalize transition-colors whitespace-nowrap",
                       status === k ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                    {k}
+                    {k === "nomomo" ? "No MoMo" : k}
                   </button>
                 ))}
               </div>
@@ -270,7 +311,12 @@ export function MyWriters() {
                         </div>
                       </div>
                     </div>
-                    <span className="hidden md:block text-xs font-mono text-muted-foreground truncate">{w.phone || "—"}</span>
+                    <span className="hidden md:block min-w-0">
+                      <span className="block text-xs font-mono text-muted-foreground truncate">{w.phone || "—"}</span>
+                      {!(w as { momoNumber?: string | null }).momoNumber && (
+                        <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">No MoMo wallet</span>
+                      )}
+                    </span>
                     <span className="hidden md:block">
                       {w.operationModel ? (
                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize",
@@ -280,6 +326,9 @@ export function MyWriters() {
                       ) : <span className="text-xs text-muted-foreground">—</span>}
                     </span>
                     <div className="flex items-center justify-end gap-1 md:contents">
+                      {!(w as { momoNumber?: string | null }).momoNumber && (
+                        <span title="No MoMo wallet: winning tickets cannot be paid" className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 md:hidden">No MoMo</span>
+                      )}
                       <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full md:justify-self-start",
                         w.isActive ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
                         {w.isActive ? "Active" : "Inactive"}
@@ -306,7 +355,7 @@ export function MyWriters() {
                         <button
                           title="Edit writer"
                           aria-label={`Edit ${w.fullName}`}
-                          onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}
+                          onClick={() => { setMomoTouched(false); setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}
                           className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors active:scale-95"
                         >
                           <EditIcon />
@@ -435,6 +484,7 @@ export function MyWriters() {
                 autoComplete="name"
               />
             </div>
+            <WriterMomoFields form={momo} idPrefix="my-writers-momo" touched={momoTouched} />
             <WriterLocationField
               id="my-writers-edit-location"
               required={false}
@@ -462,8 +512,8 @@ export function MyWriters() {
             </div>
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" className="flex-1 h-11 rounded-xl" onClick={() => setEditWriter(null)}>Cancel</Button>
-              <Button type="submit" className="flex-1 h-11 rounded-xl font-semibold" disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving…" : "Save Changes"}
+              <Button type="submit" className="flex-1 h-11 rounded-xl font-semibold" disabled={updateMutation.isPending || savingMomo}>
+                {updateMutation.isPending || savingMomo ? "Saving…" : "Save Changes"}
               </Button>
             </DialogFooter>
           </form>

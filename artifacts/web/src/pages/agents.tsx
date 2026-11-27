@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { WriterLocationField, locationPayload } from "@/components/writer-location-field";
+import { WriterMomoFields, useWriterMomoForm } from "@/components/writer-momo-fields";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -53,9 +54,19 @@ function WritersSection({ agentId }: { agentId: string }) {
     }
   };
 
+  const momo = useWriterMomoForm(editWriter?.id);
+  const [momoTouched, setMomoTouched] = useState(false);
+  const [savingMomo, setSavingMomo] = useState(false);
+
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editWriter) return;
+    // An active writer must have a payout wallet (when this user may set one).
+    if (momo.canEdit && editForm.isActive && !momo.valid) {
+      setMomoTouched(true);
+      toast({ title: momo.problem ?? "Add the writer's MoMo wallet", variant: "destructive" });
+      return;
+    }
     try {
       await updateMutation.mutateAsync({
         id: editWriter.id,
@@ -70,7 +81,24 @@ function WritersSection({ agentId }: { agentId: string }) {
           lng: editForm.lng,
         },
       });
-      toast({ title: "Writer updated" });
+      if (momo.canEdit && momo.dirty && momo.valid) {
+        setSavingMomo(true);
+        try {
+          const name = await momo.save();
+          toast({
+            title: "Writer updated",
+            description: name ? `MoMo wallet confirmed: ${name}` : "MoMo wallet saved. The network did not confirm the name - check the number with the writer.",
+          });
+        } catch (err) {
+          toast({ title: (err as Error).message || "The MoMo wallet was not saved", variant: "destructive" });
+          invalidate();
+          return;
+        } finally {
+          setSavingMomo(false);
+        }
+      } else {
+        toast({ title: "Writer updated" });
+      }
       setEditWriter(null);
       invalidate();
     } catch {
@@ -103,9 +131,15 @@ function WritersSection({ agentId }: { agentId: string }) {
               <tr key={w.id} className={`border-b last:border-0 ${!w.isActive ? "opacity-50" : ""}`}>
                 <td className="py-1 font-mono text-xs">{w.fullCode}</td>
                 <td className="py-1 text-xs">{w.fullName}</td>
-                <td className="py-1"><Badge variant={w.isActive ? "default" : "secondary"} className="text-xs h-4 px-1">{w.isActive ? "Active" : "Inactive"}</Badge></td>
+                <td className="py-1">
+                  <Badge variant={w.isActive ? "default" : "secondary"} className="text-xs h-4 px-1">{w.isActive ? "Active" : "Inactive"}</Badge>
+                  {!(w as { momoNumber?: string | null }).momoNumber && (
+                    <Badge variant="outline" title="No MoMo wallet: winning tickets cannot be paid"
+                      className="ml-1 text-[10px] h-4 px-1 border-amber-300 bg-amber-50 text-amber-800">No MoMo</Badge>
+                  )}
+                </td>
                 <td className="py-1 text-right">
-                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}>Edit</Button>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setMomoTouched(false); setEditWriter(w); setEditForm({ fullName: w.fullName, isActive: w.isActive, location: w.location ?? "", lat: w.lat ?? "", lng: w.lng ?? "" }); }}>Edit</Button>
                 </td>
               </tr>
             ))}
@@ -138,13 +172,14 @@ function WritersSection({ agentId }: { agentId: string }) {
       </Dialog>
 
       <Dialog open={!!editWriter} onOpenChange={open => !open && setEditWriter(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Writer — {editWriter?.fullCode}</DialogTitle></DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Full Name</Label>
               <Input value={editForm.fullName} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} required className="h-9 text-sm" />
             </div>
+            <WriterMomoFields form={momo} idPrefix="agents-edit-momo" touched={momoTouched} />
             <WriterLocationField
               id="agents-edit-writer-location"
               required={false}
@@ -157,7 +192,7 @@ function WritersSection({ agentId }: { agentId: string }) {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditWriter(null)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={updateMutation.isPending}>Save</Button>
+              <Button type="submit" size="sm" disabled={updateMutation.isPending || savingMomo}>{updateMutation.isPending || savingMomo ? "Saving…" : "Save"}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -118,6 +118,13 @@ export interface BetSelection {
   /** Per-line stake bounds from the bet type. A zero max means no ceiling. */
   minStake?: number;
   maxStake?: number;
+  /**
+   * The count the administrator set on the bet type. It can only narrow the
+   * mechanic's own range, never widen it, and is enforced here so the API
+   * holds the same line as the keypad.
+   */
+  minNumbers?: number;
+  maxNumbers?: number;
 }
 
 export interface BetQuote {
@@ -174,15 +181,20 @@ export function validateSelection(selection: BetSelection): string | null {
     return "This bet type has no banker";
   }
 
-  if (numbers.length < spec.minNumbers) {
-    return spec.minNumbers === spec.maxNumbers
-      ? `Pick exactly ${spec.minNumbers} number${spec.minNumbers === 1 ? "" : "s"}`
-      : `Pick at least ${spec.minNumbers} numbers`;
+  const lo = Math.max(spec.minNumbers, selection.minNumbers ?? spec.minNumbers);
+  const hi = Math.min(spec.maxNumbers, selection.maxNumbers ?? spec.maxNumbers);
+  const fewest = Math.min(lo, hi);
+  const most = Math.max(lo, hi);
+  if (numbers.length < fewest) {
+    return fewest === most
+      ? `Pick exactly ${fewest} number${fewest === 1 ? "" : "s"}`
+      : `Pick at least ${fewest} numbers`;
   }
-  if (numbers.length > spec.maxNumbers) {
-    return spec.maxNumbers === 0
-      ? "This bet type takes only a banker"
-      : `Pick at most ${spec.maxNumbers} numbers`;
+  if (numbers.length > most) {
+    if (most === 0) return "This bet type takes only a banker";
+    return fewest === most
+      ? `Pick exactly ${most} number${most === 1 ? "" : "s"}`
+      : `Pick at most ${most} numbers`;
   }
 
   if (!(selection.stakePerLine > 0)) return "Stake per line must be more than zero";

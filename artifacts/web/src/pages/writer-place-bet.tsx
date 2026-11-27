@@ -422,6 +422,9 @@ export function WriterPlaceBet() {
                   onChange={(next) => setBanker(next.length ? (next[next.length - 1] as number) : null)}
                   min={1}
                   max={1}
+                  // An against-number cannot also be the banker.
+                  reserved={picked}
+                  reservedLabel="Against"
                   submitting={placeBetMutation.isPending}
                   disabled={!gameId || !betTypeCode || bettingClosed}
                   onSubmit={wantsNumbers ? undefined : () => handleSubmit()}
@@ -446,6 +449,9 @@ export function WriterPlaceBet() {
                 <NumberKeypad
                   selected={picked}
                   onChange={setPicked}
+                  // The banker is held apart: it cannot be picked again here.
+                  reserved={needsBanker && banker ? [banker] : []}
+                  reservedLabel="Banker"
                   min={Number(selectedBetType.minNumbers)}
                   max={Number(selectedBetType.maxNumbers)}
                   submitting={placeBetMutation.isPending}

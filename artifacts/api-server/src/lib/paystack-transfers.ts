@@ -43,6 +43,17 @@ export function normaliseMomoNumber(input: unknown): string | null {
   return /^0\d{9}$/.test(digits) ? digits : null;
 }
 
+/**
+ * Ghana mobile prefixes (020-028, 050-059 as allocated). A landline or an
+ * unallocated range cannot hold a wallet, so it is refused before Paystack is
+ * asked. The network is not checked against the prefix: numbers are portable
+ * between networks, so 024 is not proof of MTN.
+ */
+const GH_MOBILE_PREFIXES = new Set(["020", "023", "024", "025", "026", "027", "028", "050", "053", "054", "055", "056", "057", "059"]);
+export function isGhanaMobile(number: string): boolean {
+  return /^0\d{9}$/.test(number) && GH_MOBILE_PREFIXES.has(number.slice(0, 3));
+}
+
 /** Cedis as a string to pesewas as an integer, without going through a float. */
 export function toMinorUnits(amount: string): number {
   const [whole, frac = ""] = amount.split(".");

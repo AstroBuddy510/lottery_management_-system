@@ -263,3 +263,10 @@
   60% { transform: rotate(-8deg); }
   80% { transform: rotate(5deg); }
 }
+
+/* Number keypad: a tap on a full pad nudges the counter sideways, once. */
+@keyframes keypad-nudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}

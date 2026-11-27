@@ -440,7 +440,9 @@ router.get(
       .select()
       .from(writersTable)
       .where(eq(writersTable.agentId, parse.data.agentId));
-    res.json(writers);
+    // The PIN hash and Paystack's recipient handle never leave the server.
+    // momoNumber stays: the lists flag writers who have no payout wallet.
+    res.json(writers.map(({ pinHash: _pin, paystackRecipientCode: _rc, ...w }) => w));
   },
 );
 
