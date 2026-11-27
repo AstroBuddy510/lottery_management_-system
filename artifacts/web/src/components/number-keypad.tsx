@@ -228,7 +228,7 @@ export function NumberKeypad({
         <Button
           type="button"
           variant="outline"
-          className="h-12"
+          className="h-12 rounded-xl"
           onClick={backspace}
           disabled={disabled || selected.length === 0}
           aria-label="Delete last selection"
@@ -238,7 +238,7 @@ export function NumberKeypad({
         <Button
           type="button"
           variant="outline"
-          className="h-12"
+          className="h-12 rounded-xl"
           onClick={clear}
           disabled={disabled || selected.length === 0}
           aria-label="Clear all selections"
@@ -247,7 +247,7 @@ export function NumberKeypad({
         </Button>
         <Button
           type="button"
-          className="h-12 col-span-2 font-bold tracking-wide"
+          className="h-12 rounded-xl col-span-2 font-bold tracking-wide"
           onClick={onSubmit}
           disabled={disabled || submitting || !complete || !onSubmit}
         >

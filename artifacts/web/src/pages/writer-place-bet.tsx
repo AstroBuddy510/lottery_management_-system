@@ -12,7 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Info, Plus, Trash2, ShoppingCart, Receipt } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, Receipt, Clock, Ticket as TicketIcon } from "lucide-react";
+import { WriterCard, WriterCardHeader, WriterPageHeader, WriterStep } from "@/components/writer-ui";
 import { Badge } from "@/components/ui/badge";
 
 /** One bet waiting to go onto a slip. Priced by the server, not here. */
@@ -325,35 +326,37 @@ export function WriterPlaceBet() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Place Bet</h1>
+    <div className="max-w-2xl mx-auto space-y-5">
+      <WriterPageHeader
+        title="Place Bet"
+        icon={TicketIcon}
+        subtitle="Choose a draw and a bet type, enter the stake, then pick the numbers."
+        action={user?.operationModel === "prepaid" ? (
+          <span className="inline-flex flex-col items-end rounded-xl bg-primary/10 px-3 py-1.5 text-right">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-primary/80">Tokens</span>
+            <span className="text-sm font-black tabular-nums text-primary">GHS {wallet?.balance || "0.00"}</span>
+          </span>
+        ) : undefined}
+      />
 
       {/* The countdown, or the reason selling has stopped. Renders nothing
           when automated settlement is off, which is the normal case. */}
       <SettlementLockBanner gate={gate} />
       
-      {user?.operationModel === "prepaid" && (
-        <Card className="bg-primary/5 border-primary/20">
-          <CardContent className="py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Info className="h-5 w-5 text-primary" />
-              <span className="font-medium text-sm">Available Tokens</span>
-            </div>
-            <span className="text-xl font-bold">GHS {wallet?.balance || "0.00"}</span>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>New Ticket</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      <WriterCard>
+        <WriterCardHeader icon={TicketIcon} title="New Ticket"
+          description={selectedGame ? `${selectedGame.name} · ${selectedGame.eventNumber}` : "Nothing sold until you place it"}
+          right={selectedGame && !bettingClosed ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+              <Clock className="h-3 w-3" /> {timeLeft(selectedGame.closeAt)}
+            </span>
+          ) : undefined} />
+        <div className="p-4 sm:p-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Select Game</label>
+              <WriterStep n={1} title="Draw" done={!!gameId} />
               <Select value={gameId} onValueChange={setGameId} disabled={cart.length > 0}>
-                <SelectTrigger>
+                <SelectTrigger className="h-12 rounded-xl">
                   <SelectValue placeholder={loadingGames ? "Loading..." : "Select a live game"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -367,9 +370,9 @@ export function WriterPlaceBet() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Bet Type</label>
+              <WriterStep n={2} title="Bet type" done={!!betTypeCode} />
               <Select value={betTypeCode} onValueChange={setBetTypeCode}>
-                <SelectTrigger>
+                <SelectTrigger className="h-12 rounded-xl">
                   <SelectValue placeholder={loadingBetTypes ? "Loading..." : "Select bet type"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -381,7 +384,8 @@ export function WriterPlaceBet() {
             </div>
 
             {liveGames.length === 0 && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+              <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+                <Clock className="h-4 w-4 shrink-0" />
                 No game is open for betting right now.
               </div>
             )}
@@ -391,7 +395,7 @@ export function WriterPlaceBet() {
                 it the writer picked their numbers and found a dead button. */}
             {selectedBetType && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Stake per line (GHS)</label>
+                <WriterStep n={3} title="Stake per line" hint="(GHS)" done={parseFloat(stakeAmount) > 0} />
                 <Input
                   type="number"
                   step="0.01"
@@ -400,7 +404,7 @@ export function WriterPlaceBet() {
                   placeholder="0.00"
                   value={stakeAmount}
                   onChange={(e) => setStakeAmount(e.target.value)}
-                  className="h-12 text-lg font-mono"
+                  className="h-12 rounded-xl text-lg font-mono"
                 />
               </div>
             )}
@@ -411,12 +415,7 @@ export function WriterPlaceBet() {
                 all, and made this one bet type feel broken next to the rest. */}
             {selectedBetType && needsBanker && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Banker{" "}
-                  <span className="text-muted-foreground font-normal">
-                    (the number that must drop)
-                  </span>
-                </label>
+                <WriterStep n={4} title="Banker" hint="the number that must drop" done={!!banker} />
                 <NumberKeypad
                   selected={banker ? [banker] : []}
                   onChange={(next) => setBanker(next.length ? (next[next.length - 1] as number) : null)}
@@ -435,17 +434,13 @@ export function WriterPlaceBet() {
 
             {selectedBetType && Number(selectedBetType.maxNumbers) > 0 && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  {needsBanker ? "Against" : "Numbers"}
-                  {" "}
-                  <span className="text-muted-foreground font-normal">
-                    (
-                    {Number(selectedBetType.minNumbers) === Number(selectedBetType.maxNumbers)
-                      ? `pick ${selectedBetType.minNumbers}`
-                      : `pick ${selectedBetType.minNumbers} to ${selectedBetType.maxNumbers}`}
-                    )
-                  </span>
-                </label>
+                <WriterStep
+                  n={needsBanker ? 5 : 4}
+                  title={needsBanker ? "Against" : "Numbers"}
+                  hint={Number(selectedBetType.minNumbers) === Number(selectedBetType.maxNumbers)
+                    ? `pick ${selectedBetType.minNumbers}`
+                    : `pick ${selectedBetType.minNumbers} to ${selectedBetType.maxNumbers}`}
+                  done={picked.length >= Number(selectedBetType.minNumbers)} />
                 <NumberKeypad
                   selected={picked}
                   onChange={setPicked}
@@ -465,7 +460,7 @@ export function WriterPlaceBet() {
 
 
             {selectedBetType && stakeAmount && quote && (
-              <div className="mt-4 space-y-2 rounded-xl border p-4">
+              <div className="space-y-2 rounded-2xl bg-gradient-to-br from-primary/[0.06] to-transparent p-4 ring-1 ring-primary/15">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Lines</span>
                   <span className="font-semibold tabular-nums">{quote.lines}</span>
@@ -495,7 +490,7 @@ export function WriterPlaceBet() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full h-11"
+                className="w-full h-11 rounded-xl border-dashed"
                 disabled={!quote?.valid || placeSlipMutation.isPending || placeBetMutation.isPending}
                 onClick={addToCart}
               >
@@ -505,7 +500,7 @@ export function WriterPlaceBet() {
             )}
 
             {cart.length > 0 && (
-              <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-3">
+              <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-sm font-bold">
                     <ShoppingCart className="h-4 w-4" />
@@ -583,7 +578,7 @@ export function WriterPlaceBet() {
 
                 <Button
                   type="button"
-                  className="w-full h-12"
+                  className="w-full h-12 rounded-xl font-bold"
                   disabled={placeSlipMutation.isPending || bettingClosed}
                   onClick={sellSlip}
                 >
@@ -601,7 +596,7 @@ export function WriterPlaceBet() {
             {!selectedBetType && (
               <Button
                 type="submit"
-                className="w-full mt-6"
+                className="w-full h-12 rounded-xl"
                 size="lg"
                 disabled
               >
@@ -609,8 +604,8 @@ export function WriterPlaceBet() {
               </Button>
             )}
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </WriterCard>
 
       <TicketReceiptDialog ticketId={receiptTicketId} onClose={() => setReceiptTicketId(null)} />
       <SlipReceiptDialog slipNumber={slipNumber} onClose={() => setSlipNumber(null)} />

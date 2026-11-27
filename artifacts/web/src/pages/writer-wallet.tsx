@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
-import { Archive, Banknote, CalendarClock, CalendarDays, Info, Loader2, Plus, Smartphone } from "lucide-react";
+import { Archive, Banknote, CalendarClock, CalendarDays, Info, Loader2, Plus, Smartphone, Wallet as WalletIcon } from "lucide-react";
+import { WriterCard, WriterCardHeader, WriterPageHeader } from "@/components/writer-ui";
 import { Pager, PastSection } from "@/components/writer-past-section";
 import { useToast } from "@/hooks/use-toast";
 import { fmtGHS } from "@/lib/utils";
@@ -330,7 +331,7 @@ function LedgerItem({ l }: { l: LedgerRow }) {
           {String(l.settlementStatus).toUpperCase()}
         </Badge>
       </div>
-      <div className="grid grid-cols-3 gap-2 mt-2">
+      <div className="grid grid-cols-3 gap-2 mt-2 rounded-xl bg-muted/40 px-3 py-2">
         <div>
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Stakes</div>
           <div className="text-xs font-bold tabular-nums">{fmtGHS(l.totalStakes)}</div>
@@ -343,7 +344,7 @@ function LedgerItem({ l }: { l: LedgerRow }) {
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
             {settled ? "Paid" : l.amountPayable != null ? "To pay" : "Net"}
           </div>
-          <div className="text-xs font-bold tabular-nums text-primary">
+          <div className={`text-xs font-bold tabular-nums ${settled ? "text-emerald-700 dark:text-emerald-400" : "text-primary"}`}>
             {fmtGHS(settled ? (l.amountPaid ?? l.netBalance) : (l.amountPayable ?? l.netBalance))}
           </div>
         </div>
@@ -483,7 +484,18 @@ export function WriterWallet() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="mx-auto w-full max-w-2xl space-y-5">
+      <WriterPageHeader
+        title="Wallet & Ledger"
+        icon={WalletIcon}
+        subtitle={view === "prepaid" ? "Your units: what you bought and what you spent." : "What you took, what you paid out, and what is left to settle."}
+        action={view === "prepaid" ? (
+          <Button size="sm" className="h-9 rounded-xl font-semibold" onClick={() => setBuyOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" /> Buy Unit
+          </Button>
+        ) : undefined}
+      />
+
       {pendingRequest && (
         <div className="rounded-xl border border-amber-300/60 bg-amber-500/[0.07] px-4 py-3 text-xs dark:border-amber-500/30">
           <span className="font-semibold">
@@ -496,29 +508,20 @@ export function WriterWallet() {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-xl font-bold tracking-tight">Wallet &amp; Ledger</h1>
-        {view === "prepaid" && (
-          <Button size="sm" className="h-9 rounded-xl font-semibold" onClick={() => setBuyOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" /> Buy Unit
-          </Button>
-        )}
-      </div>
-
       {/* Account mode */}
-      <div className="inline-flex rounded-xl border bg-muted/40 p-1 w-full sm:w-auto">
+      <div className="flex w-full rounded-2xl bg-card p-1 shadow-sm ring-1 ring-border/70 sm:inline-flex sm:w-auto">
         {(["postpaid", "prepaid"] as Mode[]).map((m) => (
           <button
             key={m}
             type="button"
             onClick={() => selectView(m)}
             disabled={switchMode.isPending}
-            className={`flex-1 sm:flex-none px-4 h-9 rounded-lg text-xs font-bold capitalize transition-colors ${
-              view === m ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+            className={`flex-1 sm:flex-none px-5 h-9 rounded-xl text-xs font-bold capitalize transition-colors ${
+              view === m ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {m}
-            {accountMode === m && <span className="ml-1.5 text-[9px] text-emerald-600">●</span>}
+            {accountMode === m && <span className={`ml-1.5 text-[9px] ${view === m ? "text-emerald-300" : "text-emerald-600"}`}>●</span>}
           </button>
         ))}
       </div>
@@ -530,62 +533,34 @@ export function WriterWallet() {
 
       {view === "prepaid" ? (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Card className="bg-primary/5 border-primary/20 col-span-2 sm:col-span-1">
-              <CardHeader className="pb-1.5 px-4 pt-3">
-                <CardTitle className="text-[11px] font-semibold text-primary uppercase tracking-wide">
-                  Available Balance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3">
-                <div className="text-2xl font-bold tabular-nums">{fmtGHS(balanceData?.balance ?? 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-1.5 px-4 pt-3">
-                <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  Total Purchased
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3">
-                <div className="text-base font-bold tabular-nums">{fmtGHS(balanceData?.totalPurchased ?? 0)}</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-1.5 px-4 pt-3">
-                <CardTitle className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  Total Spent
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-3">
-                <div className="text-base font-bold tabular-nums">{fmtGHS(balanceData?.totalSpent ?? 0)}</div>
-              </CardContent>
-            </Card>
+          <div
+            className="relative overflow-hidden rounded-2xl p-5 text-white shadow-lg"
+            style={{ background: "linear-gradient(135deg, #0f2747 0%, #1e3a8a 50%, #1d4ed8 100%)" }}
+          >
+            <div aria-hidden className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-white/[0.07]" />
+            <p className="relative text-[11px] font-semibold uppercase tracking-wider text-white/70">Available balance</p>
+            <p className="relative mt-1 text-3xl font-black tabular-nums">{fmtGHS(balanceData?.balance ?? 0)}</p>
+            <div className="relative mt-4 grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-white/10 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/60">Total purchased</p>
+                <p className="text-sm font-bold tabular-nums">{fmtGHS(balanceData?.totalPurchased ?? 0)}</p>
+              </div>
+              <div className="rounded-xl bg-white/10 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/60">Total spent</p>
+                <p className="text-sm font-bold tabular-nums">{fmtGHS(balanceData?.totalSpent ?? 0)}</p>
+              </div>
+            </div>
           </div>
 
           {/* ── Today: open at the top ── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-primary" />
-                Today
-                {todayRows.length > 0 && (
-                  <Badge className="h-5 px-1.5 text-[10px] font-bold tabular-nums">{todayRows.length}</Badge>
-                )}
-                {todayRows.length > 0 && (
-                  <span
-                    className={`ml-auto text-sm font-bold tabular-nums ${
-                      todayNet > 0 ? "text-emerald-600" : todayNet < 0 ? "text-destructive" : "text-muted-foreground"
-                    }`}
-                  >
-                    {todayNet > 0 ? "+" : ""}
-                    {fmtGHS(todayNet)}
-                  </span>
-                )}
-              </CardTitle>
-              <CardDescription className="text-xs">Units bought and spent today.</CardDescription>
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
+          <WriterCard>
+            <WriterCardHeader icon={CalendarDays} title="Today" count={todayRows.length} description="Units bought and spent today."
+              right={todayRows.length > 0 ? (
+                <span className={`text-sm font-bold tabular-nums ${todayNet > 0 ? "text-emerald-600" : todayNet < 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                  {todayNet > 0 ? "+" : ""}{fmtGHS(todayNet)}
+                </span>
+              ) : undefined} />
+            <div className="px-4 py-1">
               {today.isLoading ? (
                 <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
               ) : today.isError ? (
@@ -593,14 +568,14 @@ export function WriterWallet() {
               ) : todayRows.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">No transactions today.</p>
               ) : (
-                <ul className="divide-y divide-border/40">
+                <ul className="max-h-[min(28rem,55vh)] divide-y divide-border/40 overflow-y-auto overscroll-contain thin-scroll">
                   {todayRows.map((tx) => (
                     <TransactionRow key={tx.id} tx={tx} />
                   ))}
                 </ul>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </WriterCard>
 
           {/* ── Earlier days: folded away, a week of days per page ── */}
           <PastSection
@@ -651,23 +626,29 @@ export function WriterWallet() {
       ) : (
         <>
           {/* ── Still to settle: open at the top ── */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CalendarClock className="h-4 w-4 text-primary" />
-                To Settle
-                {openRows.length > 0 && (
-                  <Badge className="h-5 px-1.5 text-[10px] font-bold tabular-nums">{openRows.length}</Badge>
-                )}
-                {openRows.length > 0 && (
-                  <span className="ml-auto text-sm font-bold tabular-nums text-primary">{fmtGHS(owed)}</span>
-                )}
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Stakes you took, wins you paid, and what is left to settle.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
+          {/* What is owed, at a glance */}
+          <div
+            className="relative overflow-hidden rounded-2xl p-5 text-white shadow-lg"
+            style={{ background: openRows.length > 0
+              ? "linear-gradient(135deg, #7c2d12 0%, #c2410c 55%, #f59e0b 100%)"
+              : "linear-gradient(135deg, #065f46 0%, #059669 60%, #10b981 100%)" }}
+          >
+            <div aria-hidden className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-white/[0.08]" />
+            <p className="relative text-[11px] font-semibold uppercase tracking-wider text-white/75">
+              {openRows.length > 0 ? "Left to settle" : "All settled"}
+            </p>
+            <p className="relative mt-1 text-3xl font-black tabular-nums">{fmtGHS(openRows.length > 0 ? owed : 0)}</p>
+            <p className="relative mt-1 text-xs text-white/80">
+              {openRows.length > 0
+                ? `${openRows.length} draw${openRows.length === 1 ? "" : "s"} open`
+                : "You are all paid up."}
+            </p>
+          </div>
+
+          <WriterCard>
+            <WriterCardHeader icon={CalendarClock} title="To Settle" count={openRows.length}
+              description="Stakes you took, wins you paid, and what is left to settle." />
+            <div className="px-4 py-1">
               {outstanding.isLoading ? (
                 <div className="py-8 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
               ) : outstanding.isError ? (
@@ -675,14 +656,14 @@ export function WriterWallet() {
               ) : openRows.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">Nothing to settle - you are all paid up.</p>
               ) : (
-                <ul className="divide-y divide-border/60">
+                <ul className="max-h-[min(30rem,58vh)] divide-y divide-border/60 overflow-y-auto overscroll-contain thin-scroll">
                   {openRows.map((l) => (
                     <LedgerItem key={l.id} l={l} />
                   ))}
                 </ul>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </WriterCard>
 
           {/* ── Settled days: folded away, paged ── */}
           <PastSection

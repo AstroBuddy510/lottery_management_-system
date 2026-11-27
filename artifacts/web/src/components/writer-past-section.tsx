@@ -124,7 +124,7 @@ export function PastSection({
   return (
     <div ref={ref} className="scroll-mt-20">
       <Collapsible open={open} onOpenChange={toggle}>
-        <Card>
+        <Card className="overflow-hidden rounded-2xl border-0 shadow-sm ring-1 ring-border/70">
           <CollapsibleTrigger asChild>
             <button
               type="button"
@@ -133,14 +133,16 @@ export function PastSection({
             >
               <CardHeader className="py-4 flex-row items-center justify-between gap-3 space-y-0">
                 <div className="min-w-0 space-y-1">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-base flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                    </span>
                     {title}
                     {!!count && count > 0 && (
                       <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold tabular-nums">{count}</Badge>
                     )}
                   </CardTitle>
-                  <CardDescription className="text-xs">{description}</CardDescription>
+                  <CardDescription className="text-xs pl-[42px]">{description}</CardDescription>
                 </div>
                 <ChevronDown
                   className={cn("h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300", open && "rotate-180")}
@@ -150,7 +152,7 @@ export function PastSection({
           </CollapsibleTrigger>
 
           <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-            <CardContent className="px-3 sm:px-6 pt-0">
+            <CardContent className="px-3 sm:px-5 pt-0 border-t">
               {loading ? (
                 <div className="py-10 text-center"><Loader2 className="h-4 w-4 animate-spin inline" /></div>
               ) : error ? (

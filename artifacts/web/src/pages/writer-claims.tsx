@@ -8,6 +8,7 @@ import {
   ScanLine, Camera, CameraOff, Smartphone, CheckCircle2, XCircle, Clock, Loader2, Trophy, Keyboard,
 } from "lucide-react";
 import { apiGet, apiSend } from "@/lib/api-fetch";
+import { WriterCard, WriterCardHeader, WriterPageHeader } from "@/components/writer-ui";
 import { fmtGHS } from "@/lib/utils";
 
 /**
@@ -169,44 +170,53 @@ export function WriterClaims() {
   const unclaimedTotal = unclaimed.reduce((n, c) => n + Number(c.amount), 0);
 
   return (
-    <div className="px-4 pt-5 pb-8 space-y-4 max-w-xl mx-auto">
-      <div>
-        <h1 className="text-lg font-bold flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-amber-500" /> Claim Wins
-        </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Scan the QR code on a winning ticket. Once the cashier approves, the payout is sent to your MoMo wallet.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-xl space-y-5 pb-8">
+      <WriterPageHeader
+        title="Claim Wins"
+        icon={Trophy}
+        tone="amber"
+        subtitle="Scan a winning ticket. Once the cashier approves, the money goes to your MoMo wallet."
+      />
 
       {/* Where the money will go */}
-      <Card className={wallet ? "" : "border-amber-300 bg-amber-50/60"}>
-        <CardContent className="p-3.5 flex items-center gap-3">
-          <Smartphone className={`w-5 h-5 shrink-0 ${wallet ? "text-emerald-600" : "text-amber-600"}`} />
+      <div
+        className={`relative overflow-hidden rounded-2xl p-4 shadow-sm ${wallet ? "text-white" : "bg-amber-50 ring-1 ring-amber-300 dark:bg-amber-950/30"}`}
+        style={wallet ? { background: "linear-gradient(135deg, #065f46 0%, #059669 60%, #10b981 100%)" } : undefined}
+      >
+        {wallet && <div aria-hidden className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-white/10" />}
+        <div className="relative flex items-center gap-3">
+          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${wallet ? "bg-white/15" : "bg-amber-500/15 text-amber-700"}`}>
+            <Smartphone className="h-5 w-5" />
+          </span>
           {wallet ? (
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Payouts go to</p>
-              <p className="text-sm font-bold font-mono">{wallet.number} <span className="font-sans font-medium text-muted-foreground">· {wallet.providerLabel}</span></p>
-              {wallet.accountName && <p className="text-[11px] text-muted-foreground truncate">{wallet.accountName}</p>}
+              <p className="text-[11px] font-medium uppercase tracking-wider text-white/70">Payouts go to</p>
+              <p className="font-mono text-lg font-bold leading-tight">{wallet.number}</p>
+              <p className="truncate text-xs text-white/80">
+                {wallet.providerLabel}{wallet.accountName ? ` · ${wallet.accountName}` : ""}
+              </p>
             </div>
           ) : (
-            <p className="text-xs text-amber-800">
-              <strong>No MoMo wallet registered.</strong> You cannot be paid until your agent adds one to your profile.
+            <p className="text-xs text-amber-900 dark:text-amber-200">
+              <strong className="block text-sm">No MoMo wallet registered</strong>
+              You cannot be paid until your agent adds one to your profile.
             </p>
           )}
-        </CardContent>
-      </Card>
-
-      {unclaimed.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900">
-          You have <strong>{unclaimed.length}</strong> winning ticket{unclaimed.length === 1 ? "" : "s"} worth{" "}
-          <strong>{fmtGHS(unclaimedTotal)}</strong> not yet claimed.
         </div>
-      )}
+        {unclaimed.length > 0 && (
+          <div className={`relative mt-3 flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs ${wallet ? "bg-white/15" : "bg-amber-500/10 text-amber-900"}`}>
+            <span>
+              <strong>{unclaimed.length}</strong> winning ticket{unclaimed.length === 1 ? "" : "s"} not yet claimed
+            </span>
+            <span className="text-sm font-black tabular-nums">{fmtGHS(unclaimedTotal)}</span>
+          </div>
+        )}
+      </div>
 
       {/* Scanner */}
-      <Card>
-        <CardContent className="p-3.5 space-y-3">
+      <WriterCard>
+        <WriterCardHeader icon={ScanLine} title="Scan a winning ticket" description="Point the camera at the ticket's QR code, or type its number." />
+        <div className="space-y-3 p-4">
           {scanning ? (
             <div className="relative rounded-xl overflow-hidden bg-black aspect-square">
               <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
@@ -219,10 +229,14 @@ export function WriterClaims() {
             </div>
           ) : null}
 
-          <Button className="w-full h-12 text-base font-semibold" variant={scanning ? "outline" : "default"} onClick={scanning ? stopCamera : startCamera}>
+          <Button className="w-full h-12 rounded-xl text-base font-semibold" variant={scanning ? "outline" : "default"} onClick={scanning ? stopCamera : startCamera}>
             {scanning ? <><CameraOff className="w-5 h-5 mr-2" /> Stop scanning</> : <><Camera className="w-5 h-5 mr-2" /> Scan ticket QR</>}
           </Button>
           {cameraError && <p className="text-xs text-amber-700">{cameraError}</p>}
+
+          <div className="flex items-center gap-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+          </div>
 
           <form
             className="flex gap-2"
@@ -240,18 +254,18 @@ export function WriterClaims() {
               <Input
                 value={typed}
                 onChange={e => setTyped(e.target.value)}
-                placeholder="or type the ticket number"
-                className="h-11 pl-9 font-mono text-sm"
+                placeholder="Ticket number"
+                className="h-11 rounded-xl pl-9 font-mono text-sm"
                 autoCapitalize="characters"
                 autoComplete="off"
               />
             </div>
-            <Button type="submit" variant="outline" className="h-11" disabled={!typed.trim() || submit.isPending}>
+            <Button type="submit" variant="outline" className="h-11 rounded-xl" disabled={!typed.trim() || submit.isPending}>
               <ScanLine className="w-4 h-4 mr-1.5" /> Claim
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </WriterCard>
 
       {/* What the server said, newest first */}
       {results.length > 0 && (
@@ -259,8 +273,8 @@ export function WriterClaims() {
           {results.map((r, i) => (
             <div
               key={i}
-              className={`rounded-xl border px-3.5 py-3 flex items-start gap-2.5 ${
-                r.accepted ? "border-emerald-200 bg-emerald-50/70" : "border-red-200 bg-red-50/60"
+              className={`rounded-2xl px-4 py-3 flex items-start gap-2.5 shadow-sm ring-1 ${
+                r.accepted ? "ring-emerald-200 bg-emerald-50/80 dark:bg-emerald-950/30" : "ring-red-200 bg-red-50/70 dark:bg-red-950/30"
               }`}
             >
               {r.accepted
@@ -268,7 +282,7 @@ export function WriterClaims() {
                 : <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />}
               <div className="min-w-0">
                 {r.ticketNumber && <p className="text-xs font-mono font-bold">{r.ticketNumber}</p>}
-                <p className={`text-sm ${r.accepted ? "text-emerald-900" : "text-red-900"}`}>{r.message}</p>
+                <p className={`text-sm ${r.accepted ? "text-emerald-900 dark:text-emerald-200" : "text-red-900 dark:text-red-200"}`}>{r.message}</p>
               </div>
             </div>
           ))}
@@ -276,59 +290,65 @@ export function WriterClaims() {
       )}
 
       {/* Every winning ticket of mine, and where it has got to */}
-      <div className="space-y-2">
-        <h2 className="text-sm font-bold pt-2">My winning tickets</h2>
+      <WriterCard>
+        <WriterCardHeader icon={Trophy} tone="amber" title="My winning tickets" count={claims.length}
+          description="Where each payout has got to." />
         {mine.isLoading ? (
           <div className="py-8 text-center"><Loader2 className="w-5 h-5 animate-spin inline text-muted-foreground" /></div>
         ) : claims.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">No winning tickets yet.</p>
-        ) : claims.map(c => {
-          const cfg = c.expired
-            ? { label: "Expired", tone: "bg-slate-500/10 text-slate-600 border-slate-300" }
-            : STATUS[c.status] ?? { label: c.status, tone: "bg-muted" };
-          return (
-            <Card key={c.payoutId}>
-              <CardContent className="p-3.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-mono font-bold truncate">{c.ticketNumber}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      {c.gameName} #{c.eventNumber} · <span className="font-mono">{c.numbers}</span>
+          <div className="flex flex-col items-center gap-1.5 py-10 text-center">
+            <Trophy className="h-7 w-7 text-muted-foreground/30" />
+            <p className="text-sm text-muted-foreground">No winning tickets yet.</p>
+          </div>
+        ) : (
+          <ul className="max-h-[min(32rem,60vh)] divide-y divide-border/60 overflow-y-auto overscroll-contain thin-scroll">
+            {claims.map(c => {
+              const cfg = c.expired
+                ? { label: "Expired", tone: "bg-slate-500/10 text-slate-600 border-slate-300" }
+                : STATUS[c.status] ?? { label: c.status, tone: "bg-muted" };
+              return (
+                <li key={c.payoutId} className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-mono font-bold truncate">{c.ticketNumber}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {c.gameName} #{c.eventNumber} · <span className="font-mono">{c.numbers}</span>
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-black tabular-nums text-emerald-700 dark:text-emerald-400">{fmtGHS(c.amount)}</p>
+                      <Badge variant="outline" className={`${cfg.tone} text-[10px] font-bold mt-0.5`}>{cfg.label}</Badge>
+                    </div>
+                  </div>
+                  {c.status === "paid" && c.paidAt && (
+                    <p className="text-[11px] text-emerald-700 mt-1.5 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Sent to your wallet {new Date(c.paidAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
                     </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-black tabular-nums">{fmtGHS(c.amount)}</p>
-                    <Badge variant="outline" className={`${cfg.tone} text-[10px] font-bold mt-0.5`}>{cfg.label}</Badge>
-                  </div>
-                </div>
-                {c.status === "paid" && c.paidAt && (
-                  <p className="text-[11px] text-emerald-700 mt-2 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Sent to your wallet {new Date(c.paidAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
-                  </p>
-                )}
-                {c.expired && (
-                  <p className="text-[11px] text-slate-600 mt-2">
-                    Not claimed by {new Date(c.validUntil).toLocaleDateString("en-GB", { dateStyle: "medium" })}; it can no longer be paid.
-                  </p>
-                )}
-                {!c.expired && (c.status === "pending" || c.status === "approved") && (
-                  <p className="text-[11px] text-amber-700 mt-2">
-                    Scan by {new Date(c.validUntil).toLocaleDateString("en-GB", { dateStyle: "medium" })} to be paid.
-                  </p>
-                )}
-                {c.status === "withheld" && c.resolutionNote && (
-                  <p className="text-[11px] text-slate-600 mt-2">Reason: {c.resolutionNote}</p>
-                )}
-                {(c.status === "verified" || c.status === "awaiting_funds" || c.status === "processing") && c.claimedAt && (
-                  <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Claimed {new Date(c.claimedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                  )}
+                  {c.expired && (
+                    <p className="text-[11px] text-slate-600 mt-1.5">
+                      Not claimed by {new Date(c.validUntil).toLocaleDateString("en-GB", { dateStyle: "medium" })}; it can no longer be paid.
+                    </p>
+                  )}
+                  {!c.expired && (c.status === "pending" || c.status === "approved") && (
+                    <p className="text-[11px] text-amber-700 mt-1.5 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Scan by {new Date(c.validUntil).toLocaleDateString("en-GB", { dateStyle: "medium" })} to be paid.
+                    </p>
+                  )}
+                  {c.status === "withheld" && c.resolutionNote && (
+                    <p className="text-[11px] text-slate-600 mt-1.5">Reason: {c.resolutionNote}</p>
+                  )}
+                  {(c.status === "verified" || c.status === "awaiting_funds" || c.status === "processing") && c.claimedAt && (
+                    <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Claimed {new Date(c.claimedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </WriterCard>
     </div>
   );
 }
