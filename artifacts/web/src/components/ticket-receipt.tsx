@@ -4,8 +4,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Printer, Copy, MessageSquare, MessageCircle, Check, ImageDown, Send } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Loader2, Printer, Copy, MessageSquare, MessageCircle, Check, ImageDown } from "lucide-react";
+import { WhatsAppDirectSend } from "@/components/whatsapp-direct-send";
 import { useToast } from "@/hooks/use-toast";
 import {
   captureTicketPng,
@@ -382,8 +382,6 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
   const { toast } = useToast();
   const [copied, setCopied] = useState<"sms" | "full" | null>(null);
   const [saving, setSaving] = useState(false);
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [sending, setSending] = useState(false);
 
   const smsHref = useMemo(() => `sms:?body=${encodeURIComponent(data.smsText)}`, [data.smsText]);
   /**
@@ -435,48 +433,6 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
     }
   };
 
-  /**
-   * Hand the ticket to the customer's WhatsApp through the Business API.
-   *
-   * Unlike the WhatsApp button above - which only opens the writer's own app
-   * with the text prefilled - this sends from the company's number without
-   * the writer leaving the screen. The server renders the QR and owns the
-   * template; all this sends is the phone number.
-   */
-  const sendWhatsApp = async () => {
-    const phone = customerPhone.trim();
-    if (!phone) {
-      toast({ title: "Enter the customer's phone number", variant: "destructive" });
-      return;
-    }
-    setSending(true);
-    try {
-      const res = await fetch(
-        `/api/tickets/${encodeURIComponent(data.ticket.id)}/whatsapp`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
-          },
-          body: JSON.stringify({ phone }),
-        },
-      );
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || "WhatsApp did not accept the message");
-      toast({ title: "Ticket sent", description: `Sent to ${body.to ?? phone} on WhatsApp.` });
-      setCustomerPhone("");
-    } catch (e) {
-      toast({
-        title: "Couldn't send on WhatsApp",
-        description: (e as Error).message,
-        variant: "destructive",
-      });
-    } finally {
-      setSending(false);
-    }
-  };
-
   const copy = async (text: string, which: "sms" | "full") => {
     try {
       await navigator.clipboard.writeText(text);
@@ -515,50 +471,12 @@ export function TicketReceiptView({ data }: { data: TicketReceipt }) {
             <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
           </a>
         </Button>
-        {/* Sits directly above Download Image: the writer's eye is already
-            here after a sale, and sending beats saving-then-attaching. */}
-        {/* Stacked on a phone, side by side from sm up.
-            "Enter customer's phone number" needs 256px and only 254px was
-            left beside the Send button at 390px, so the placeholder clipped
-            on exactly the handsets writers use - and worse on a 360px screen.
-            Given the whole row, it has 332px and reads in full. */}
-        <div className="col-span-2 flex flex-col gap-2 sm:flex-row">
-          <Input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="Enter customer's phone number"
-            aria-label="Customer's phone number for WhatsApp"
-            // h-11 rather than the default h-9: 44px is a size a thumb can
-            // hit, and the extra height gives the text room to sit in rather
-            // than fill the box. text-base is kept on mobile deliberately -
-            // below 16px, iOS zooms the page the moment the field is focused.
-            className="h-11 text-base"
-            value={customerPhone}
-            onChange={(e) => setCustomerPhone(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !sending) {
-                e.preventDefault();
-                void sendWhatsApp();
-              }
-            }}
-            disabled={sending}
+        {/* Any number, saved or not: below Print / WhatsApp, above Download Image. */}
+        <div className="col-span-2">
+          <WhatsAppDirectSend
+            sendPath={`/api/tickets/${encodeURIComponent(data.ticket.id)}/whatsapp`}
+            fallbackText={data.smsText}
           />
-          <Button
-            variant="outline"
-            // Matches the input's height so the pair sits level, and takes the
-            // full width when stacked.
-            className="h-11 w-full shrink-0 border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 sm:w-auto dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
-            disabled={sending || !customerPhone.trim()}
-            onClick={sendWhatsApp}
-          >
-            {sending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4 mr-2" />
-            )}
-            {sending ? "Sending…" : "Send"}
-          </Button>
         </div>
         <Button
           variant="outline"

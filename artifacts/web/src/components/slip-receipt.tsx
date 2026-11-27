@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Loader2, Printer, Copy, MessageSquare, MessageCircle, Check, ImageDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { captureTicketPng, downloadBlob, shareImage, TICKET_SLIP_ID } from "@/lib/ticket-image";
+import { WhatsAppDirectSend } from "@/components/whatsapp-direct-send";
 
 /**
  * The printed document for several bets bought together.
@@ -208,6 +209,14 @@ export function SlipReceiptView({ data }: { data: SlipReceipt }) {
             <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
           </a>
         </Button>
+        {/* Any number, saved or not: below Print / WhatsApp, above Download Image. */}
+        <div className="col-span-2">
+          <WhatsAppDirectSend
+            sendPath={`/api/tickets/slip/${encodeURIComponent(data.slip.slipNumber)}/whatsapp`}
+            fallbackText={data.smsText}
+            what="slip"
+          />
+        </div>
         <Button variant="outline" className="col-span-2" disabled={saving} onClick={saveImage}>
           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ImageDown className="h-4 w-4 mr-2" />}
           {saving ? "Preparing image…" : "Download Image"}

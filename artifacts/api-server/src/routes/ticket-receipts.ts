@@ -435,6 +435,23 @@ router.post("/tickets/:ticketId/whatsapp", requireAuth, async (req, res) => {
     return;
   }
 
+  const sent = await sendTicketOnWhatsApp(row, to);
+  if (!sent.ok) {
+    res.status(502).json({ error: sent.error });
+    return;
+  }
+  res.json({ sent: true, to, messageId: sent.messageId });
+});
+
+/**
+ * One ticket, as one template message: its own QR as the image, its own
+ * number, draw, numbers and stake. Shared by the single-ticket route and the
+ * slip route, so a ticket sent either way looks and scans the same.
+ */
+async function sendTicketOnWhatsApp(
+  row: NonNullable<Awaited<ReturnType<typeof loadTicket>>>,
+  to: string,
+): Promise<{ ok: true; messageId: string | null } | { ok: false; error: string }> {
   const payload = receiptResponse(row);
   const qrPng = await QRCode.toBuffer(payload.qrPayload, {
     type: "png",
@@ -448,8 +465,7 @@ router.post("/tickets/:ticketId/whatsapp", requireAuth, async (req, res) => {
   const upload = await uploadWhatsAppMedia(qrPng, "image/png");
   if (!upload.success || !upload.mediaId) {
     logger.error({ ticketId: row.ticket.id, error: upload.error }, "[TICKET WHATSAPP] upload failed");
-    res.status(502).json({ error: upload.error ?? "Could not upload the ticket image" });
-    return;
+    return { ok: false, error: upload.error ?? "Could not upload the ticket image" };
   }
 
   const sent = await sendWhatsAppTemplate({
@@ -466,8 +482,7 @@ router.post("/tickets/:ticketId/whatsapp", requireAuth, async (req, res) => {
 
   if (!sent.success) {
     logger.error({ ticketId: row.ticket.id, error: sent.error }, "[TICKET WHATSAPP] send failed");
-    res.status(502).json({ error: sent.error ?? "WhatsApp did not accept the message" });
-    return;
+    return { ok: false, error: sent.error ?? "WhatsApp did not accept the message" };
   }
 
   // Deliberately not a ticket_event: the enum has no "shared" value, and
@@ -475,7 +490,74 @@ router.post("/tickets/:ticketId/whatsapp", requireAuth, async (req, res) => {
   // reason about - too much weight for an audit nicety. The structured log
   // line below carries the same facts.
   logger.info({ ticketId: row.ticket.id, messageId: sent.messageId }, "[TICKET WHATSAPP] sent");
-  res.json({ sent: true, to, messageId: sent.messageId ?? null });
+  return { ok: true, messageId: sent.messageId ?? null };
+}
+
+/**
+ * Whether the company WhatsApp number is connected. The ticket screen asks
+ * first, so a writer whose company has not finished the WhatsApp set-up gets
+ * a chat opened with the customer's number instead of an error.
+ */
+router.get("/whatsapp/status", requireAuth, (_req, res) => {
+  res.json({ configured: whatsappConfigured() });
+});
+
+/**
+ * Send every bet on a slip to the customer. Each bet is its own ticket with
+ * its own QR - that is what gets scanned at a claim - so each goes as its own
+ * message, in the order it was sold. Stops at the first failure and says how
+ * many went.
+ */
+router.post("/tickets/slip/:slipNumber/whatsapp", requireAuth, async (req, res) => {
+  if (!whatsappConfigured()) {
+    res.status(503).json({
+      error: "WhatsApp is not connected yet. An administrator needs to add the WhatsApp credentials.",
+    });
+    return;
+  }
+  const parse = sendSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: "Enter the customer's phone number" });
+    return;
+  }
+  const to = toWhatsAppNumber(parse.data.phone);
+  if (!to) {
+    res.status(400).json({ error: "That phone number does not look right" });
+    return;
+  }
+
+  const slipNumber = req.params["slipNumber"] as string;
+  const ids = await db
+    .select({ id: ticketsTable.id })
+    .from(ticketsTable)
+    .where(eq(ticketsTable.slipNumber, slipNumber))
+    .orderBy(ticketsTable.createdAt);
+  if (ids.length === 0) {
+    res.status(404).json({ error: "Slip not found" });
+    return;
+  }
+
+  let sent = 0;
+  for (const { id } of ids) {
+    const row = await loadTicket(id);
+    // Every bet on a slip has the same writer; the first check covers it, and
+    // a slip the user may not see is reported as not found.
+    if (!row || (sent === 0 && !(await mayView(req.user!.role, req.user!.userId, row)))) {
+      res.status(404).json({ error: "Slip not found" });
+      return;
+    }
+    const r = await sendTicketOnWhatsApp(row, to);
+    if (!r.ok) {
+      res.status(502).json({
+        error: sent > 0 ? `${sent} of ${ids.length} bets sent, then: ${r.error}` : r.error,
+        sent,
+        total: ids.length,
+      });
+      return;
+    }
+    sent++;
+  }
+  res.json({ sent: true, to, count: sent });
 });
 
 export default router;
