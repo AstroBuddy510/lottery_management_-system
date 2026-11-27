@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Delete, X, Lock } from "lucide-react";
 
@@ -33,6 +33,12 @@ export interface NumberKeypadProps {
   /** What to call a reserved number on its key, e.g. "Banker". */
   reservedLabel?: string;
   onSubmit?: () => void;
+  /**
+   * What sits beside backspace and clear. Left out, it is the pad's own
+   * submit button; a node takes its place (the bet page puts the amount
+   * there); false leaves just backspace and clear.
+   */
+  action?: ReactNode | false;
   submitLabel?: string;
   submitting?: boolean;
   disabled?: boolean;
@@ -50,6 +56,7 @@ export function NumberKeypad({
   reserved = [],
   reservedLabel = "In use",
   onSubmit,
+  action,
   submitLabel = "Place Bet",
   submitting = false,
   disabled = false,
@@ -223,8 +230,8 @@ export function NumberKeypad({
         })}
       </div>
 
-      {/* Backspace, clear, submit */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* Backspace, clear, and the submit button or whatever replaces it */}
+      <div className={action === false ? "grid grid-cols-2 gap-2" : "grid grid-cols-4 gap-2"}>
         <Button
           type="button"
           variant="outline"
@@ -245,14 +252,18 @@ export function NumberKeypad({
         >
           <X className="h-4 w-4" />
         </Button>
-        <Button
-          type="button"
-          className="h-12 rounded-xl col-span-2 font-bold tracking-wide"
-          onClick={onSubmit}
-          disabled={disabled || submitting || !complete || !onSubmit}
-        >
-          {submitting ? "Placing…" : submitLabel}
-        </Button>
+        {action === undefined ? (
+          <Button
+            type="button"
+            className="h-12 rounded-xl col-span-2 font-bold tracking-wide"
+            onClick={onSubmit}
+            disabled={disabled || submitting || !complete || !onSubmit}
+          >
+            {submitting ? "Placing…" : submitLabel}
+          </Button>
+        ) : action === false ? null : (
+          <div className="col-span-2">{action}</div>
+        )}
       </div>
     </div>
   );

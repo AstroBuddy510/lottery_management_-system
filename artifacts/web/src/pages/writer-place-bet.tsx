@@ -233,7 +233,7 @@ export function WriterPlaceBet() {
     if (!betTypeCode) return "Choose a bet type";
     if (needsBanker && !banker) return "Enter the banker number";
     if (wantsNumbers && picked.length === 0) return "Pick your numbers";
-    if (!stakeAmount || !(parseFloat(stakeAmount) > 0)) return "Enter the stake per line";
+    if (!stakeAmount || !(parseFloat(stakeAmount) > 0)) return "Enter the amount per stake";
     if (bettingClosed) return "Betting has closed for this game";
     if (settlementLocked) {
       return gate?.reason === "previous-day-unpaid"
@@ -290,23 +290,6 @@ export function WriterPlaceBet() {
   const cartTotal = cart.reduce((sum, b) => sum + b.totalStake, 0);
   const cartMaxWin = cart.reduce((sum, b) => sum + b.maxPayout, 0);
 
-  const sellSlip = () => {
-    if (cart.length === 0) return;
-    if (bettingClosed) {
-      toast({ title: "Betting has closed for this game", variant: "destructive" });
-      return;
-    }
-    placeSlipMutation.mutate({
-      gameId,
-      bets: cart.map((b) => ({
-        betTypeCode: b.betTypeCode,
-        numbers: b.numbers,
-        stakeAmount: b.stakePerLine,
-        ...(b.bankerNumber != null ? { bankerNumber: b.bankerNumber } : {}),
-      })),
-    });
-  };
-
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     const blocked = blockedBecause();
@@ -325,12 +308,72 @@ export function WriterPlaceBet() {
     });
   };
 
+  /*
+   * The amount, where the hand is after the last number: beside the keypad's
+   * backspace and clear, as on a paper slip. It is the stake for one line;
+   * a perm or banker bet multiplies it by its lines.
+   */
+  const amountField = (
+    <div className="relative h-12">
+      <span className="pointer-events-none absolute -top-2 left-3 z-10 rounded bg-card px-1 text-[9px] font-bold uppercase tracking-wider text-primary">
+        Amount per stake
+      </span>
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">GH₵</span>
+      <Input
+        type="number"
+        step="0.01"
+        min="1"
+        inputMode="decimal"
+        placeholder="Enter amount"
+        aria-label="Amount per stake (GH₵)"
+        value={stakeAmount}
+        onChange={(e) => setStakeAmount(e.target.value)}
+        className="h-12 rounded-xl border-2 border-primary/50 pl-11 font-mono text-base font-bold focus-visible:border-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+    </div>
+  );
+
+  const busy = placeSlipMutation.isPending || placeBetMutation.isPending;
+  // Something half-entered: numbers or a banker picked, or an amount typed.
+  const halfEntered = picked.length > 0 || !!banker;
+  const canPlace = !busy && !bettingClosed && !settlementLocked &&
+    (cart.length > 0 ? (!halfEntered || !!quote?.valid) : !!quote?.valid);
+
+  /** Sell what is on screen: the slip (with the bet in progress, if it is complete) or the one bet. */
+  const placeNow = () => {
+    if (cart.length === 0) {
+      handleSubmit();
+      return;
+    }
+    if (halfEntered && !quote?.valid) {
+      toast({ title: "Finish this bet or clear it first", description: quote?.reason ?? undefined, variant: "destructive" });
+      return;
+    }
+    if (bettingClosed) {
+      toast({ title: "Betting has closed for this game", variant: "destructive" });
+      return;
+    }
+    const bets = [...cart.map((b) => ({ betTypeCode: b.betTypeCode, numbers: b.numbers, stakeAmount: b.stakePerLine, bankerNumber: b.bankerNumber }))];
+    if (halfEntered && quote?.valid) {
+      bets.push({ betTypeCode, numbers, stakeAmount: parseFloat(stakeAmount), bankerNumber: banker });
+    }
+    placeSlipMutation.mutate({
+      gameId,
+      bets: bets.map((b) => ({
+        betTypeCode: b.betTypeCode,
+        numbers: b.numbers,
+        stakeAmount: b.stakeAmount,
+        ...(b.bankerNumber != null ? { bankerNumber: b.bankerNumber } : {}),
+      })),
+    });
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       <WriterPageHeader
         title="Place Bet"
         icon={TicketIcon}
-        subtitle="Choose a draw and a bet type, enter the stake, then pick the numbers."
+        subtitle="Choose a draw and a bet type, pick the numbers, then enter the amount."
         action={user?.operationModel === "prepaid" ? (
           <span className="inline-flex flex-col items-end rounded-xl bg-primary/10 px-3 py-1.5 text-right">
             <span className="text-[9px] font-bold uppercase tracking-wider text-primary/80">Tokens</span>
@@ -390,32 +433,13 @@ export function WriterPlaceBet() {
               </div>
             )}
 
-            {/* Above the pickers deliberately: the keypad's own submit button is
-                disabled until there is a stake, and when this sat underneath
-                it the writer picked their numbers and found a dead button. */}
-            {selectedBetType && (
-              <div className="space-y-2">
-                <WriterStep n={3} title="Stake per line" hint="(GHS)" done={parseFloat(stakeAmount) > 0} />
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="1"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={stakeAmount}
-                  onChange={(e) => setStakeAmount(e.target.value)}
-                  className="h-12 rounded-xl text-lg font-mono"
-                />
-              </div>
-            )}
-
             {/* The banker gets the same keypad as everything else. It used to be
                 a bare number box, which on Banker All - where the banker is the
                 only pick - left the writer with no keypad on the screen at
                 all, and made this one bet type feel broken next to the rest. */}
             {selectedBetType && needsBanker && (
               <div className="space-y-2">
-                <WriterStep n={4} title="Banker" hint="the number that must drop" done={!!banker} />
+                <WriterStep n={3} title="Banker" hint="the number that must drop" done={!!banker} />
                 <NumberKeypad
                   selected={banker ? [banker] : []}
                   onChange={(next) => setBanker(next.length ? (next[next.length - 1] as number) : null)}
@@ -424,10 +448,10 @@ export function WriterPlaceBet() {
                   // An against-number cannot also be the banker.
                   reserved={picked}
                   reservedLabel="Against"
-                  submitting={placeBetMutation.isPending}
                   disabled={!gameId || !betTypeCode || bettingClosed}
-                  onSubmit={wantsNumbers ? undefined : () => handleSubmit()}
-                  submitLabel="Place Bet"
+                  // Banker All picks only the banker, so the amount sits here;
+                  // otherwise it sits under the against-numbers.
+                  action={wantsNumbers ? false : amountField}
                 />
               </div>
             )}
@@ -435,7 +459,7 @@ export function WriterPlaceBet() {
             {selectedBetType && Number(selectedBetType.maxNumbers) > 0 && (
               <div className="space-y-2">
                 <WriterStep
-                  n={needsBanker ? 5 : 4}
+                  n={needsBanker ? 4 : 3}
                   title={needsBanker ? "Against" : "Numbers"}
                   hint={Number(selectedBetType.minNumbers) === Number(selectedBetType.maxNumbers)
                     ? `pick ${selectedBetType.minNumbers}`
@@ -449,10 +473,8 @@ export function WriterPlaceBet() {
                   reservedLabel="Banker"
                   min={Number(selectedBetType.minNumbers)}
                   max={Number(selectedBetType.maxNumbers)}
-                  submitting={placeBetMutation.isPending}
                   disabled={!gameId || !betTypeCode || bettingClosed}
-                  onSubmit={!stakeAmount ? undefined : () => handleSubmit()}
-                  submitLabel="Place Bet"
+                  action={amountField}
                 />
               </div>
             )}
@@ -481,22 +503,6 @@ export function WriterPlaceBet() {
                   <p className="pt-1 text-xs text-amber-700 dark:text-amber-400">{quote.reason}</p>
                 )}
               </div>
-            )}
-
-            {/* Add Bet stacks this bet up instead of selling it. The keypad's own
-                Place Bet is left alone: most sales are a single bet and that
-                path should stay one tap. */}
-            {selectedBetType && (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full h-11 rounded-xl border-dashed"
-                disabled={!quote?.valid || placeSlipMutation.isPending || placeBetMutation.isPending}
-                onClick={addToCart}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Bet
-              </Button>
             )}
 
             {cart.length > 0 && (
@@ -576,32 +582,41 @@ export function WriterPlaceBet() {
                   </div>
                 </div>
 
-                <Button
-                  type="button"
-                  className="w-full h-12 rounded-xl font-bold"
-                  disabled={placeSlipMutation.isPending || bettingClosed}
-                  onClick={sellSlip}
-                >
-                  <Receipt className="h-4 w-4 mr-2" />
-                  {placeSlipMutation.isPending
-                    ? "Selling…"
-                    : `Sell & print slip · GHS ${cartTotal.toFixed(2)}`}
-                </Button>
                 <p className="text-[10px] text-muted-foreground text-center">
-                  Nothing is charged until you tap this. All bets on a slip share one draw.
+                  Nothing is charged until you tap Place Bet. All bets on a slip share one draw.
                 </p>
               </div>
             )}
 
-            {!selectedBetType && (
+            {/* The action bar, as on the paper slip: Add Bet keeps building the
+                slip, Place Bet sells it (or this one bet, when the slip is empty). */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
               <Button
-                type="submit"
-                className="w-full h-12 rounded-xl"
-                size="lg"
-                disabled
+                type="button"
+                variant="outline"
+                className="h-12 rounded-xl border-2 font-bold"
+                disabled={!quote?.valid || placeSlipMutation.isPending || placeBetMutation.isPending}
+                onClick={addToCart}
               >
-                Select a game and bet type
+                <Plus className="h-4 w-4 mr-1.5" />
+                Add Bet
               </Button>
+              <Button
+                type="button"
+                className="h-12 rounded-xl border-2 border-amber-400 font-black tracking-wide shadow-md ring-2 ring-amber-300/40 disabled:border-amber-200 disabled:ring-0"
+                disabled={!canPlace}
+                onClick={placeNow}
+              >
+                <Receipt className="h-4 w-4 mr-1.5" />
+                {placeSlipMutation.isPending || placeBetMutation.isPending
+                  ? "Placing…"
+                  : cart.length > 0
+                    ? `Place Bet · ${cart.length + (quote?.valid ? 1 : 0)}`
+                    : "Place Bet"}
+              </Button>
+            </div>
+            {!selectedBetType && (
+              <p className="-mt-2 text-center text-[11px] text-muted-foreground">Choose a draw and a bet type to start.</p>
             )}
           </form>
         </div>
