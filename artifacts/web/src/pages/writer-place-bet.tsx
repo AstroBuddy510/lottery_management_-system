@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ShoppingCart, Receipt, Clock, Ticket as TicketIcon } from "lucide-react";
+import { Trash2, ShoppingCart, Receipt, Clock, Ticket as TicketIcon } from "lucide-react";
 import { WriterCard, WriterCardHeader, WriterPageHeader, WriterStep } from "@/components/writer-ui";
 import { Badge } from "@/components/ui/badge";
 
@@ -315,10 +315,11 @@ export function WriterPlaceBet() {
    */
   const amountField = (
     <div className="relative h-12">
-      <span className="pointer-events-none absolute -top-2 left-3 z-10 rounded bg-card px-1 text-[9px] font-bold uppercase tracking-wider text-primary">
+      {/* Centred on the box's top edge. */}
+      <span className="pointer-events-none absolute -top-2 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-card px-1.5 text-[9px] font-bold uppercase leading-4 tracking-wider text-primary">
         Amount per stake
       </span>
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">GH₵</span>
+      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-muted-foreground">GH₵</span>
       <Input
         type="number"
         step="0.01"
@@ -328,7 +329,9 @@ export function WriterPlaceBet() {
         aria-label="Amount per stake (GH₵)"
         value={stakeAmount}
         onChange={(e) => setStakeAmount(e.target.value)}
-        className="h-12 rounded-xl border-2 border-primary/50 pl-11 font-mono text-base font-bold focus-visible:border-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        // The placeholder is set like the GH₵ beside it - small, bold, muted -
+        // so it fits the box whole; a typed amount is large and monospaced.
+        className="h-12 rounded-xl border-2 border-primary/50 pl-9 pr-2 font-mono text-base font-bold focus-visible:border-primary placeholder:font-sans placeholder:text-[11px] placeholder:font-bold placeholder:text-muted-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
     </div>
   );
@@ -399,13 +402,27 @@ export function WriterPlaceBet() {
             <div className="space-y-2">
               <WriterStep n={1} title="Draw" done={!!gameId} />
               <Select value={gameId} onValueChange={setGameId} disabled={cart.length > 0}>
-                <SelectTrigger className="h-12 rounded-xl">
-                  <SelectValue placeholder={loadingGames ? "Loading..." : "Select a live game"} />
+                <SelectTrigger className="h-12 rounded-xl min-w-0">
+                  {/* The trigger shows the draw's name, with its event and time
+                      left in small print that gives way first on a narrow phone. */}
+                  <SelectValue placeholder={loadingGames ? "Loading..." : "Select a live game"}>
+                    {selectedGame && (
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="truncate font-semibold">{selectedGame.name}</span>
+                        <span className="truncate text-[11px] text-muted-foreground">
+                          {selectedGame.eventNumber} · {timeLeft(selectedGame.closeAt)}
+                        </span>
+                      </span>
+                    )}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[calc(100vw-1.5rem)]">
                   {liveGames.map((g: any) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name} ({g.eventNumber}) · {timeLeft(g.closeAt)}
+                    <SelectItem key={g.id} value={g.id} className="min-w-0">
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate font-semibold">{g.name}</span>
+                        <span className="truncate text-[11px] opacity-70">{g.eventNumber} · {timeLeft(g.closeAt)}</span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -415,12 +432,24 @@ export function WriterPlaceBet() {
             <div className="space-y-2">
               <WriterStep n={2} title="Bet type" done={!!betTypeCode} />
               <Select value={betTypeCode} onValueChange={setBetTypeCode}>
-                <SelectTrigger className="h-12 rounded-xl">
-                  <SelectValue placeholder={loadingBetTypes ? "Loading..." : "Select bet type"} />
+                <SelectTrigger className="h-12 rounded-xl min-w-0">
+                  <SelectValue placeholder={loadingBetTypes ? "Loading..." : "Select bet type"}>
+                    {selectedBetType && (
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="truncate font-semibold">{selectedBetType.name}</span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">×{selectedBetType.payoutMultiplier}</span>
+                      </span>
+                    )}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[calc(100vw-1.5rem)]">
                   {betTypes?.filter((b: any) => b.isActive).map((b: any) => (
-                    <SelectItem key={b.code} value={b.code}>{b.name} (x{b.payoutMultiplier})</SelectItem>
+                    <SelectItem key={b.code} value={b.code} className="min-w-0">
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="truncate">{b.name}</span>
+                        <span className="shrink-0 text-[11px] opacity-70">×{b.payoutMultiplier}</span>
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -594,11 +623,11 @@ export function WriterPlaceBet() {
               <Button
                 type="button"
                 variant="outline"
-                className="h-12 rounded-xl border-2 font-bold"
+                // Same weight of border as the keypad's clear button; text centred.
+                className="h-12 justify-center rounded-xl text-center font-bold"
                 disabled={!quote?.valid || placeSlipMutation.isPending || placeBetMutation.isPending}
                 onClick={addToCart}
               >
-                <Plus className="h-4 w-4 mr-1.5" />
                 Add Bet
               </Button>
               <Button
